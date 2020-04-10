@@ -1,3 +1,5 @@
+use crate::error::Xerr;
+
 #[derive(Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
@@ -11,13 +13,6 @@ pub struct Lex {
     col: usize,
     pos: usize,
     src: String,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum LexError {
-    Incomplete,
-    ParseIntErr,
-    ParseFloatErr,
 }
 
 impl Lex {
@@ -86,7 +81,7 @@ impl Lex {
         Self::is_schar(c) || c == '"'
     }
 
-    fn parse_word(&mut self) -> Result<Tok, LexError> {
+    fn parse_word(&mut self) -> Result<Tok, Xerr> {
         let start = self.pos;
         let mut maybe_sign = None;
         while let Some((_, c)) = self.peek() {
@@ -108,7 +103,7 @@ impl Lex {
         Ok(Tok::Word(w))
     }
 
-    fn parse_number(&mut self, sign: Option<char>) -> Result<Tok, LexError> {
+    fn parse_number(&mut self, sign: Option<char>) -> Result<Tok, Xerr> {
         let mut start = self.pos;
         let a = self.take().unwrap();
         let base = match self.peek().map(|x| x.1).unwrap_or('_') {
@@ -128,7 +123,7 @@ impl Lex {
             if c.is_digit(base) {
                 self.take();
             } else if i == 0 {
-                return Err(LexError::ParseIntErr);
+                return Err(Xerr::InputParseError);
             }
         }
         self.src[start..self.pos]
@@ -139,14 +134,14 @@ impl Lex {
                     _ => n,
                 })
             })
-            .map_err(|_| LexError::ParseIntErr)
+            .map_err(|_| Xerr::InputParseError)
     }
 
-    fn parse_string(&mut self) -> Result<Tok, LexError> {
-        Err(LexError::Incomplete)
+    fn parse_string(&mut self) -> Result<Tok, Xerr> {
+        Err(Xerr::InputIncomplete)
     }
 
-    pub fn next(&mut self) -> Result<Tok, LexError> {
+    pub fn next(&mut self) -> Result<Tok, Xerr> {
         let c = loop {
             match self.skip_whitespaces() {
                 None => return Ok(Tok::EndOfInput),
