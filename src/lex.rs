@@ -1,11 +1,9 @@
-
 #[derive(Debug, PartialEq)]
 pub enum Tok {
+    EndOfInput,
     Word(String),
     Num(i64),
     SChar(char),
-    Incomplete,
-    BadNumber,
 }
 
 pub struct Lex {
@@ -15,9 +13,11 @@ pub struct Lex {
     src: String,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum LexError {
     Incomplete,
-    NumError,
+    ParseIntErr,
+    ParseFloatErr,
 }
 
 impl Lex {
@@ -86,7 +86,7 @@ impl Lex {
         Self::is_schar(c) || c == '"'
     }
 
-    fn parse_word(&mut self) -> Tok {
+    fn parse_word(&mut self) -> Result<Tok, LexError> {
         let start = self.pos;
         let mut maybe_sign = None;
         while let Some((_, c)) = self.peek() {
@@ -105,10 +105,10 @@ impl Lex {
             }
         }
         let w = self.src[start..self.pos].to_string();
-        Tok::Word(w)
+        Ok(Tok::Word(w))
     }
 
-    fn parse_number(&mut self, sign: Option<char>) -> Tok {
+    fn parse_number(&mut self, sign: Option<char>) -> Result<Tok, LexError> {
         let mut start = self.pos;
         let a = self.take().unwrap();
         let base = match self.peek().map(|x| x.1).unwrap_or('_') {
@@ -128,52 +128,51 @@ impl Lex {
             if c.is_digit(base) {
                 self.take();
             } else if i == 0 {
-                return Tok::BadNumber;
+                return Err(LexError::ParseIntErr);
             }
         }
         self.src[start..self.pos]
             .parse::<i64>()
-            .ok()
             .map(|n| {
                 Tok::Num(match sign {
                     Some('-') => -n,
                     _ => n,
                 })
             })
-            .unwrap_or(Tok::BadNumber)
+            .map_err(|_| LexError::ParseIntErr)
     }
 
-    fn parse_string(&mut self) -> Tok {
-        Tok::Incomplete
+    fn parse_string(&mut self) -> Result<Tok, LexError> {
+        Err(LexError::Incomplete)
     }
 
-    pub fn next(&mut self) -> Option<Tok> {
+    pub fn next(&mut self) -> Result<Tok, LexError> {
         let c = loop {
-            match self.skip_whitespaces()? {
-                '#' => self.skip_comment(),
-                other => break other,
+            match self.skip_whitespaces() {
+                None => return Ok(Tok::EndOfInput),
+                Some('#') => self.skip_comment(),
+                Some(c) => break c,
             }
         };
-        let t = match c {
+        match c {
             c if Self::is_schar(c) => {
                 self.take().unwrap();
-                Tok::SChar(c)
+                Ok(Tok::SChar(c))
             }
             '0'..='9' => self.parse_number(None),
             '"' => self.parse_string(),
             _ => self.parse_word(),
-        };
-        Some(t)
+        }
     }
 }
 
 #[test]
 fn test_lex_ws() {
     let mut lex = Lex::from_str("\n\t");
-    assert_eq!(None, lex.next());
+    assert_eq!(Ok(Tok::EndOfInput), lex.next());
     assert_eq!((2, 2), lex.linecol());
     let mut lex = Lex::from_str("\n\t#567");
-    assert_eq!(None, lex.next());
+    assert_eq!(Ok(Tok::EndOfInput), lex.next());
     assert_eq!((2, 6), lex.linecol());
     let mut lex = Lex::from_str("x1 + -1");
     let t = lex.next().unwrap();
