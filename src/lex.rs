@@ -5,6 +5,7 @@ pub enum Tok {
     EndOfInput,
     Word(String),
     Num(i64),
+    Str(String),
     SChar(char),
 }
 
@@ -23,6 +24,10 @@ impl Lex {
             pos: 0,
             src: s.to_string(),
         }
+    }
+
+    pub fn push_str(&mut self, s: &str) {
+        self.src.push_str(s);
     }
 
     pub fn linecol(&self) -> (usize, usize) {
@@ -121,7 +126,7 @@ impl Lex {
         while let Some((_, c)) = self.peek() {
             if c == '_' || c.is_digit(base) {
                 self.take();
-            } else if c.is_ascii_whitespace() {
+            } else if c.is_ascii_whitespace() || Self::is_special(c) {
                 break;
             } else {
                 return Err(Xerr::InputParseError);
@@ -142,7 +147,24 @@ impl Lex {
     }
 
     fn parse_string(&mut self) -> Result<Tok, Xerr> {
-        Err(Xerr::InputIncomplete)
+        let start = self.pos;
+        self.take();
+        let mut s = String::new();
+        loop {
+            match self.take() {
+                None => {
+                    self.pos = start;
+                    return Err(Xerr::InputIncomplete);
+                }
+                Some('"') => break,
+                Some(c) => {
+                    if c != '\n' {
+                        s.push(c);
+                    }
+                }
+            }
+        }
+        Ok(Tok::Str(s))
     }
 
     pub fn next(&mut self) -> Result<Tok, Xerr> {
@@ -173,6 +195,10 @@ fn test_lex_ws() {
     let mut lex = Lex::from_str("\n\t#567");
     assert_eq!(Ok(Tok::EndOfInput), lex.next());
     assert_eq!((2, 6), lex.linecol());
+}
+
+#[test]
+fn test_lex_num() {
     let mut lex = Lex::from_str("x1 + -1 -x1 +1_2_3");
     let t = lex.next().unwrap();
     assert_eq!(Tok::Word("x1".to_string()), t);
@@ -190,4 +216,30 @@ fn test_lex_ws() {
     assert_eq!(Tok::Num(255), t);
     let t = lex.next().unwrap();
     assert_eq!(Tok::Num(3), t);
+}
+
+#[test]
+fn text_lex_schar() {
+    let mut lex = Lex::from_str("({aa : 0[bb]cc)");
+    assert_eq!(Ok(Tok::SChar('(')), lex.next());
+    assert_eq!(Ok(Tok::SChar('{')), lex.next());
+    assert_eq!(Ok(Tok::Word("aa".to_string())), lex.next());
+    assert_eq!(Ok(Tok::Word(":".to_string())), lex.next());
+    assert_eq!(Ok(Tok::Num(0)), lex.next());
+    assert_eq!(Ok(Tok::SChar('[')), lex.next());
+    assert_eq!(Ok(Tok::Word("bb".to_string())), lex.next());
+    assert_eq!(Ok(Tok::SChar(']')), lex.next());
+    assert_eq!(Ok(Tok::Word("cc".to_string())), lex.next());
+    assert_eq!(Ok(Tok::SChar(')')), lex.next());
+}
+
+#[test]
+fn test_lex_str() {
+    let mut lex = Lex::from_str(" \"))\n[[\" ");
+    assert_eq!(Ok(Tok::Str("))[[".to_string())), lex.next());
+
+    let mut lex = Lex::from_str(" \" xx\n ");
+    assert_eq!(Err(Xerr::InputIncomplete), lex.next());
+    lex.push_str("\"");
+    assert_eq!(Ok(Tok::Str(" xx ".to_string())), lex.next());
 }
