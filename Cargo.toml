@@ -1,5 +1,5 @@
 [package]
-name = "xeh2"
+name = "xeh"
 version = "0.1.0"
 authors = ["rivo <db05@bk.ru>"]
 edition = "2018"
