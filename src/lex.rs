@@ -90,9 +90,8 @@ impl Lex {
             }
             if maybe_sign.is_none() {
                 maybe_sign = self.take();
-                let s = maybe_sign.unwrap();
                 let is_digit = self.peek().map(|x| x.1.is_digit(10)).unwrap_or(false);
-                if (s == '+' || s == '-') && is_digit {
+                if (c == '+' || c == '-') && is_digit {
                     return self.parse_number(maybe_sign);
                 }
             } else {
@@ -119,15 +118,20 @@ impl Lex {
             }
             _ => 10,
         };
-        while let Some((i, c)) = self.peek() {
-            if c.is_digit(base) {
+        while let Some((_, c)) = self.peek() {
+            if c == '_' || c.is_digit(base) {
                 self.take();
-            } else if i == 0 {
+            } else if c.is_ascii_whitespace() {
+                break;
+            } else {
                 return Err(Xerr::InputParseError);
             }
         }
-        self.src[start..self.pos]
-            .parse::<i64>()
+        let s: String = self.src[start..self.pos]
+            .chars()
+            .filter(|&c| c != '_')
+            .collect();
+        i64::from_str_radix(&s, base)
             .map(|n| {
                 Tok::Num(match sign {
                     Some('-') => -n,
@@ -169,7 +173,7 @@ fn test_lex_ws() {
     let mut lex = Lex::from_str("\n\t#567");
     assert_eq!(Ok(Tok::EndOfInput), lex.next());
     assert_eq!((2, 6), lex.linecol());
-    let mut lex = Lex::from_str("x1 + -1");
+    let mut lex = Lex::from_str("x1 + -1 -x1 +1_2_3");
     let t = lex.next().unwrap();
     assert_eq!(Tok::Word("x1".to_string()), t);
     assert_eq!((1, 3), lex.linecol());
@@ -177,4 +181,13 @@ fn test_lex_ws() {
     assert_eq!(Tok::Word("+".to_string()), t);
     let t = lex.next().unwrap();
     assert_eq!(Tok::Num(-1), t);
+    let t = lex.next().unwrap();
+    assert_eq!(Tok::Word("-x1".to_string()), t);
+    let t = lex.next().unwrap();
+    assert_eq!(Tok::Num(123), t);
+    let mut lex = Lex::from_str("0xff 0b11");
+    let t = lex.next().unwrap();
+    assert_eq!(Tok::Num(255), t);
+    let t = lex.next().unwrap();
+    assert_eq!(Tok::Num(3), t);
 }
