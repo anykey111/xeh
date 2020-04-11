@@ -10,6 +10,7 @@ edition = "2018"
 im-rc = "14.3"
 rpds = "0.7"
 anyhow = "1"
+num-bigint = "0.2.6"
 
 [profile.release]
 opt-level = "s"

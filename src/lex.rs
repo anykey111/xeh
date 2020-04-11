@@ -1,12 +1,13 @@
+use num_bigint::{BigInt, ToBigInt};
+
 use crate::error::Xerr;
 
 #[derive(Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
     Word(String),
-    Num(i64),
+    Num(BigInt),
     Str(String),
-    SChar(char),
 }
 
 pub struct Lex {
@@ -88,62 +89,68 @@ impl Lex {
 
     fn parse_word(&mut self) -> Result<Tok, Xerr> {
         let start = self.pos;
-        let mut maybe_sign = None;
         while let Some((_, c)) = self.peek() {
-            if Self::is_special(c) || c.is_ascii_whitespace() {
+            if c.is_ascii_whitespace() || Self::is_special(c) {
+                if self.pos == start && Self::is_schar(c) {
+                    self.take();
+                }
                 break;
             }
-            if maybe_sign.is_none() {
-                maybe_sign = self.take();
-                let is_digit = self.peek().map(|x| x.1.is_digit(10)).unwrap_or(false);
-                if (c == '+' || c == '-') && is_digit {
-                    return self.parse_number(maybe_sign);
+            self.take();
+        }
+        let w = &self.src[start..self.pos];
+        // maybe number
+        let mut it = w.chars();
+        let mut x = it.next();
+        let mut sign_minus = false;
+        if x == Some('+') {
+            x = it.next();
+        } else if x == Some('-') {
+            sign_minus = true;
+            x = it.next();
+        }
+        let mut digits: Vec<u8> = Vec::new();
+        match x {
+            Some(c) if c.is_digit(10) => {
+                if sign_minus {
+                    digits.push('-' as u8);
                 }
-            } else {
-                self.take();
+                digits.push(c as u8);
+            }
+            _ => return Ok(Tok::Word(w.to_string())),
+        }
+        let mut radix = 10;
+        if x == Some('0') {
+            match it.next() {
+                Some('x') | Some('X') => radix = 16,
+                Some('b') | Some('B') => radix = 2,
+                Some(c) if c.is_digit(10) => {
+                    digits.push('0' as u8);
+                    digits.push(c as u8);
+                }
+                None => digits.push('0' as u8),
+                _ => {
+                    self.pos = start;
+                    return Err(Xerr::InputParseError);
+                }
             }
         }
-        let w = self.src[start..self.pos].to_string();
-        Ok(Tok::Word(w))
-    }
-
-    fn parse_number(&mut self, sign: Option<char>) -> Result<Tok, Xerr> {
-        let mut start = self.pos;
-        let a = self.take().unwrap();
-        let base = match self.peek().map(|x| x.1).unwrap_or('_') {
-            'x' | 'X' if a == '0' => {
-                self.take().unwrap();
-                start = self.pos;
-                16
+        while let Some(c) = it.next() {
+            if c == '_' {
+                continue;
             }
-            'b' | 'B' if a == '0' => {
-                self.take().unwrap();
-                start = self.pos;
-                2
-            }
-            _ => 10,
-        };
-        while let Some((_, c)) = self.peek() {
-            if c == '_' || c.is_digit(base) {
-                self.take();
-            } else if c.is_ascii_whitespace() || Self::is_special(c) {
-                break;
+            if c.is_digit(radix) {
+                digits.push(c as u8);
             } else {
+                self.pos = start;
                 return Err(Xerr::InputParseError);
             }
         }
-        let s: String = self.src[start..self.pos]
-            .chars()
-            .filter(|&c| c != '_')
-            .collect();
-        i64::from_str_radix(&s, base)
-            .map(|n| {
-                Tok::Num(match sign {
-                    Some('-') => -n,
-                    _ => n,
-                })
-            })
-            .map_err(|_| Xerr::InputParseError)
+        if let Some(i) = BigInt::parse_bytes(&digits, radix) {
+            return Ok(Tok::Num(i));
+        }
+        self.pos = start;
+        return Err(Xerr::InputParseError);
     }
 
     fn parse_string(&mut self) -> Result<Tok, Xerr> {
@@ -175,14 +182,10 @@ impl Lex {
                 Some(c) => break c,
             }
         };
-        match c {
-            c if Self::is_schar(c) => {
-                self.take().unwrap();
-                Ok(Tok::SChar(c))
-            }
-            '0'..='9' => self.parse_number(None),
-            '"' => self.parse_string(),
-            _ => self.parse_word(),
+        if c == '"' {
+            self.parse_string()
+        } else {
+            self.parse_word()
         }
     }
 }
@@ -201,38 +204,32 @@ fn test_lex_ws() {
 
 #[test]
 fn test_lex_num() {
-    let mut lex = Lex::from_str("x1 + -1 -x1 +1_2_3");
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Word("x1".to_string()), t);
+    let mut lex = Lex::from_str("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
+    assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
     assert_eq!((1, 3), lex.linecol());
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Word("+".to_string()), t);
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Num(-1), t);
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Word("-x1".to_string()), t);
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Num(123), t);
-    let mut lex = Lex::from_str("0xff 0b11");
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Num(255), t);
-    let t = lex.next().unwrap();
-    assert_eq!(Tok::Num(3), t);
+    assert_eq!(Tok::Word("+".to_string()), lex.next().unwrap());
+    assert_eq!(Tok::Word("-".to_string()), lex.next().unwrap());
+    assert_eq!(Tok::Num((-1).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Word("-x1".to_string()), lex.next().unwrap());
+    assert_eq!(Tok::Num((-1).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Num((0).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Num((3).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Num((0xff00).to_bigint().unwrap()), lex.next().unwrap());
 }
 
 #[test]
 fn text_lex_schar() {
-    let mut lex = Lex::from_str("({aa : 0[bb]cc)");
-    assert_eq!(Ok(Tok::SChar('(')), lex.next());
-    assert_eq!(Ok(Tok::SChar('{')), lex.next());
+    let mut lex = Lex::from_str("({aa : +[bb]cc)");
+    assert_eq!(Ok(Tok::Word("(".to_string())), lex.next());
+    assert_eq!(Ok(Tok::Word("{".to_string())), lex.next());
     assert_eq!(Ok(Tok::Word("aa".to_string())), lex.next());
     assert_eq!(Ok(Tok::Word(":".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Num(0)), lex.next());
-    assert_eq!(Ok(Tok::SChar('[')), lex.next());
+    assert_eq!(Ok(Tok::Word("+".to_string())), lex.next());
+    assert_eq!(Ok(Tok::Word("[".to_string())), lex.next());
     assert_eq!(Ok(Tok::Word("bb".to_string())), lex.next());
-    assert_eq!(Ok(Tok::SChar(']')), lex.next());
+    assert_eq!(Ok(Tok::Word("]".to_string())), lex.next());
     assert_eq!(Ok(Tok::Word("cc".to_string())), lex.next());
-    assert_eq!(Ok(Tok::SChar(')')), lex.next());
+    assert_eq!(Ok(Tok::Word(")".to_string())), lex.next());
 }
 
 #[test]
