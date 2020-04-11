@@ -83,7 +83,7 @@ impl Lex {
     }
 
     fn is_special(c: char) -> bool {
-        Self::is_schar(c) || c == '"'
+        Self::is_schar(c) || c == '"' || c == '#'
     }
 
     fn parse_word(&mut self) -> Result<Tok, Xerr> {
@@ -195,6 +195,8 @@ fn test_lex_ws() {
     let mut lex = Lex::from_str("\n\t#567");
     assert_eq!(Ok(Tok::EndOfInput), lex.next());
     assert_eq!((2, 6), lex.linecol());
+    let mut lex = Lex::from_str("a#b");
+    assert_eq!(Ok(Tok::Word("a".to_string())), lex.next());
 }
 
 #[test]
