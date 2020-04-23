@@ -1,4 +1,4 @@
-use num_bigint::{BigInt, ToBigInt};
+use num_bigint::BigInt;
 
 use crate::error::Xerr;
 
@@ -10,11 +10,23 @@ pub enum Tok {
     Str(String),
 }
 
+#[derive(Clone, Debug)]
 pub struct Lex {
     line: usize,
     col: usize,
     pos: usize,
     src: String,
+}
+
+impl Default for Lex {
+    fn default() -> Lex {
+        Self {
+            line: 1,
+            col: 1,
+            pos: 0,
+            src: String::new(),
+        }
+    }
 }
 
 impl Lex {
@@ -204,6 +216,7 @@ fn test_lex_ws() {
 
 #[test]
 fn test_lex_num() {
+    use num_bigint::ToBigInt;
     let mut lex = Lex::from_str("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
     assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
     assert_eq!((1, 3), lex.linecol());
