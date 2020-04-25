@@ -27,8 +27,9 @@ pub enum Inst {
 
 #[derive(Clone)]
 enum Flow {
-    Origin(usize),
-    Destination(usize),
+    If(usize),
+    Begin(usize),
+    While(usize),
 }
 
 #[derive(Clone, Default)]
@@ -98,6 +99,10 @@ impl VM {
         core_insert_imm_word(self, "if", core_word_if)?;
         core_insert_imm_word(self, "else", core_word_else)?;
         core_insert_imm_word(self, "then", core_word_then)?;
+        core_insert_imm_word(self, "begin", core_word_begin)?;
+        core_insert_imm_word(self, "while", core_word_while)?;
+        core_insert_imm_word(self, "repeat", core_word_repeat)?;
+        core_insert_imm_word(self, "until", core_word_until)?;
         OK
     }
 
@@ -127,7 +132,7 @@ impl VM {
 
     fn finish_context(&mut self) -> Xresult {
         if self.ctx.fs.is_empty() {
-           OK 
+            OK
         } else {
             Err(Xerr::ControlFlowError)
         }
@@ -153,27 +158,45 @@ impl VM {
     }
 
     //fn exec1(&mut self, inst: &Inst) -> Xresult {
-        // match inst {
-        //     Inst::Jump(offs) => {
-        //         jump_to(offs)?;
-        //     }
-        //     Inst::JumpIf(offs) => {
-        //         let t = pop()?.is_true();
-        //         jump_if(t, offs)?;
-        //     }
-        //     Inst::JumpIfNot(offs) => {
-        //         let t = pop()?.is_true();
-        //         jump_if(!t, offs)?;
-        //     }
-        //     Inst::Call(x) => {
+    // match inst {
+    //     Inst::Jump(offs) => {
+    //         jump_to(offs)?;
+    //     }
+    //     Inst::JumpIf(offs) => {
+    //         let t = pop()?.is_true();
+    //         jump_if(t, offs)?;
+    //     }
+    //     Inst::JumpIfNot(offs) => {
+    //         let t = pop()?.is_true();
+    //         jump_if(!t, offs)?;
+    //     }
+    //     Inst::Call(x) => {
 
-        //     }
-        //     Inst::Const(x) => {
+    //     }
+    //     Inst::Const(x) => {
 
-        //     }
-        // }
+    //     }
+    // }
     //     OK
     // }
+
+    fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
+        match &mut self.ctx.code[at] {
+            Inst::Jump(ref mut a) => *a = offs,
+            Inst::JumpIf(ref mut a) => *a = offs,
+            Inst::JumpIfNot(ref mut a) => *a = offs,
+            other => panic!("not a jump instruction {:?}", other),
+        }
+        OK
+    }
+
+    fn pop_flow(&mut self) -> Result<Flow, Xerr> {
+        self.ctx.fs.pop().ok_or(Xerr::ControlFlowError)
+    }
+
+    fn push_flow(&mut self, flow: Flow) {
+        self.ctx.fs.push(flow);
+    }
 
     pub fn lookup(&mut self, name: &str) -> Option<usize> {
         self.dict.iter().position(|x| x.name == name)
@@ -218,47 +241,88 @@ fn core_insert_imm_word(vm: &mut VM, name: &str, f: XfnType) -> Xresult {
 }
 
 fn core_word_if(vm: &mut VM) -> Xresult {
-    let fwd = Flow::Origin(vm.origin());
+    let fwd = Flow::If(vm.origin());
     vm.emit(Inst::JumpIfNot(0))?;
-    vm.ctx.fs.push(fwd);
+    vm.push_flow(fwd);
     OK
 }
 
 fn core_word_else(vm: &mut VM) -> Xresult {
-    let fwd = vm.ctx.fs.pop().ok_or(Xerr::ControlFlowError)?;
-    match fwd {
-        Flow::Origin(patch_addr) => {
-            let fwd = Flow::Origin(vm.origin());
+    match vm.pop_flow()? {
+        Flow::If(if_org) => {
+            let fwd = Flow::If(vm.origin());
             vm.emit(Inst::Jump(0))?;
-            vm.ctx.fs.push(fwd);
-            core_patch_jump(vm, patch_addr)
+            vm.push_flow(fwd);
+            let offs = jump_offset(if_org, vm.origin());
+            vm.patch_jump(if_org, offs)
         }
         _ => Err(Xerr::ControlFlowError),
     }
 }
 
 fn core_word_then(vm: &mut VM) -> Xresult {
-    let fwd = vm.ctx.fs.pop().ok_or(Xerr::ControlFlowError)?;
-    match fwd {
-        Flow::Origin(patch_addr) => core_patch_jump(vm, patch_addr),
+    match vm.pop_flow()? {
+        Flow::If(if_org) => {
+            let offs = jump_offset(if_org, vm.origin());
+            vm.patch_jump(if_org, offs)
+        }
         _ => Err(Xerr::ControlFlowError),
     }
 }
 
-fn core_patch_jump(vm: &mut VM, patch_addr: usize) -> Xresult {
-    let org = vm.origin();
-    let offs = if org < patch_addr {
-        (patch_addr - org + 1) as isize
-    } else {
-        (org - patch_addr) as isize
-    };
-    match &mut vm.ctx.code[patch_addr] {
-        Inst::Jump(ref mut a) => *a = offs,
-        Inst::JumpIf(ref mut a) => *a = offs,
-        Inst::JumpIfNot(ref mut a) => *a = offs,
-        other => panic!("not a jump instruction {:?}", other),
-    }
+fn core_word_begin(vm: &mut VM) -> Xresult {
+    vm.push_flow(Flow::Begin(vm.origin()));
     OK
+}
+
+fn core_word_until(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::Begin(begin_org) => {
+            let offs = jump_offset(vm.origin(), begin_org);
+            vm.emit(Inst::JumpIf(offs))
+        }
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn core_word_while(vm: &mut VM) -> Xresult {
+    let cond = Flow::While(vm.origin());
+    vm.emit(Inst::JumpIfNot(0))?;
+    vm.push_flow(cond);
+    OK
+}
+
+fn core_word_repeat(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::Begin(begin_org) => {
+            let offs = jump_offset(vm.origin(), begin_org);
+            vm.emit(Inst::Jump(offs))
+        }
+        Flow::While(cond_org) => match vm.pop_flow()? {
+            Flow::Begin(begin_org) => {
+                let offs = jump_offset(cond_org, vm.origin());
+                vm.patch_jump(cond_org, offs)?;
+                let offs = jump_offset(vm.origin(), begin_org);
+                vm.emit(Inst::Jump(offs))
+            }
+            _ => Err(Xerr::ControlFlowError),
+        },
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn jump_offset(origin: usize, dest: usize) -> isize {
+    if origin > dest {
+        -((origin - dest) as isize)
+    } else {
+        (dest - origin) as isize
+    }
+}
+
+#[test]
+fn test_jump_offset() {
+    assert_eq!(2, jump_offset(2, 4));
+    assert_eq!(-2, jump_offset(4, 2));
 }
 
 #[test]
@@ -275,10 +339,7 @@ fn test_if_flow() {
     assert_eq!(&Inst::JumpIfNot(3), it.next().unwrap());
     it.next().unwrap();
     assert_eq!(&Inst::Jump(2), it.next().unwrap());
-}
-
-#[test]
-fn test_if_err() {
+    // test errors
     let mut vm = VM::boot().unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("1 if 222 else 333"));
     let mut vm = VM::boot().unwrap();
@@ -288,4 +349,34 @@ fn test_if_err() {
     let mut vm = VM::boot().unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("1 else 222 then"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("else 222 if"));
+}
+
+#[test]
+fn test_begin_repeat() {
+    let mut vm = VM::boot().unwrap();
+    vm.load("begin 5 while 1 - repeat").unwrap();
+    let mut it = vm.ctx.code.iter();
+    it.next().unwrap();
+    assert_eq!(&Inst::JumpIfNot(3), it.next().unwrap());
+    it.next().unwrap();
+    it.next().unwrap();
+    assert_eq!(&Inst::Jump(-4), it.next().unwrap());
+    let mut vm = VM::boot().unwrap();
+    vm.load("begin leave repeat").unwrap();
+    let mut it = vm.ctx.code.iter();
+    it.next().unwrap();
+    assert_eq!(&Inst::Jump(-1), it.next().unwrap());
+    let mut vm = VM::boot().unwrap();
+    vm.load("0 begin 1 + until");
+    let mut it = vm.ctx.code.iter();
+    it.next().unwrap();
+    it.next().unwrap();
+    it.next().unwrap();
+    assert_eq!(&Inst::JumpIf(-2), it.next().unwrap());
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("if begin then repeat"));
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("repeat begin"));
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin then while"));
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("until begin"));
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin repeat until"));
+    assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin until repeat"));
 }
