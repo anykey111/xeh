@@ -22,7 +22,13 @@ use std::fmt;
 
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<XEH Cell>")
+        match self {
+            Cell::Int(n) => write!(f, "{}", n),
+            Cell::Real(r) => write!(f, "{}", r),
+            Cell::Str(s) => write!(f, "{}", s),
+            Cell::InterpFn(a) => write!(f, "{:0x}", a),
+            Cell::NativeFn(x) => write!(f, "{:?}", x),
+        }
     }
 }
 

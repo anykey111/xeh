@@ -44,29 +44,43 @@ pub struct Ctx {
 #[derive(Clone, Default)]
 pub struct VM {
     dict: Xvec<Entry>,
-    data: Xvec<Cell>,
+    heap: Xvec<Cell>,
     ctx: Ctx,
     source: Lex,
-}
-
-use std::fmt;
-impl fmt::Debug for VM {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<XEH VM>")
-    }
 }
 
 impl VM {
     pub fn load(&mut self, source: &str) -> Xresult {
         self.source = Lex::from_str(source);
-        self.run()
+        self.build(true)
     }
 
-    pub fn run(&mut self) -> Xresult {
+    pub fn interpret(&mut self, source: &str) -> Xresult {
+        self.source = Lex::from_str(source);
+        self.build(false)
+    }
+
+    fn build(&mut self, is_loading: bool) -> Xresult {
+        let mut start = self.ctx.code.len();
         loop {
+            if !is_loading && !self.has_pending_flow() {
+                self.emit(Inst::Ret)?;
+                self.finish_building()?;
+                self.call_addr(start)?;
+                start = self.ctx.code.len();
+            }
             match self.source.next()? {
                 Tok::EndOfInput => {
-                    return self.finish_context();
+                    self.finish_building()?;
+                    if start < self.ctx.code.len() {
+                        self.emit(Inst::Ret)?;
+                        if is_loading {
+                            break self.push_data(Cell::InterpFn(start));
+                        } else {
+                            break self.call_addr(start);
+                        }
+                    }
+                    break OK;
                 }
                 Tok::Num(n) => {
                     let n = n.to_i64().ok_or(Xerr::IntegerOverflow)?;
@@ -86,6 +100,18 @@ impl VM {
                     }
                 }
             }
+        }
+    }
+
+    fn has_pending_flow(&self) -> bool {
+        self.ctx.fs.len() > 0
+    }
+
+    fn finish_building(&mut self) -> Xresult {
+        if self.has_pending_flow() {
+            Err(Xerr::ControlFlowError)
+        } else {
+            OK
         }
     }
 
@@ -139,11 +165,11 @@ impl VM {
     }
 
     fn readonly_cell(&mut self, c: Cell) -> usize {
-        if let Some(a) = self.data.iter().position(|x| x == &c) {
+        if let Some(a) = self.heap.iter().position(|x| x == &c) {
             a
         } else {
-            let a = self.data.len();
-            self.data.push_back_mut(c);
+            let a = self.heap.len();
+            self.heap.push_back_mut(c);
             a
         }
     }
@@ -157,28 +183,60 @@ impl VM {
         }
     }
 
-    //fn exec1(&mut self, inst: &Inst) -> Xresult {
-    // match inst {
-    //     Inst::Jump(offs) => {
-    //         jump_to(offs)?;
-    //     }
-    //     Inst::JumpIf(offs) => {
-    //         let t = pop()?.is_true();
-    //         jump_if(t, offs)?;
-    //     }
-    //     Inst::JumpIfNot(offs) => {
-    //         let t = pop()?.is_true();
-    //         jump_if(!t, offs)?;
-    //     }
-    //     Inst::Call(x) => {
+    fn run1(&mut self) -> Xresult {
+        let ip = self.ctx.ip;
+        match self.ctx.code[ip] {
+            Inst::Jump(offs) => self.jump_to(offs),
+            Inst::JumpIf(offs) => {
+                let t = self.pop_data()? != ZERO;
+                self.jump_if(t, offs)
+            }
+            Inst::JumpIfNot(offs) => {
+                let t = self.pop_data()? == ZERO;
+                self.jump_if(t, offs)
+            }
+            Inst::Const(data_index) => {
+                let val = self.heap[data_index].clone();
+                self.push_data(val)?;
+                self.next_ip()
+            }
+            Inst::Call(a) => todo!("call inst"),
+            Inst::Ret => {
+                let ret_addr = self.ctx.rs.pop().ok_or(Xerr::NoReturnAddress)?;
+                self.ctx.ip = ret_addr;
+                OK
+            }
+            Inst::Load(a) => todo!("load inst"),
+            Inst::Store(a) => todo!("store inst"),
+        }
+    }
 
-    //     }
-    //     Inst::Const(x) => {
+    fn jump_to(&mut self, offs: isize) -> Xresult {
+        let old_ip = self.ctx.ip;
+        let new_ip = (old_ip as isize + offs) as usize;
+        self.ctx.ip = new_ip;
+        OK
+    }
 
-    //     }
-    // }
-    //     OK
-    // }
+    fn jump_if(&mut self, t: bool, offs: isize) -> Xresult {
+        if t {
+            self.jump_to(offs)
+        } else {
+            self.next_ip()
+        }
+    }
+
+    fn call_addr(&mut self, addr: usize) -> Xresult {
+        let ip = self.ctx.ip + 1;
+        self.ctx.rs.push(ip);
+        self.ctx.ip = addr;
+        self.run1()
+    }
+
+    fn next_ip(&mut self) -> Xresult {
+        self.ctx.ip += 1;
+        OK
+    }
 
     fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
         match &mut self.ctx.code[at] {
@@ -216,17 +274,6 @@ impl VM {
     }
 }
 
-// fn relative_jump_dest(ip: usize, offs: isize) -> usize {
-//     (ip as isize + offs) as usize
-// }
-
-// fn jump_if(t: bool, offs: isize) -> Xresult {
-//     if t {
-//         jump_to(offs)?
-//     } else {
-//         jump_fallthrough()?;
-//     }
-// }
 fn core_insert_imm_word(vm: &mut VM, name: &str, f: XfnType) -> Xresult {
     if let Some(_) = vm.lookup(name) {
         panic!("core word duplication {:?}", name);
@@ -380,3 +427,4 @@ fn test_begin_repeat() {
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin repeat until"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin until repeat"));
 }
+
