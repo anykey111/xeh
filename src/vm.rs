@@ -17,6 +17,8 @@ pub struct Entry {
 pub enum Inst {
     Const(usize),
     Call(usize),
+    DeferredCall(usize),
+    NativeCall(Xfn),
     Ret,
     JumpIf(isize),
     JumpIfNot(isize),
@@ -30,6 +32,7 @@ enum Flow {
     If(usize),
     Begin(usize),
     While(usize),
+    Leave(usize),
 }
 
 #[derive(Clone, Default)]
@@ -47,6 +50,7 @@ pub struct VM {
     heap: Xvec<Cell>,
     ctx: Ctx,
     source: Lex,
+    debug: bool,
 }
 
 impl VM {
@@ -63,10 +67,10 @@ impl VM {
     fn build(&mut self, is_loading: bool) -> Xresult {
         let mut start = self.ctx.code.len();
         loop {
-            if !is_loading && !self.has_pending_flow() {
+            if !is_loading && !self.has_pending_flow() && start < self.ctx.code.len() {
                 self.emit(Inst::Ret)?;
                 self.finish_building()?;
-                self.call_addr(start)?;
+                self.run(start)?;
                 start = self.ctx.code.len();
             }
             match self.source.next()? {
@@ -77,7 +81,7 @@ impl VM {
                         if is_loading {
                             break self.push_data(Cell::InterpFn(start));
                         } else {
-                            break self.call_addr(start);
+                            break self.run(start);
                         }
                     }
                     break OK;
@@ -93,11 +97,32 @@ impl VM {
                 }
                 Tok::Word(name) => {
                     let wa = self.insert_word(name);
-                    if self.dict[wa].immediate {
-                        self.run_immediate(wa)?;
-                    } else {
-                        self.emit(Inst::Call(wa))?;
-                    }
+                    match &self.dict[wa] {
+                        Entry {
+                            immediate: true,
+                            data: Some(c),
+                            ..
+                        } => {
+                            let c = c.clone();
+                            self.run_immediate(c)?
+                        }
+                        Entry {
+                            data: Some(Cell::InterpFn(a)),
+                            ..
+                        } => {
+                            let a = *a;
+                            self.emit(Inst::Call(a))?
+                        }
+                        Entry {
+                            data: Some(Cell::NativeFn(f)),
+                            ..
+                        } => {
+                            let f = f.clone();
+                            self.emit(Inst::NativeCall(f))?
+                        }
+                        Entry { data: None, .. } => self.emit(Inst::DeferredCall(wa))?,
+                        other => panic!("invalid word definition {:?}", other),
+                    };
                 }
             }
         }
@@ -117,6 +142,7 @@ impl VM {
 
     pub fn boot() -> Result<VM, Xerr> {
         let mut vm = VM::default();
+        vm.debug = true;
         vm.load_core()?;
         Ok(vm)
     }
@@ -129,6 +155,8 @@ impl VM {
         core_insert_imm_word(self, "while", core_word_while)?;
         core_insert_imm_word(self, "repeat", core_word_repeat)?;
         core_insert_imm_word(self, "until", core_word_until)?;
+        core_insert_imm_word(self, "leave", core_word_leave)?;
+        core_insert_imm_word(self, "again", core_word_again)?;
         OK
     }
 
@@ -156,14 +184,6 @@ impl VM {
         OK
     }
 
-    fn finish_context(&mut self) -> Xresult {
-        if self.ctx.fs.is_empty() {
-            OK
-        } else {
-            Err(Xerr::ControlFlowError)
-        }
-    }
-
     fn readonly_cell(&mut self, c: Cell) -> usize {
         if let Some(a) = self.heap.iter().position(|x| x == &c) {
             a
@@ -174,9 +194,8 @@ impl VM {
         }
     }
 
-    fn run_immediate(&mut self, wa: usize) -> Xresult {
-        let e = self.dict[wa].data.clone().ok_or(Xerr::UnknownWord)?;
-        match e {
+    fn run_immediate(&mut self, x: Cell) -> Xresult {
+        match x {
             Cell::NativeFn(f) => f.0(self),
             Cell::InterpFn(_) => todo!("immediate interpreted function"),
             other => panic!("invalid immediate function {:?}", other),
@@ -184,8 +203,7 @@ impl VM {
     }
 
     fn run1(&mut self) -> Xresult {
-        let ip = self.ctx.ip;
-        match self.ctx.code[ip] {
+        match self.ctx.code[self.ctx.ip] {
             Inst::Jump(offs) => self.jump_to(offs),
             Inst::JumpIf(offs) => {
                 let t = self.pop_data()? != ZERO;
@@ -200,14 +218,16 @@ impl VM {
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Inst::Call(a) => todo!("call inst"),
+            Inst::Call(_) => todo!("Call inst"),
+            Inst::DeferredCall(_) => todo!("DeferredCall"),
+            Inst::NativeCall(_) => todo!("NativeCall"),
             Inst::Ret => {
                 let ret_addr = self.ctx.rs.pop().ok_or(Xerr::NoReturnAddress)?;
                 self.ctx.ip = ret_addr;
                 OK
             }
-            Inst::Load(a) => todo!("load inst"),
-            Inst::Store(a) => todo!("store inst"),
+            Inst::Load(_) => todo!("Load inst"),
+            Inst::Store(_) => todo!("Store inst"),
         }
     }
 
@@ -226,11 +246,17 @@ impl VM {
         }
     }
 
-    fn call_addr(&mut self, addr: usize) -> Xresult {
-        let ip = self.ctx.ip + 1;
+    fn run(&mut self, addr: usize) -> Xresult {
+        let depth = self.ctx.rs.len();
+        let ip = self.ctx.ip;
         self.ctx.rs.push(ip);
         self.ctx.ip = addr;
-        self.run1()
+        loop {
+            self.run1()?;
+            if depth == self.ctx.rs.len() {
+                break OK;
+            }
+        }
     }
 
     fn next_ip(&mut self) -> Xresult {
@@ -339,23 +365,48 @@ fn core_word_while(vm: &mut VM) -> Xresult {
     OK
 }
 
-fn core_word_repeat(vm: &mut VM) -> Xresult {
-    match vm.pop_flow()? {
-        Flow::Begin(begin_org) => {
-            let offs = jump_offset(vm.origin(), begin_org);
-            vm.emit(Inst::Jump(offs))
-        }
-        Flow::While(cond_org) => match vm.pop_flow()? {
-            Flow::Begin(begin_org) => {
-                let offs = jump_offset(cond_org, vm.origin());
-                vm.patch_jump(cond_org, offs)?;
-                let offs = jump_offset(vm.origin(), begin_org);
-                vm.emit(Inst::Jump(offs))
+fn core_word_again(vm: &mut VM) -> Xresult {
+    loop {
+        match vm.pop_flow()? {
+            Flow::Leave(leave_org) => {
+                let offs = jump_offset(leave_org, vm.origin() + 1);
+                vm.patch_jump(leave_org, offs)?;
             }
-            _ => Err(Xerr::ControlFlowError),
-        },
-        _ => Err(Xerr::ControlFlowError),
+            Flow::Begin(begin_org) => {
+                let offs = jump_offset(vm.origin(), begin_org);
+                break vm.emit(Inst::Jump(offs));
+            }
+            _ => break Err(Xerr::ControlFlowError),
+        }
     }
+}
+
+fn core_word_repeat(vm: &mut VM) -> Xresult {
+    loop {
+        match vm.pop_flow()? {
+            Flow::Leave(leave_org) => {
+                let offs = jump_offset(leave_org, vm.origin() + 1);
+                vm.patch_jump(leave_org, offs)?;
+            }
+            Flow::While(cond_org) => match vm.pop_flow()? {
+                Flow::Begin(begin_org) => {
+                    let offs = jump_offset(cond_org, vm.origin());
+                    vm.patch_jump(cond_org, offs)?;
+                    let offs = jump_offset(vm.origin(), begin_org);
+                    break vm.emit(Inst::Jump(offs));
+                }
+                _ => break Err(Xerr::ControlFlowError),
+            },
+            _ => break Err(Xerr::ControlFlowError),
+        }
+    }
+}
+
+fn core_word_leave(vm: &mut VM) -> Xresult {
+    let leave = Flow::Leave(vm.origin());
+    vm.emit(Inst::Jump(0))?;
+    vm.push_flow(leave);
+    OK
 }
 
 fn jump_offset(origin: usize, dest: usize) -> isize {
@@ -409,12 +460,12 @@ fn test_begin_repeat() {
     it.next().unwrap();
     assert_eq!(&Inst::Jump(-4), it.next().unwrap());
     let mut vm = VM::boot().unwrap();
-    vm.load("begin leave repeat").unwrap();
+    vm.load("begin leave again").unwrap();
     let mut it = vm.ctx.code.iter();
     it.next().unwrap();
     assert_eq!(&Inst::Jump(-1), it.next().unwrap());
     let mut vm = VM::boot().unwrap();
-    vm.load("0 begin 1 + until");
+    vm.load("0 begin 1 + until").unwrap();
     let mut it = vm.ctx.code.iter();
     it.next().unwrap();
     it.next().unwrap();
@@ -428,3 +479,14 @@ fn test_begin_repeat() {
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin until repeat"));
 }
 
+#[test]
+fn test_loop_leave() {
+    let mut vm = VM::boot().unwrap();
+    vm.interpret("begin 1 leave again").unwrap();
+    let x = vm.pop_data().unwrap();
+    assert_eq!(x, Cell::Int(1));
+    assert_eq!(Err(Xerr::StackUnderflow), vm.pop_data());
+    let mut vm = VM::boot().unwrap();
+    let res = vm.interpret("begin 1 again leave");
+    assert_eq!(Err(Xerr::ControlFlowError), res);
+}

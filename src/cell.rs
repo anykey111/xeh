@@ -14,6 +14,7 @@ pub enum Cell {
     Int(i64),
     Real(f64),
     Str(String),
+    Vector(Xvec<Cell>),
     InterpFn(usize),
     NativeFn(Xfn),
 }
@@ -26,6 +27,7 @@ impl fmt::Debug for Cell {
             Cell::Int(n) => write!(f, "{}", n),
             Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) => write!(f, "{}", s),
+            Cell::Vector(v) => write!(f, "{:?}", v),
             Cell::InterpFn(a) => write!(f, "{:0x}", a),
             Cell::NativeFn(x) => write!(f, "{:?}", x),
         }
