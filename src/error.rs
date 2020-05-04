@@ -7,6 +7,7 @@ pub enum Xerr {
     ControlFlowError,
     StackUnderflow,
     NoReturnAddress,
+    TypeError,
 }
 
 pub type Xresult = Result<(), Xerr>;

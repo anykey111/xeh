@@ -15,6 +15,7 @@ pub struct Entry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inst {
+    Nop,
     Const(usize),
     Call(usize),
     DeferredCall(usize),
@@ -33,6 +34,7 @@ enum Flow {
     Begin(usize),
     While(usize),
     Leave(usize),
+    VecPushBack(usize),
 }
 
 #[derive(Clone, Default)]
@@ -70,7 +72,7 @@ impl VM {
             if !is_loading && !self.has_pending_flow() && start < self.ctx.code.len() {
                 self.emit(Inst::Ret)?;
                 self.finish_building()?;
-                self.run(start)?;
+                self.run(Cell::InterpFn(start), None)?;
                 start = self.ctx.code.len();
             }
             match self.source.next()? {
@@ -81,7 +83,7 @@ impl VM {
                         if is_loading {
                             break self.push_data(Cell::InterpFn(start));
                         } else {
-                            break self.run(start);
+                            break self.run(Cell::InterpFn(start), None);
                         }
                     }
                     break OK;
@@ -97,32 +99,16 @@ impl VM {
                 }
                 Tok::Word(name) => {
                     let wa = self.insert_word(name);
-                    match &self.dict[wa] {
-                        Entry {
-                            immediate: true,
-                            data: Some(c),
-                            ..
-                        } => {
-                            let c = c.clone();
-                            self.run_immediate(c)?
-                        }
-                        Entry {
-                            data: Some(Cell::InterpFn(a)),
-                            ..
-                        } => {
-                            let a = *a;
-                            self.emit(Inst::Call(a))?
-                        }
-                        Entry {
-                            data: Some(Cell::NativeFn(f)),
-                            ..
-                        } => {
-                            let f = f.clone();
-                            self.emit(Inst::NativeCall(f))?
-                        }
-                        Entry { data: None, .. } => self.emit(Inst::DeferredCall(wa))?,
-                        other => panic!("invalid word definition {:?}", other),
-                    };
+                    let e = &self.dict[wa];
+                    if e.immediate {
+                        let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
+                        self.run(c, None)?;
+                    } else if e.data.is_some() {
+                        let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
+                        self.run(c, None)?;
+                    } else {
+                        self.emit(Inst::DeferredCall(wa))?;
+                    }
                 }
             }
         }
@@ -157,6 +143,8 @@ impl VM {
         core_insert_imm_word(self, "until", core_word_until)?;
         core_insert_imm_word(self, "leave", core_word_leave)?;
         core_insert_imm_word(self, "again", core_word_again)?;
+        core_insert_imm_word(self, "[", core_word_vec_start)?;
+        core_insert_imm_word(self, "]", core_word_vec_end)?;
         OK
     }
 
@@ -194,16 +182,28 @@ impl VM {
         }
     }
 
-    fn run_immediate(&mut self, x: Cell) -> Xresult {
-        match x {
+    fn run(&mut self, c: Cell, return_to: Option<usize>) -> Xresult {
+        match c {
             Cell::NativeFn(f) => f.0(self),
-            Cell::InterpFn(_) => todo!("immediate interpreted function"),
-            other => panic!("invalid immediate function {:?}", other),
+            Cell::InterpFn(f) => {
+                let depth = self.ctx.rs.len();
+                let new_ip = return_to.unwrap_or(self.ctx.ip);
+                self.ctx.ip = f;
+                loop {
+                    self.run_inst()?;
+                    if depth == self.ctx.rs.len() {
+                        self.ctx.ip = new_ip;
+                        break OK;
+                    }
+                }
+            }
+            other => panic!("invalid function {:?}", other),
         }
     }
 
-    fn run1(&mut self) -> Xresult {
-        match self.ctx.code[self.ctx.ip] {
+    fn run_inst(&mut self) -> Xresult {
+        let ip = self.ctx.ip;
+        match self.ctx.code[ip] {
             Inst::Jump(offs) => self.jump_to(offs),
             Inst::JumpIf(offs) => {
                 let t = self.pop_data()? != ZERO;
@@ -218,9 +218,12 @@ impl VM {
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Inst::Call(_) => todo!("Call inst"),
-            Inst::DeferredCall(_) => todo!("DeferredCall"),
-            Inst::NativeCall(_) => todo!("NativeCall"),
+            Inst::Call(a) => self.run(Cell::InterpFn(a), Some(ip + 1)),
+            Inst::DeferredCall(wa) => {
+                let f = self.dict[wa].data.clone().ok_or(Xerr::UnknownWord)?;
+                self.run(f, Some(ip + 1))
+            }
+            Inst::NativeCall(f) => self.run(Cell::NativeFn(f), Some(ip + 1)),
             Inst::Ret => {
                 let ret_addr = self.ctx.rs.pop().ok_or(Xerr::NoReturnAddress)?;
                 self.ctx.ip = ret_addr;
@@ -243,19 +246,6 @@ impl VM {
             self.jump_to(offs)
         } else {
             self.next_ip()
-        }
-    }
-
-    fn run(&mut self, addr: usize) -> Xresult {
-        let depth = self.ctx.rs.len();
-        let ip = self.ctx.ip;
-        self.ctx.rs.push(ip);
-        self.ctx.ip = addr;
-        loop {
-            self.run1()?;
-            if depth == self.ctx.rs.len() {
-                break OK;
-            }
         }
     }
 
@@ -289,6 +279,10 @@ impl VM {
     pub fn push_data(&mut self, data: Cell) -> Xresult {
         self.ctx.ds.push(data);
         OK
+    }
+
+    pub fn pop_data_typed(&mut self) -> Result<Cell, Xerr> {
+        todo!("wof!")
     }
 
     pub fn pop_data(&mut self) -> Result<Cell, Xerr> {
@@ -414,6 +408,41 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
         -((origin - dest) as isize)
     } else {
         (dest - origin) as isize
+    }
+}
+
+fn core_word_vec_start(vm: &mut VM) -> Xresult {
+    vm.push_flow(Flow::VecPushBack(0));
+    let f = Xfn(|vm| vm.push_data(Cell::Vector(Xvec::new())));
+    vm.emit(Inst::NativeCall(f))
+}
+
+fn core_word_vec_end(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::VecPushBack(_) => OK,
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn core_word_comma(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::VecPushBack(n) => {
+            vm.push_flow(Flow::VecPushBack(n + 1));
+            vm.emit(Inst::NativeCall(Xfn(vec_push_back)))
+        }
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn vec_new(vm: &mut VM) -> Xresult {
+    vm.push_data(Cell::Vector(Xvec::new()))
+}
+
+fn vec_push_back(vm: &mut VM) -> Xresult {
+    let x = vm.pop_data()?;
+    match vm.pop_data()? {
+        Cell::Vector(v) => vm.push_data(v.push_back(x)),
+        _ => Err(Xerr::TypeError),
     }
 }
 

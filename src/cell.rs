@@ -6,7 +6,7 @@ pub type Xlist<T> = rpds::List<T>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut VM) -> Xresult;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Xfn(pub XfnType);
 
 #[derive(Clone, PartialEq)]
