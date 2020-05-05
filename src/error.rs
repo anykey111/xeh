@@ -6,7 +6,10 @@ pub enum Xerr {
     IntegerOverflow,
     ControlFlowError,
     StackUnderflow,
-    NoReturnAddress,
+    ReturnStackUnderflow,
+    LoopStackUnderflow,
+    CollectionError,
+    StackNotBalanced,
     TypeError,
 }
 

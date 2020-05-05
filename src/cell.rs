@@ -1,18 +1,20 @@
+use crate::error::{Xerr, Xresult};
 use crate::vm::VM;
-use crate::error::Xresult;
 
 pub type Xvec<T> = rpds::Vector<T>;
 pub type Xlist<T> = rpds::List<T>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut VM) -> Xresult;
+pub type Xint = i64;
+pub type Xreal = f64;
 
 #[derive(Clone, Copy)]
 pub struct Xfn(pub XfnType);
 
 #[derive(Clone, PartialEq)]
 pub enum Cell {
-    Int(i64),
-    Real(f64),
+    Int(Xint),
+    Real(Xreal),
     Str(String),
     Vector(Xvec<Cell>),
     InterpFn(usize),
@@ -36,7 +38,6 @@ impl fmt::Debug for Cell {
 
 impl fmt::Debug for Xfn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         write!(f, "{:?}", self.0 as usize)
     }
 }
@@ -44,6 +45,21 @@ impl fmt::Debug for Xfn {
 impl PartialEq for Xfn {
     fn eq(&self, other: &Self) -> bool {
         self.0 as usize == other.0 as usize
+    }
+}
+
+impl Cell {
+    pub fn to_usize(&self) -> Result<usize, Xerr> {
+        match self {
+            Cell::Int(i) => {
+                if i.is_positive() {
+                    Ok(*i as usize)
+                } else {
+                    Err(Xerr::IntegerOverflow)
+                }
+            }
+            _other => Err(Xerr::TypeError),
+        }
     }
 }
 

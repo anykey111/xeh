@@ -34,7 +34,12 @@ enum Flow {
     Begin(usize),
     While(usize),
     Leave(usize),
-    VecPushBack(usize),
+    VecPushBack,
+}
+
+#[derive(Clone)]
+enum Loop {
+    VecBuilder { stack_ptr: usize },
 }
 
 #[derive(Clone, Default)]
@@ -44,6 +49,7 @@ pub struct Ctx {
     ds: Vec<Cell>,
     rs: Vec<usize>,
     fs: Vec<Flow>,
+    ls: Vec<Loop>,
 }
 
 #[derive(Clone, Default)]
@@ -72,7 +78,7 @@ impl VM {
             if !is_loading && !self.has_pending_flow() && start < self.ctx.code.len() {
                 self.emit(Inst::Ret)?;
                 self.finish_building()?;
-                self.run(Cell::InterpFn(start), None)?;
+                self.run(Cell::InterpFn(start))?;
                 start = self.ctx.code.len();
             }
             match self.source.next()? {
@@ -83,7 +89,7 @@ impl VM {
                         if is_loading {
                             break self.push_data(Cell::InterpFn(start));
                         } else {
-                            break self.run(Cell::InterpFn(start), None);
+                            break self.run(Cell::InterpFn(start));
                         }
                     }
                     break OK;
@@ -102,10 +108,10 @@ impl VM {
                     let e = &self.dict[wa];
                     if e.immediate {
                         let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
-                        self.run(c, None)?;
+                        self.run(c)?;
                     } else if e.data.is_some() {
                         let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
-                        self.run(c, None)?;
+                        todo!("word data {:?}", c);
                     } else {
                         self.emit(Inst::DeferredCall(wa))?;
                     }
@@ -143,7 +149,7 @@ impl VM {
         core_insert_imm_word(self, "until", core_word_until)?;
         core_insert_imm_word(self, "leave", core_word_leave)?;
         core_insert_imm_word(self, "again", core_word_again)?;
-        core_insert_imm_word(self, "[", core_word_vec_start)?;
+        core_insert_imm_word(self, "[", core_word_vec_begin)?;
         core_insert_imm_word(self, "]", core_word_vec_end)?;
         OK
     }
@@ -172,6 +178,21 @@ impl VM {
         OK
     }
 
+    fn patch_insn(&mut self, at: usize, insn: Inst) -> Xresult {
+        self.ctx.code[at] = insn;
+        OK
+    }
+
+    fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
+        let insn = match &self.ctx.code[at] {
+            Inst::Jump(_) => Inst::Jump(offs),
+            Inst::JumpIf(_) => Inst::JumpIf(offs),
+            Inst::JumpIfNot(_) => Inst::JumpIfNot(offs),
+            other => panic!("not a jump instruction {:?}", other),
+        };
+        self.patch_insn(at, insn)
+    }
+
     fn readonly_cell(&mut self, c: Cell) -> usize {
         if let Some(a) = self.heap.iter().position(|x| x == &c) {
             a
@@ -182,17 +203,18 @@ impl VM {
         }
     }
 
-    fn run(&mut self, c: Cell, return_to: Option<usize>) -> Xresult {
+    fn run(&mut self, c: Cell) -> Xresult {
         match c {
             Cell::NativeFn(f) => f.0(self),
-            Cell::InterpFn(f) => {
+            Cell::InterpFn(a) => {
+                let old_ip = self.ctx.ip;
                 let depth = self.ctx.rs.len();
-                let new_ip = return_to.unwrap_or(self.ctx.ip);
-                self.ctx.ip = f;
+                self.push_return(old_ip)?;
+                self.set_ip(a)?;
                 loop {
                     self.run_inst()?;
                     if depth == self.ctx.rs.len() {
-                        self.ctx.ip = new_ip;
+                        assert_eq!(old_ip, self.ctx.ip);
                         break OK;
                     }
                 }
@@ -204,6 +226,7 @@ impl VM {
     fn run_inst(&mut self) -> Xresult {
         let ip = self.ctx.ip;
         match self.ctx.code[ip] {
+            Inst::Nop => self.next_ip(),
             Inst::Jump(offs) => self.jump_to(offs),
             Inst::JumpIf(offs) => {
                 let t = self.pop_data()? != ZERO;
@@ -218,16 +241,25 @@ impl VM {
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Inst::Call(a) => self.run(Cell::InterpFn(a), Some(ip + 1)),
-            Inst::DeferredCall(wa) => {
-                let f = self.dict[wa].data.clone().ok_or(Xerr::UnknownWord)?;
-                self.run(f, Some(ip + 1))
+            Inst::Call(a) => {
+                self.push_return(ip + 1)?;
+                self.set_ip(a)
             }
-            Inst::NativeCall(f) => self.run(Cell::NativeFn(f), Some(ip + 1)),
+            Inst::DeferredCall(wa) => {
+                let c = self.dict[wa].data.clone().ok_or(Xerr::UnknownWord)?;
+                match c {
+                    Cell::InterpFn(a) => self.patch_insn(ip, Inst::Call(a)),
+                    Cell::NativeFn(f) => self.patch_insn(ip, Inst::NativeCall(f)),
+                    _other => self.patch_insn(ip, Inst::Load(wa)),
+                }
+            }
+            Inst::NativeCall(f) => {
+                f.0(self)?;
+                self.next_ip()
+            }
             Inst::Ret => {
-                let ret_addr = self.ctx.rs.pop().ok_or(Xerr::NoReturnAddress)?;
-                self.ctx.ip = ret_addr;
-                OK
+                let new_ip = self.pop_return()?;
+                self.set_ip(new_ip)
             }
             Inst::Load(_) => todo!("Load inst"),
             Inst::Store(_) => todo!("Store inst"),
@@ -249,18 +281,13 @@ impl VM {
         }
     }
 
-    fn next_ip(&mut self) -> Xresult {
-        self.ctx.ip += 1;
+    fn set_ip(&mut self, new_ip: usize) -> Xresult {
+        self.ctx.ip = new_ip;
         OK
     }
 
-    fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
-        match &mut self.ctx.code[at] {
-            Inst::Jump(ref mut a) => *a = offs,
-            Inst::JumpIf(ref mut a) => *a = offs,
-            Inst::JumpIfNot(ref mut a) => *a = offs,
-            other => panic!("not a jump instruction {:?}", other),
-        }
+    fn next_ip(&mut self) -> Xresult {
+        self.ctx.ip += 1;
         OK
     }
 
@@ -268,12 +295,18 @@ impl VM {
         self.ctx.fs.pop().ok_or(Xerr::ControlFlowError)
     }
 
-    fn push_flow(&mut self, flow: Flow) {
+    fn push_flow(&mut self, flow: Flow) -> Xresult {
         self.ctx.fs.push(flow);
+        OK
     }
 
     pub fn lookup(&mut self, name: &str) -> Option<usize> {
         self.dict.iter().position(|x| x.name == name)
+    }
+
+    fn truncate_data(&mut self, len: usize) -> Xresult {
+        self.ctx.ds.truncate(len);
+        OK
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
@@ -289,8 +322,26 @@ impl VM {
         self.ctx.ds.pop().ok_or(Xerr::StackUnderflow)
     }
 
-    pub fn top_data(&mut self) -> Result<&Cell, Xerr> {
-        self.ctx.ds.last().ok_or(Xerr::StackUnderflow)
+    pub fn top_data(&mut self) -> Option<&Cell> {
+        self.ctx.ds.last()
+    }
+
+    fn push_return(&mut self, return_to: usize) -> Xresult {
+        self.ctx.rs.push(return_to);
+        OK
+    }
+
+    fn pop_return(&mut self) -> Result<usize, Xerr> {
+        self.ctx.rs.pop().ok_or(Xerr::ReturnStackUnderflow)
+    }
+
+    fn push_loop(&mut self, l: Loop) -> Xresult {
+        self.ctx.ls.push(l);
+        OK
+    }
+
+    fn pop_loop(&mut self) -> Result<Loop, Xerr> {
+        self.ctx.ls.pop().ok_or(Xerr::LoopStackUnderflow)
     }
 }
 
@@ -310,8 +361,7 @@ fn core_insert_imm_word(vm: &mut VM, name: &str, f: XfnType) -> Xresult {
 fn core_word_if(vm: &mut VM) -> Xresult {
     let fwd = Flow::If(vm.origin());
     vm.emit(Inst::JumpIfNot(0))?;
-    vm.push_flow(fwd);
-    OK
+    vm.push_flow(fwd)
 }
 
 fn core_word_else(vm: &mut VM) -> Xresult {
@@ -319,7 +369,7 @@ fn core_word_else(vm: &mut VM) -> Xresult {
         Flow::If(if_org) => {
             let fwd = Flow::If(vm.origin());
             vm.emit(Inst::Jump(0))?;
-            vm.push_flow(fwd);
+            vm.push_flow(fwd)?;
             let offs = jump_offset(if_org, vm.origin());
             vm.patch_jump(if_org, offs)
         }
@@ -338,8 +388,7 @@ fn core_word_then(vm: &mut VM) -> Xresult {
 }
 
 fn core_word_begin(vm: &mut VM) -> Xresult {
-    vm.push_flow(Flow::Begin(vm.origin()));
-    OK
+    vm.push_flow(Flow::Begin(vm.origin()))
 }
 
 fn core_word_until(vm: &mut VM) -> Xresult {
@@ -355,8 +404,7 @@ fn core_word_until(vm: &mut VM) -> Xresult {
 fn core_word_while(vm: &mut VM) -> Xresult {
     let cond = Flow::While(vm.origin());
     vm.emit(Inst::JumpIfNot(0))?;
-    vm.push_flow(cond);
-    OK
+    vm.push_flow(cond)
 }
 
 fn core_word_again(vm: &mut VM) -> Xresult {
@@ -399,7 +447,7 @@ fn core_word_repeat(vm: &mut VM) -> Xresult {
 fn core_word_leave(vm: &mut VM) -> Xresult {
     let leave = Flow::Leave(vm.origin());
     vm.emit(Inst::Jump(0))?;
-    vm.push_flow(leave);
+    vm.push_flow(leave)?;
     OK
 }
 
@@ -411,38 +459,39 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
     }
 }
 
-fn core_word_vec_start(vm: &mut VM) -> Xresult {
-    vm.push_flow(Flow::VecPushBack(0));
-    let f = Xfn(|vm| vm.push_data(Cell::Vector(Xvec::new())));
-    vm.emit(Inst::NativeCall(f))
+fn core_word_vec_begin(vm: &mut VM) -> Xresult {
+    vm.push_flow(Flow::VecPushBack)?;
+    vm.emit(Inst::NativeCall(Xfn(vec_builder_begin)))
 }
 
 fn core_word_vec_end(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
-        Flow::VecPushBack(_) => OK,
+        Flow::VecPushBack => vm.emit(Inst::NativeCall(Xfn(vec_builder_end))),
         _ => Err(Xerr::ControlFlowError),
     }
 }
 
-fn core_word_comma(vm: &mut VM) -> Xresult {
-    match vm.pop_flow()? {
-        Flow::VecPushBack(n) => {
-            vm.push_flow(Flow::VecPushBack(n + 1));
-            vm.emit(Inst::NativeCall(Xfn(vec_push_back)))
+fn vec_builder_begin(vm: &mut VM) -> Xresult {
+    let stack_ptr = vm.ctx.ds.len();
+    vm.push_loop(Loop::VecBuilder { stack_ptr })
+}
+
+fn vec_builder_end(vm: &mut VM) -> Xresult {
+    let top_ptr = vm.ctx.ds.len();
+    match vm.pop_loop()? {
+        //todo: maybe check capacity
+        Loop::VecBuilder { stack_ptr } => {
+            if top_ptr < stack_ptr {
+                Err(Xerr::StackNotBalanced)
+            } else {
+                let mut v = Xvec::new();
+                for x in &vm.ctx.ds[stack_ptr..] {
+                    v.push_back_mut(x.clone());
+                }
+                vm.truncate_data(stack_ptr)?;
+                vm.push_data(Cell::Vector(v))
+            }
         }
-        _ => Err(Xerr::ControlFlowError),
-    }
-}
-
-fn vec_new(vm: &mut VM) -> Xresult {
-    vm.push_data(Cell::Vector(Xvec::new()))
-}
-
-fn vec_push_back(vm: &mut VM) -> Xresult {
-    let x = vm.pop_data()?;
-    match vm.pop_data()? {
-        Cell::Vector(v) => vm.push_data(v.push_back(x)),
-        _ => Err(Xerr::TypeError),
     }
 }
 
