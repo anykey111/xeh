@@ -2,7 +2,7 @@ use crate::error::{Xerr, Xresult};
 use crate::vm::VM;
 
 pub type Xvec<T> = rpds::Vector<T>;
-pub type Xlist<T> = rpds::List<T>;
+pub type Xmap = rpds::Vector<(Cell,Cell)>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut VM) -> Xresult;
 pub type Xint = i64;
@@ -17,6 +17,7 @@ pub enum Cell {
     Real(Xreal),
     Str(String),
     Vector(Xvec<Cell>),
+    Map(Xmap),
     InterpFn(usize),
     NativeFn(Xfn),
 }
@@ -30,6 +31,7 @@ impl fmt::Debug for Cell {
             Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) => write!(f, "{}", s),
             Cell::Vector(v) => write!(f, "{:?}", v),
+            Cell::Map(v) => write!(f, "{:?}", v),
             Cell::InterpFn(a) => write!(f, "{:0x}", a),
             Cell::NativeFn(x) => write!(f, "{:?}", x),
         }
@@ -50,15 +52,18 @@ impl PartialEq for Xfn {
 
 impl Cell {
     pub fn to_usize(&self) -> Result<usize, Xerr> {
+        let i = self.to_int()?;
+        if i.is_positive() {
+            Ok(i as usize)
+        } else {
+            Err(Xerr::IntegerOverflow)
+        }
+    }
+
+    pub fn to_int(&self) -> Result<Xint, Xerr> {
         match self {
-            Cell::Int(i) => {
-                if i.is_positive() {
-                    Ok(*i as usize)
-                } else {
-                    Err(Xerr::IntegerOverflow)
-                }
-            }
-            _other => Err(Xerr::TypeError),
+            Cell::Int(i) => Ok(*i),
+            _ => Err(Xerr::TypeError),
         }
     }
 }

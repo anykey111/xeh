@@ -34,12 +34,14 @@ enum Flow {
     Begin(usize),
     While(usize),
     Leave(usize),
-    VecPushBack,
+    Vec,
+    Map,
 }
 
 #[derive(Clone)]
 enum Loop {
     VecBuilder { stack_ptr: usize },
+    MapBuilder { stack_ptr: usize },
 }
 
 #[derive(Clone, Default)]
@@ -151,6 +153,8 @@ impl VM {
         core_insert_imm_word(self, "again", core_word_again)?;
         core_insert_imm_word(self, "[", core_word_vec_begin)?;
         core_insert_imm_word(self, "]", core_word_vec_end)?;
+        core_insert_imm_word(self, "{", core_word_map_begin)?;
+        core_insert_imm_word(self, "}", core_word_map_end)?;
         OK
     }
 
@@ -304,9 +308,14 @@ impl VM {
         self.dict.iter().position(|x| x.name == name)
     }
 
-    fn truncate_data(&mut self, len: usize) -> Xresult {
-        self.ctx.ds.truncate(len);
-        OK
+    fn dropn(&mut self, len: usize) -> Xresult {
+        let ds_len = self.ctx.ds.len();
+        if ds_len < len {
+            Err(Xerr::StackUnderflow)
+        } else {
+            self.ctx.ds.truncate(ds_len - len);
+            OK
+        }
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
@@ -460,13 +469,13 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
 }
 
 fn core_word_vec_begin(vm: &mut VM) -> Xresult {
-    vm.push_flow(Flow::VecPushBack)?;
+    vm.push_flow(Flow::Vec)?;
     vm.emit(Inst::NativeCall(Xfn(vec_builder_begin)))
 }
 
 fn core_word_vec_end(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
-        Flow::VecPushBack => vm.emit(Inst::NativeCall(Xfn(vec_builder_end))),
+        Flow::Vec => vm.emit(Inst::NativeCall(Xfn(vec_builder_end))),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -479,7 +488,6 @@ fn vec_builder_begin(vm: &mut VM) -> Xresult {
 fn vec_builder_end(vm: &mut VM) -> Xresult {
     let top_ptr = vm.ctx.ds.len();
     match vm.pop_loop()? {
-        //todo: maybe check capacity
         Loop::VecBuilder { stack_ptr } => {
             if top_ptr < stack_ptr {
                 Err(Xerr::StackNotBalanced)
@@ -488,10 +496,47 @@ fn vec_builder_end(vm: &mut VM) -> Xresult {
                 for x in &vm.ctx.ds[stack_ptr..] {
                     v.push_back_mut(x.clone());
                 }
-                vm.truncate_data(stack_ptr)?;
+                vm.dropn(top_ptr - stack_ptr)?;
                 vm.push_data(Cell::Vector(v))
             }
         }
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn core_word_map_begin(vm: &mut VM) -> Xresult {
+    vm.push_flow(Flow::Map)?;
+    vm.emit(Inst::NativeCall(Xfn(map_builder_begin)))
+}
+
+fn core_word_map_end(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::Map => vm.emit(Inst::NativeCall(Xfn(map_builder_end))),
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn map_builder_begin(vm: &mut VM) -> Xresult {
+    let stack_ptr = vm.ctx.ds.len();
+    vm.push_loop(Loop::MapBuilder { stack_ptr })
+}
+
+fn map_builder_end(vm: &mut VM) -> Xresult {
+    let top_ptr = vm.ctx.ds.len();
+    match vm.pop_loop()? {
+        Loop::MapBuilder { stack_ptr } => {
+            if top_ptr < stack_ptr || (top_ptr - stack_ptr) % 2 == 1 {
+                Err(Xerr::StackNotBalanced)
+            } else {
+                let mut m = Xmap::new();
+                for kv in vm.ctx.ds[stack_ptr..].chunks(2) {
+                    m.push_back_mut((kv[0].clone(), kv[1].clone()));
+                }
+                vm.dropn(top_ptr - stack_ptr)?;
+                vm.push_data(Cell::Map(m))
+            }
+        }
+        _ => Err(Xerr::ControlFlowError),
     }
 }
 
