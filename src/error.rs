@@ -11,6 +11,9 @@ pub enum Xerr {
     CollectionError,
     StackNotBalanced,
     TypeError,
+    RecusriveDefinition,
+    ExpectingName,
+    NotAnExecutable,
 }
 
 pub type Xresult = Result<(), Xerr>;

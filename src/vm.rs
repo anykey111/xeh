@@ -2,15 +2,20 @@ use num_traits::ToPrimitive;
 
 use crate::cell::*;
 use crate::error::*;
-use crate::hash::*;
 use crate::lex::*;
 
-#[derive(Debug)]
-pub struct Entry {
+#[derive(Debug, Clone, PartialEq)]
+enum EntryData {
+    Empty,
+    Var(Cell),
+    Exec(Cell),
+}
+
+#[derive(Debug, Clone)]
+struct Entry {
     name: String,
     immediate: bool,
-    hash: Xhash,
-    data: Option<Cell>,
+    data: EntryData,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +23,7 @@ pub enum Inst {
     Nop,
     Const(usize),
     Call(usize),
-    DeferredCall(usize),
+    Deferred(usize),
     NativeCall(Xfn),
     Ret,
     JumpIf(isize),
@@ -36,6 +41,7 @@ enum Flow {
     Leave(usize),
     Vec,
     Map,
+    Fun { word_addr: usize, start: usize },
 }
 
 #[derive(Clone)]
@@ -56,8 +62,8 @@ pub struct Ctx {
 
 #[derive(Clone, Default)]
 pub struct VM {
-    dict: Xvec<Entry>,
-    heap: Xvec<Cell>,
+    dict: Vec<Entry>,
+    heap: Vec<Cell>,
     ctx: Ctx,
     source: Lex,
     debug: bool,
@@ -106,16 +112,30 @@ impl VM {
                     self.emit(Inst::Const(a))?;
                 }
                 Tok::Word(name) => {
-                    let wa = self.insert_word(name);
+                    let wa = self.lookup(&name).unwrap_or_else(|| self.insert_word(name));
                     let e = &self.dict[wa];
                     if e.immediate {
-                        let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
-                        self.run(c)?;
-                    } else if e.data.is_some() {
-                        let c = e.data.clone().ok_or(Xerr::UnknownWord)?;
-                        todo!("word data {:?}", c);
+                        match &e.data {
+                            EntryData::Exec(x) => {
+                                let x = x.clone();
+                                self.run(x)?
+                            }
+                            _ => Err(Xerr::NotAnExecutable)?,
+                        };
                     } else {
-                        self.emit(Inst::DeferredCall(wa))?;
+                        match &e.data {
+                            EntryData::Empty => self.emit(Inst::Deferred(wa))?,
+                            EntryData::Exec(Cell::InterpFn(a)) => {
+                                let a = *a;
+                                self.emit(Inst::Call(a))?;
+                            }
+                            EntryData::Exec(Cell::NativeFn(f)) => {
+                                let f = *f;
+                                self.emit(Inst::NativeCall(f))?;
+                            }
+                            EntryData::Var(_) => self.emit(Inst::Load(wa))?,
+                            _ => Err(Xerr::NotAnExecutable)?,
+                        }
                     }
                 }
             }
@@ -155,22 +175,19 @@ impl VM {
         core_insert_imm_word(self, "]", core_word_vec_end)?;
         core_insert_imm_word(self, "{", core_word_map_begin)?;
         core_insert_imm_word(self, "}", core_word_map_end)?;
+        core_insert_imm_word(self, ":", core_word_def_begin)?;
+        core_insert_imm_word(self, ";", core_word_def_end)?;
         OK
     }
 
     fn insert_word(&mut self, name: String) -> usize {
-        if let Some(wa) = self.lookup(&name) {
-            wa
-        } else {
-            let wa = self.dict.len();
-            self.dict.push_back_mut(Entry {
-                name: name,
-                immediate: false,
-                hash: Default::default(),
-                data: None,
-            });
-            wa
-        }
+        let wa = self.dict.len();
+        self.dict.push(Entry {
+            name: name,
+            immediate: false,
+            data: EntryData::Empty,
+        });
+        wa
     }
 
     fn origin(&self) -> usize {
@@ -202,7 +219,7 @@ impl VM {
             a
         } else {
             let a = self.heap.len();
-            self.heap.push_back_mut(c);
+            self.heap.push(c);
             a
         }
     }
@@ -249,14 +266,21 @@ impl VM {
                 self.push_return(ip + 1)?;
                 self.set_ip(a)
             }
-            Inst::DeferredCall(wa) => {
-                let c = self.dict[wa].data.clone().ok_or(Xerr::UnknownWord)?;
-                match c {
-                    Cell::InterpFn(a) => self.patch_insn(ip, Inst::Call(a)),
-                    Cell::NativeFn(f) => self.patch_insn(ip, Inst::NativeCall(f)),
-                    _other => self.patch_insn(ip, Inst::Load(wa)),
-                }
-            }
+            Inst::Deferred(wa) => match &self.dict[wa].data {
+                EntryData::Empty => Err(Xerr::UnknownWord),
+                EntryData::Exec(c) => match c {
+                    Cell::InterpFn(a) => {
+                        let a = *a;
+                        self.patch_insn(ip, Inst::Call(a))
+                    }
+                    Cell::NativeFn(f) => {
+                        let f = *f;
+                        self.patch_insn(ip, Inst::NativeCall(f))
+                    }
+                    _ => Err(Xerr::NotAnExecutable),
+                },
+                EntryData::Var(_) => self.patch_insn(ip, Inst::Load(wa)),
+            },
             Inst::NativeCall(f) => {
                 f.0(self)?;
                 self.next_ip()
@@ -305,7 +329,7 @@ impl VM {
     }
 
     pub fn lookup(&mut self, name: &str) -> Option<usize> {
-        self.dict.iter().position(|x| x.name == name)
+        self.dict.iter().rposition(|x| x.name == name)
     }
 
     fn dropn(&mut self, len: usize) -> Xresult {
@@ -358,11 +382,10 @@ fn core_insert_imm_word(vm: &mut VM, name: &str, f: XfnType) -> Xresult {
     if let Some(_) = vm.lookup(name) {
         panic!("core word duplication {:?}", name);
     }
-    vm.dict.push_back_mut(Entry {
+    vm.dict.push(Entry {
         name: name.to_string(),
         immediate: true,
-        hash: Xhash::from(f),
-        data: Some(Cell::NativeFn(Xfn(f))),
+        data: EntryData::Exec(Cell::NativeFn(Xfn(f))),
     });
     OK
 }
@@ -486,9 +509,9 @@ fn vec_builder_begin(vm: &mut VM) -> Xresult {
 }
 
 fn vec_builder_end(vm: &mut VM) -> Xresult {
-    let top_ptr = vm.ctx.ds.len();
     match vm.pop_loop()? {
         Loop::VecBuilder { stack_ptr } => {
+            let top_ptr = vm.ctx.ds.len();
             if top_ptr < stack_ptr {
                 Err(Xerr::StackNotBalanced)
             } else {
@@ -522,9 +545,9 @@ fn map_builder_begin(vm: &mut VM) -> Xresult {
 }
 
 fn map_builder_end(vm: &mut VM) -> Xresult {
-    let top_ptr = vm.ctx.ds.len();
     match vm.pop_loop()? {
         Loop::MapBuilder { stack_ptr } => {
+            let top_ptr = vm.ctx.ds.len();
             if top_ptr < stack_ptr || (top_ptr - stack_ptr) % 2 == 1 {
                 Err(Xerr::StackNotBalanced)
             } else {
@@ -535,6 +558,38 @@ fn map_builder_end(vm: &mut VM) -> Xresult {
                 vm.dropn(top_ptr - stack_ptr)?;
                 vm.push_data(Cell::Map(m))
             }
+        }
+        _ => Err(Xerr::ControlFlowError),
+    }
+}
+
+fn core_word_def_begin(vm: &mut VM) -> Xresult {
+    if vm.ctx.fs.iter().any(|x| match x {
+        Flow::Fun { .. } => true,
+        _ => false,
+    }) {
+        return Err(Xerr::RecusriveDefinition);
+    }
+    let name = match vm.source.next()? {
+        Tok::Word(name) => name,
+        _other => return Err(Xerr::ExpectingName),
+    };
+    let word_addr = vm.lookup(&name).unwrap_or_else(|| vm.insert_word(name));
+    vm.dict[word_addr].data = EntryData::Empty;
+    let start = vm.origin();
+    vm.emit(Inst::Jump(0))?;
+    vm.push_flow(Flow::Fun { word_addr, start })
+}
+
+fn core_word_def_end(vm: &mut VM) -> Xresult {
+    match vm.pop_flow()? {
+        Flow::Fun { word_addr, start } => {
+            vm.emit(Inst::Ret)?;
+            let offs = jump_offset(start, vm.origin());
+            vm.patch_jump(start, offs)?;
+            let start = start + 1; // skip jump
+            vm.dict[word_addr].data = EntryData::Exec(Cell::InterpFn(start));
+            OK
         }
         _ => Err(Xerr::ControlFlowError),
     }
@@ -610,6 +665,6 @@ fn test_loop_leave() {
     assert_eq!(x, Cell::Int(1));
     assert_eq!(Err(Xerr::StackUnderflow), vm.pop_data());
     let mut vm = VM::boot().unwrap();
-    let res = vm.interpret("begin 1 again leave");
+    let res = vm.load("begin 1 again leave");
     assert_eq!(Err(Xerr::ControlFlowError), res);
 }
