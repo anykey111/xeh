@@ -90,7 +90,7 @@ impl Lex {
 
     fn is_schar(c: char) -> bool {
         match c {
-            '(' | ')' | '[' | ']' | '{' | '}' => true,
+            '(' | ')' | '[' | ']' | '{' | '}' | '!' => true,
             _ => false,
         }
     }

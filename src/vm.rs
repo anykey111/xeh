@@ -5,17 +5,18 @@ use crate::error::*;
 use crate::lex::*;
 
 #[derive(Debug, Clone, PartialEq)]
-enum EntryData {
+enum Xflags {
     Empty,
-    Var(Cell),
-    Exec(Cell),
+    Immediate,
+    Variable,
+    Function,
 }
 
 #[derive(Debug, Clone)]
 struct Entry {
     name: String,
-    immediate: bool,
-    data: EntryData,
+    flags: Xflags,
+    data: Cell,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,28 +114,36 @@ impl VM {
                 }
                 Tok::Word(name) => {
                     let wa = self.lookup(&name).unwrap_or_else(|| self.insert_word(name));
-                    let e = &self.dict[wa];
-                    if e.immediate {
-                        match &e.data {
-                            EntryData::Exec(x) => {
-                                let x = x.clone();
-                                self.run(x)?
+                    match &self.dict[wa] {
+                        Entry {
+                            flags: Xflags::Empty,
+                            ..
+                        } => self.emit(Inst::Deferred(wa))?,
+                        Entry {
+                            flags: Xflags::Immediate,
+                            data,
+                            ..
+                        } => {
+                            let x = data.clone();
+                            self.run(x)?;
+                        }
+                        Entry {
+                            flags: Xflags::Variable,
+                            ..
+                        } => {
+                            self.emit(Inst::Load(wa))?;
+                        }
+                        Entry {
+                            flags: Xflags::Function,
+                            data,
+                            ..
+                        } => {
+                            let x = data.clone();
+                            match x {
+                                Cell::InterpFn(a) => self.emit(Inst::Call(a))?,
+                                Cell::NativeFn(f) => self.emit(Inst::NativeCall(f))?,
+                                _ => Err(Xerr::NotAnExecutable)?,
                             }
-                            _ => Err(Xerr::NotAnExecutable)?,
-                        };
-                    } else {
-                        match &e.data {
-                            EntryData::Empty => self.emit(Inst::Deferred(wa))?,
-                            EntryData::Exec(Cell::InterpFn(a)) => {
-                                let a = *a;
-                                self.emit(Inst::Call(a))?;
-                            }
-                            EntryData::Exec(Cell::NativeFn(f)) => {
-                                let f = *f;
-                                self.emit(Inst::NativeCall(f))?;
-                            }
-                            EntryData::Var(_) => self.emit(Inst::Load(wa))?,
-                            _ => Err(Xerr::NotAnExecutable)?,
                         }
                     }
                 }
@@ -177,6 +186,8 @@ impl VM {
         core_insert_imm_word(self, "}", core_word_map_end)?;
         core_insert_imm_word(self, ":", core_word_def_begin)?;
         core_insert_imm_word(self, ";", core_word_def_end)?;
+        core_insert_imm_word(self, "var", core_word_var)?;
+        core_insert_imm_word(self, "!", core_word_store)?;
         OK
     }
 
@@ -184,8 +195,8 @@ impl VM {
         let wa = self.dict.len();
         self.dict.push(Entry {
             name: name,
-            immediate: false,
-            data: EntryData::Empty,
+            flags: Xflags::Empty,
+            data: Cell::Nil,
         });
         wa
     }
@@ -214,6 +225,16 @@ impl VM {
         self.patch_insn(at, insn)
     }
 
+    fn word_get(&self, wa: usize) -> Result<&Entry, Xerr> {
+        self.dict.get(wa).ok_or(Xerr::InvalidAddress)
+    }
+
+    fn word_modify(&mut self, a: usize, c: Cell) -> Xresult {
+        let p = self.dict.get_mut(a).ok_or(Xerr::InvalidAddress)?;
+        p.data = c;
+        OK
+    }
+
     fn readonly_cell(&mut self, c: Cell) -> usize {
         if let Some(a) = self.heap.iter().position(|x| x == &c) {
             a
@@ -240,7 +261,7 @@ impl VM {
                     }
                 }
             }
-            other => panic!("invalid function {:?}", other),
+            _ => Err(Xerr::NotAnExecutable),
         }
     }
 
@@ -266,20 +287,20 @@ impl VM {
                 self.push_return(ip + 1)?;
                 self.set_ip(a)
             }
-            Inst::Deferred(wa) => match &self.dict[wa].data {
-                EntryData::Empty => Err(Xerr::UnknownWord),
-                EntryData::Exec(c) => match c {
-                    Cell::InterpFn(a) => {
-                        let a = *a;
-                        self.patch_insn(ip, Inst::Call(a))
-                    }
-                    Cell::NativeFn(f) => {
-                        let f = *f;
-                        self.patch_insn(ip, Inst::NativeCall(f))
-                    }
+            Inst::Deferred(wa) => match self.word_get(wa)? {
+                Entry {
+                    flags: Xflags::Empty,
+                    ..
+                } => Err(Xerr::UnknownWord),
+                Entry {
+                    flags: Xflags::Variable,
+                    ..
+                } => self.patch_insn(ip, Inst::Load(wa)),
+                Entry { data, .. } => match data.clone() {
+                    Cell::InterpFn(a) => self.patch_insn(ip, Inst::Call(a)),
+                    Cell::NativeFn(f) => self.patch_insn(ip, Inst::NativeCall(f)),
                     _ => Err(Xerr::NotAnExecutable),
                 },
-                EntryData::Var(_) => self.patch_insn(ip, Inst::Load(wa)),
             },
             Inst::NativeCall(f) => {
                 f.0(self)?;
@@ -289,8 +310,16 @@ impl VM {
                 let new_ip = self.pop_return()?;
                 self.set_ip(new_ip)
             }
-            Inst::Load(_) => todo!("Load inst"),
-            Inst::Store(_) => todo!("Store inst"),
+            Inst::Load(wa) => {
+                let c = self.word_get(wa)?.data.clone();
+                self.push_data(c)?;
+                self.next_ip()
+            }
+            Inst::Store(wa) => {
+                let c = self.pop_data()?;
+                self.word_modify(wa, c)?;
+                self.next_ip()
+            }
         }
     }
 
@@ -384,8 +413,8 @@ fn core_insert_imm_word(vm: &mut VM, name: &str, f: XfnType) -> Xresult {
     }
     vm.dict.push(Entry {
         name: name.to_string(),
-        immediate: true,
-        data: EntryData::Exec(Cell::NativeFn(Xfn(f))),
+        flags: Xflags::Immediate,
+        data: Cell::NativeFn(Xfn(f)),
     });
     OK
 }
@@ -563,11 +592,15 @@ fn map_builder_end(vm: &mut VM) -> Xresult {
     }
 }
 
-fn core_word_def_begin(vm: &mut VM) -> Xresult {
-    if vm.ctx.fs.iter().any(|x| match x {
+fn is_building_word(vm: &mut VM) -> bool {
+    vm.ctx.fs.iter().any(|x| match x {
         Flow::Fun { .. } => true,
         _ => false,
-    }) {
+    })
+}
+
+fn core_word_def_begin(vm: &mut VM) -> Xresult {
+    if is_building_word(vm) {
         return Err(Xerr::RecusriveDefinition);
     }
     let name = match vm.source.next()? {
@@ -575,9 +608,9 @@ fn core_word_def_begin(vm: &mut VM) -> Xresult {
         _other => return Err(Xerr::ExpectingName),
     };
     let word_addr = vm.lookup(&name).unwrap_or_else(|| vm.insert_word(name));
-    vm.dict[word_addr].data = EntryData::Empty;
+    vm.dict[word_addr].flags = Xflags::Function;
     let start = vm.origin();
-    vm.emit(Inst::Jump(0))?;
+    vm.emit(Inst::Jump(0))?; // jump over function body
     vm.push_flow(Flow::Fun { word_addr, start })
 }
 
@@ -588,11 +621,33 @@ fn core_word_def_end(vm: &mut VM) -> Xresult {
             let offs = jump_offset(start, vm.origin());
             vm.patch_jump(start, offs)?;
             let start = start + 1; // skip jump
-            vm.dict[word_addr].data = EntryData::Exec(Cell::InterpFn(start));
+            vm.dict[word_addr].data = Cell::InterpFn(start);
             OK
         }
         _ => Err(Xerr::ControlFlowError),
     }
+}
+
+fn core_word_var(vm: &mut VM) -> Xresult {
+    if is_building_word(vm) {
+        return Err(Xerr::RecusriveDefinition);
+    }
+    let name = match vm.source.next()? {
+        Tok::Word(name) => name,
+        _other => return Err(Xerr::ExpectingName),
+    };
+    let wa = vm.lookup(&name).unwrap_or_else(|| vm.insert_word(name));
+    vm.dict[wa].flags = Xflags::Variable;
+    OK
+}
+
+fn core_word_store(vm: &mut VM) -> Xresult {
+    let name = match vm.source.next()? {
+        Tok::Word(name) => name,
+        _other => return Err(Xerr::ExpectingName),
+    };
+    let wa = vm.lookup(&name).ok_or(Xerr::UnknownWord)?;
+    vm.emit(Inst::Store(wa))
 }
 
 #[test]

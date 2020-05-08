@@ -14,6 +14,7 @@ pub enum Xerr {
     RecusriveDefinition,
     ExpectingName,
     NotAnExecutable,
+    InvalidAddress,
 }
 
 pub type Xresult = Result<(), Xerr>;
