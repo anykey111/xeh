@@ -15,6 +15,7 @@ pub enum Xerr {
     ExpectingName,
     NotAnExecutable,
     InvalidAddress,
+    ReadonlyAddress,
 }
 
 pub type Xresult = Result<(), Xerr>;

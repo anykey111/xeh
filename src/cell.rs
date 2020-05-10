@@ -2,14 +2,17 @@ use crate::error::{Xerr, Xresult};
 use crate::vm::VM;
 
 pub type Xvec<T> = rpds::Vector<T>;
-pub type Xmap = rpds::Vector<(Cell,Cell)>;
+pub type Xmap = rpds::Vector<(Cell, Cell)>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut VM) -> Xresult;
 pub type Xint = i64;
 pub type Xreal = f64;
 
-#[derive(Clone, Copy)]
-pub struct Xfn(pub XfnType);
+#[derive(Clone)]
+pub enum Xfn {
+    Interp(usize),
+    Native(XfnType),
+}
 
 #[derive(Clone, PartialEq)]
 pub enum Cell {
@@ -19,8 +22,7 @@ pub enum Cell {
     Str(String),
     Vector(Xvec<Cell>),
     Map(Xmap),
-    InterpFn(usize),
-    NativeFn(Xfn),
+    Fun(Xfn),
 }
 
 use std::fmt;
@@ -34,21 +36,27 @@ impl fmt::Debug for Cell {
             Cell::Str(s) => write!(f, "{}", s),
             Cell::Vector(v) => write!(f, "{:?}", v),
             Cell::Map(v) => write!(f, "{:?}", v),
-            Cell::InterpFn(a) => write!(f, "{:0x}", a),
-            Cell::NativeFn(x) => write!(f, "{:?}", x),
+            Cell::Fun(x) => write!(f, "{:?}", x),
         }
     }
 }
 
 impl fmt::Debug for Xfn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0 as usize)
+        match self {
+            Xfn::Interp(x) => write!(f, "{:?}", x),
+            Xfn::Native(x) => write!(f, "{:?}", *x as usize),
+        }
     }
 }
 
 impl PartialEq for Xfn {
     fn eq(&self, other: &Self) -> bool {
-        self.0 as usize == other.0 as usize
+        match (self, other) {
+            (Xfn::Interp(a), Xfn::Interp(b)) => a == b,
+            (Xfn::Native(a), Xfn::Native(b)) => *a as usize == *b as usize,
+            _ => false,
+        }
     }
 }
 
