@@ -163,6 +163,25 @@ impl VM {
         Ok(vm)
     }
 
+    pub fn defvar(&mut self, name: &str, value: Cell) -> Xresult {
+        let a = self.alloc_cell()?;
+        self.heap[a] = value;
+        self.dict_insert(name.to_string(), Entry::Variable(a))?;
+        OK
+    }
+
+    pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
+        let xf = Xfn::Native(x);
+        self.dict_insert(
+            name.to_string(),
+            Entry::Function {
+                immediate: false,
+                xf,
+            },
+        )?;
+        OK
+    }
+
     fn load_core(&mut self) -> Xresult {
         core_insert_imm_word(self, "if", core_word_if)?;
         core_insert_imm_word(self, "else", core_word_else)?;
@@ -229,13 +248,9 @@ impl VM {
     }
 
     fn readonly_cell(&mut self, c: Cell) -> usize {
-        if let Some(a) = self.heap.iter().position(|x| x == &c) {
-            a
-        } else {
-            let a = self.heap.len();
-            self.heap.push(c);
-            a
-        }
+        let a = self.heap.len();
+        self.heap.push(c);
+        a
     }
 
     fn run(&mut self, x: Xfn) -> Xresult {
@@ -263,12 +278,12 @@ impl VM {
             Inst::Nop => self.next_ip(),
             Inst::Jump(offs) => self.jump_to(offs),
             Inst::JumpIf(offs) => {
-                let t = self.pop_data()? != ZERO;
-                self.jump_if(t, offs)
+                let t = self.pop_data()?;
+                self.jump_if(t.is_true(), offs)
             }
             Inst::JumpIfNot(offs) => {
-                let t = self.pop_data()? == ZERO;
-                self.jump_if(t, offs)
+                let t = self.pop_data()?;
+                self.jump_if(!t.is_true(), offs)
             }
             Inst::Call(a) => {
                 self.push_return(ip + 1)?;

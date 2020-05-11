@@ -7,6 +7,7 @@ pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut VM) -> Xresult;
 pub type Xint = i64;
 pub type Xreal = f64;
+pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 
 #[derive(Clone)]
 pub enum Xfn {
@@ -14,7 +15,7 @@ pub enum Xfn {
     Native(XfnType),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Cell {
     Nil,
     Int(Xint),
@@ -23,6 +24,7 @@ pub enum Cell {
     Vector(Xvec<Cell>),
     Map(Xmap),
     Fun(Xfn),
+    AnyRc(Xanyrc),
 }
 
 use std::fmt;
@@ -37,6 +39,12 @@ impl fmt::Debug for Cell {
             Cell::Vector(v) => write!(f, "{:?}", v),
             Cell::Map(v) => write!(f, "{:?}", v),
             Cell::Fun(x) => write!(f, "{:?}", x),
+            Cell::AnyRc(x) => {
+                match x.try_borrow() {
+                    Ok(p) => write!(f, "<{:?}>", p.type_id()),
+                    Err(_) => write!(f, "<any>"),
+                }
+            }
         }
     }
 }
@@ -75,6 +83,24 @@ impl Cell {
             Cell::Int(i) => Ok(*i),
             _ => Err(Xerr::TypeError),
         }
+    }
+
+    pub fn is_true(&self) -> bool {
+        match self {
+            Cell::Nil | Cell::Int(0) => false,
+            _ => true,
+        }
+    }
+
+    pub fn to_any(&self) -> Result<Xanyrc, Xerr> {
+        match self {
+            Cell::AnyRc(p) => Ok(p.clone()),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
+    pub fn from_any<T>(val: T) -> Self where T: 'static{
+        Cell::AnyRc(std::rc::Rc::new(std::cell::RefCell::new(val)))
     }
 }
 
