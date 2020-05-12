@@ -11,7 +11,7 @@ enum Entry {
     Function { immediate: bool, xf: Xfn },
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Inst {
     Nop,
     Call(usize),
@@ -720,6 +720,7 @@ fn test_begin_repeat() {
     it.next().unwrap();
     it.next().unwrap();
     assert_eq!(&Inst::JumpIf(-2), it.next().unwrap());
+    vm.interpret("var x 1 -> x begin x while 0 -> x repeat").unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("if begin then repeat"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("repeat begin"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin then while"));
@@ -733,8 +734,8 @@ fn test_loop_leave() {
     let mut vm = VM::boot().unwrap();
     vm.interpret("begin 1 leave again").unwrap();
     let x = vm.pop_data().unwrap();
-    assert_eq!(x, Cell::Int(1));
-    assert_eq!(Err(Xerr::StackUnderflow), vm.pop_data());
+    assert_eq!(x.to_int(), Ok(1));
+    assert_eq!(Some(Xerr::StackUnderflow), vm.pop_data().err());
     let mut vm = VM::boot().unwrap();
     let res = vm.load("begin 1 again leave");
     assert_eq!(Err(Xerr::ControlFlowError), res);

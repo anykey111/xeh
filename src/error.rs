@@ -6,6 +6,7 @@ pub enum Xerr {
     IntegerOverflow,
     ControlFlowError,
     StackUnderflow,
+    StackOverflow,
     ReturnStackUnderflow,
     LoopStackUnderflow,
     CollectionError,

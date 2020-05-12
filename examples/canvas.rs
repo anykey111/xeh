@@ -47,7 +47,6 @@ fn minifb_update(vm: &mut VM) -> Xresult {
     let w = fb.width;
     let h = fb.height;
     fb.window.update_with_buffer(&buf, w, h).unwrap();
-    println!("update");
     OK
 }
 
@@ -57,7 +56,6 @@ fn minifb_is_open(vm: &mut VM) -> Xresult {
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let t = fb.window.is_open() && !fb.window.is_key_down(Key::Escape);
     let c = Cell::Int(if t {1} else {0});
-    println!("{}", t);
     vm.push_data(c)
 }
 
@@ -66,21 +64,14 @@ fn main() {
     
     vm.defword("minifb-new", minifb_new).unwrap();
     vm.defword("minifb-is-open", minifb_is_open).unwrap();
-    vm.defword("minifb-update", minifb_is_open).unwrap();
+    vm.defword("minifb-update", minifb_update).unwrap();
     
     vm.interpret("
     var fb
     320 200 minifb-new -> fb
 
     begin fb minifb-is-open while
-        fb minifb-update
+       fb minifb-update
     repeat
     ").unwrap();
-    
-    // while window.is_open() && !window.is_key_down(Key::Escape) {
-    //     for i in buffer.iter_mut() {
-    //         *i = 0xff00ff00;
-    //     }
-    //     window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
-    // }
 }
