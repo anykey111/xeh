@@ -1,10 +1,10 @@
 use crate::error::{Xerr, Xresult};
-use crate::vm::VM;
+use crate::state::State;
 
 pub type Xvec<T> = rpds::Vector<T>;
 pub type Xmap = rpds::Vector<(Cell, Cell)>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
-pub type XfnType = fn(&mut VM) -> Xresult;
+pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i64;
 pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;

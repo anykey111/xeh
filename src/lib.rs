@@ -6,4 +6,4 @@ pub mod hash;
 pub mod error;
 pub mod lex;
 pub mod cell;
-pub mod vm;
+pub mod state;

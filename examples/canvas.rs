@@ -2,7 +2,7 @@ extern crate minifb;
 extern crate xeh;
 use minifb::{Key, Window, WindowOptions};
 use std::any::Any;
-use xeh::vm::VM;
+use xeh::vm::State;
 use xeh::cell::{Cell};
 use xeh::error::*;
 
@@ -32,14 +32,14 @@ impl MiniFb {
     }
 }
 
-fn minifb_new(vm: &mut VM) -> Xresult {
+fn minifb_new(vm: &mut State) -> Xresult {
     let height = vm.pop_data()?.to_usize()?;
     let width = vm.pop_data()?.to_usize()?;
     let fb = MiniFb::new(width, height);
     vm.push_data(Cell::from_any(fb))
 }
 
-fn minifb_update(vm: &mut VM) -> Xresult {
+fn minifb_update(vm: &mut State) -> Xresult {
     let p = vm.pop_data()?.to_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
@@ -50,7 +50,7 @@ fn minifb_update(vm: &mut VM) -> Xresult {
     OK
 }
 
-fn minifb_is_open(vm: &mut VM) -> Xresult {
+fn minifb_is_open(vm: &mut State) -> Xresult {
     let p = vm.pop_data()?.to_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
@@ -60,7 +60,7 @@ fn minifb_is_open(vm: &mut VM) -> Xresult {
 }
 
 fn main() {
-    let mut vm = VM::boot().unwrap();
+    let mut vm = State::boot().unwrap();
     
     vm.defword("minifb-new", minifb_new).unwrap();
     vm.defword("minifb-is-open", minifb_is_open).unwrap();
