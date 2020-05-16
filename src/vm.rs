@@ -11,7 +11,7 @@ enum Entry {
     Function { immediate: bool, xf: Xfn },
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Inst {
     Nop,
     Call(usize),
@@ -42,14 +42,26 @@ enum Loop {
     MapBuilder { stack_ptr: usize },
 }
 
+
 #[derive(Clone, Default)]
-pub struct Ctx {
+struct CtxState {
+    ds_len: usize,
+    cs_len: usize,
+    rs_len: usize,
+    fs_len: usize,
+    ls_len: usize,
+    autoexec: bool,
+}
+
+#[derive(Clone, Default)]
+struct Ctx {
     code: Vec<Inst>,
     ip: usize,
     ds: Vec<Cell>,
     rs: Vec<usize>,
     fs: Vec<Flow>,
     ls: Vec<Loop>,
+    autoexec: bool,
 }
 
 #[derive(Clone, Default)]
@@ -57,8 +69,8 @@ pub struct VM {
     dict: Vec<(String, Entry)>,
     heap: Vec<Cell>,
     ctx: Ctx,
+    ctx_nested:  Vec<CtxState>,
     source: Lex,
-    debug: bool,
 }
 
 impl VM {
@@ -75,8 +87,8 @@ impl VM {
     fn build(&mut self, autoexec: bool) -> Xresult {
         let mut start = self.ctx.code.len();
         loop {
-            if autoexec && !self.has_pending_flow() && start < self.ctx.code.len() {
-                self.emit(Inst::Ret)?;
+            if autoexec && !self.is_building() && start < self.ctx.code.len() {
+                self.assemble(Inst::Ret)?;
                 self.finish_building()?;
                 self.run(Xfn::Interp(start))?;
                 start = self.ctx.code.len();
@@ -85,7 +97,7 @@ impl VM {
                 Tok::EndOfInput => {
                     self.finish_building()?;
                     if start < self.ctx.code.len() {
-                        self.emit(Inst::Ret)?;
+                        self.assemble(Inst::Ret)?;
                         let xf = Xfn::Interp(start);
                         if autoexec {
                             break self.run(xf);
@@ -98,11 +110,11 @@ impl VM {
                 Tok::Num(n) => {
                     let n = n.to_i64().ok_or(Xerr::IntegerOverflow)?;
                     let a = self.readonly_cell(Cell::Int(n));
-                    self.emit(Inst::Load(a))?;
+                    self.assemble(Inst::Load(a))?;
                 }
                 Tok::Str(s) => {
                     let a = self.readonly_cell(Cell::Str(s));
-                    self.emit(Inst::Load(a))?;
+                    self.assemble(Inst::Load(a))?;
                 }
                 Tok::Word(name) => {
                     // get entry address or insert deferred
@@ -112,10 +124,10 @@ impl VM {
                         self.dict_insert(name, Entry::Deferred)?
                     };
                     match self.dict_at(idx).unwrap() {
-                        Entry::Deferred => self.emit(Inst::Deferred(idx))?,
+                        Entry::Deferred => self.assemble(Inst::Deferred(idx))?,
                         Entry::Variable(a) => {
                             let a = *a;
-                            self.emit(Inst::Load(a))?;
+                            self.assemble(Inst::Load(a))?;
                         }
                         Entry::Function {
                             immediate: true,
@@ -129,19 +141,27 @@ impl VM {
                             xf: Xfn::Interp(x),
                         } => {
                             let x = *x;
-                            self.emit(Inst::Call(x))?;
+                            self.assemble(Inst::Call(x))?;
                         }
                         Entry::Function {
                             immediate: false,
                             xf: Xfn::Native(x),
                         } => {
                             let x = *x;
-                            self.emit(Inst::NativeCall(x))?;
+                            self.assemble(Inst::NativeCall(x))?;
                         }
                     }
                 }
             }
         }
+    }
+
+    fn is_immediate(&self) -> bool {
+        self.ctx_nested.last().map(|s| s.autoexec).unwrap_or(false) 
+    }
+
+    fn is_building(&self) -> bool {
+        self.has_pending_flow() || self.ctx_nested.is_empty()
     }
 
     fn has_pending_flow(&self) -> bool {
@@ -158,7 +178,6 @@ impl VM {
 
     pub fn boot() -> Result<VM, Xerr> {
         let mut vm = VM::default();
-        vm.debug = true;
         vm.load_core()?;
         Ok(vm)
     }
@@ -200,6 +219,9 @@ impl VM {
         core_insert_imm_word(self, ";", core_word_def_end)?;
         core_insert_imm_word(self, "var", core_word_var)?;
         core_insert_imm_word(self, "->", core_word_setvar)?;
+        core_insert_imm_word(self, "const", core_word_const)?;
+        core_insert_imm_word(self, "(", core_word_nested_begin)?;
+        core_insert_imm_word(self, ")", core_word_nested_end)?;
         OK
     }
 
@@ -221,7 +243,7 @@ impl VM {
         self.ctx.code.len()
     }
 
-    fn emit(&mut self, inst: Inst) -> Xresult {
+    fn assemble(&mut self, inst: Inst) -> Xresult {
         self.ctx.code.push(inst);
         OK
     }
@@ -383,6 +405,10 @@ impl VM {
     }
 
     pub fn pop_data(&mut self) -> Result<Cell, Xerr> {
+        let frozen_len = self.ctx_nested.last().map(|s| s.ds_len).unwrap_or(0);
+        if self.ctx.ds.len() <= frozen_len {
+            return Err(Xerr::StackUnderflow);
+        }
         self.ctx.ds.pop().ok_or(Xerr::StackUnderflow)
     }
 
@@ -396,6 +422,10 @@ impl VM {
     }
 
     fn pop_return(&mut self) -> Result<usize, Xerr> {
+        let frozen_len = self.ctx_nested.last().map(|s| s.rs_len).unwrap_or(0);
+        if self.ctx.rs.len() <= frozen_len {
+            return Err(Xerr::ReturnStackUnderflow);
+        }
         self.ctx.rs.pop().ok_or(Xerr::ReturnStackUnderflow)
     }
 
@@ -405,6 +435,10 @@ impl VM {
     }
 
     fn pop_loop(&mut self) -> Result<Loop, Xerr> {
+        let frozen_len = self.ctx_nested.last().map(|s| s.ls_len).unwrap_or(0);
+        if self.ctx.ls.len() <= frozen_len {
+            return Err(Xerr::ReturnStackUnderflow);
+        }
         self.ctx.ls.pop().ok_or(Xerr::LoopStackUnderflow)
     }
 }
@@ -422,7 +456,7 @@ fn core_insert_imm_word(vm: &mut VM, name: &str, x: XfnType) -> Xresult {
 
 fn core_word_if(vm: &mut VM) -> Xresult {
     let fwd = Flow::If(vm.origin());
-    vm.emit(Inst::JumpIfNot(0))?;
+    vm.assemble(Inst::JumpIfNot(0))?;
     vm.push_flow(fwd)
 }
 
@@ -430,7 +464,7 @@ fn core_word_else(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
         Flow::If(if_org) => {
             let fwd = Flow::If(vm.origin());
-            vm.emit(Inst::Jump(0))?;
+            vm.assemble(Inst::Jump(0))?;
             vm.push_flow(fwd)?;
             let offs = jump_offset(if_org, vm.origin());
             vm.patch_jump(if_org, offs)
@@ -457,7 +491,7 @@ fn core_word_until(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
         Flow::Begin(begin_org) => {
             let offs = jump_offset(vm.origin(), begin_org);
-            vm.emit(Inst::JumpIf(offs))
+            vm.assemble(Inst::JumpIf(offs))
         }
         _ => Err(Xerr::ControlFlowError),
     }
@@ -465,7 +499,7 @@ fn core_word_until(vm: &mut VM) -> Xresult {
 
 fn core_word_while(vm: &mut VM) -> Xresult {
     let cond = Flow::While(vm.origin());
-    vm.emit(Inst::JumpIfNot(0))?;
+    vm.assemble(Inst::JumpIfNot(0))?;
     vm.push_flow(cond)
 }
 
@@ -478,7 +512,7 @@ fn core_word_again(vm: &mut VM) -> Xresult {
             }
             Flow::Begin(begin_org) => {
                 let offs = jump_offset(vm.origin(), begin_org);
-                break vm.emit(Inst::Jump(offs));
+                break vm.assemble(Inst::Jump(offs));
             }
             _ => break Err(Xerr::ControlFlowError),
         }
@@ -497,7 +531,7 @@ fn core_word_repeat(vm: &mut VM) -> Xresult {
                     let offs = jump_offset(cond_org, vm.origin());
                     vm.patch_jump(cond_org, offs)?;
                     let offs = jump_offset(vm.origin(), begin_org);
-                    break vm.emit(Inst::Jump(offs));
+                    break vm.assemble(Inst::Jump(offs));
                 }
                 _ => break Err(Xerr::ControlFlowError),
             },
@@ -508,7 +542,7 @@ fn core_word_repeat(vm: &mut VM) -> Xresult {
 
 fn core_word_leave(vm: &mut VM) -> Xresult {
     let leave = Flow::Leave(vm.origin());
-    vm.emit(Inst::Jump(0))?;
+    vm.assemble(Inst::Jump(0))?;
     vm.push_flow(leave)?;
     OK
 }
@@ -523,12 +557,12 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
 
 fn core_word_vec_begin(vm: &mut VM) -> Xresult {
     vm.push_flow(Flow::Vec)?;
-    vm.emit(Inst::NativeCall(vec_builder_begin))
+    vm.assemble(Inst::NativeCall(vec_builder_begin))
 }
 
 fn core_word_vec_end(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
-        Flow::Vec => vm.emit(Inst::NativeCall(vec_builder_end)),
+        Flow::Vec => vm.assemble(Inst::NativeCall(vec_builder_end)),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -559,12 +593,12 @@ fn vec_builder_end(vm: &mut VM) -> Xresult {
 
 fn core_word_map_begin(vm: &mut VM) -> Xresult {
     vm.push_flow(Flow::Map)?;
-    vm.emit(Inst::NativeCall(map_builder_begin))
+    vm.assemble(Inst::NativeCall(map_builder_begin))
 }
 
 fn core_word_map_end(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
-        Flow::Map => vm.emit(Inst::NativeCall(map_builder_end)),
+        Flow::Map => vm.assemble(Inst::NativeCall(map_builder_end)),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -610,7 +644,7 @@ fn core_word_def_begin(vm: &mut VM) -> Xresult {
     };
     let start = vm.origin();
     // jump over function body
-    vm.emit(Inst::Jump(0))?;
+    vm.assemble(Inst::Jump(0))?;
     // function starts right after jump
     let xf = Xfn::Interp(vm.origin());
     let dict_idx = vm.dict_insert(
@@ -626,7 +660,7 @@ fn core_word_def_begin(vm: &mut VM) -> Xresult {
 fn core_word_def_end(vm: &mut VM) -> Xresult {
     match vm.pop_flow()? {
         Flow::Fun { start, .. } => {
-            vm.emit(Inst::Ret)?;
+            vm.assemble(Inst::Ret)?;
             let offs = jump_offset(start, vm.origin());
             vm.patch_jump(start, offs)
         }
@@ -660,9 +694,51 @@ fn core_word_setvar(vm: &mut VM) -> Xresult {
         Entry::Deferred => Err(Xerr::UnknownWord),
         Entry::Variable(a) => {
             let a = *a;
-            vm.emit(Inst::Store(a))
+            vm.assemble(Inst::Store(a))
         }
         _ => Err(Xerr::ReadonlyAddress),
+    }
+}
+
+fn core_word_const(vm: &mut VM) -> Xresult {
+    if is_building_word(vm) {
+        return Err(Xerr::RecusriveDefinition);
+    }
+    let name = match vm.source.next()? {
+        Tok::Word(name) => name,
+        _other => return Err(Xerr::ExpectingName),
+    };
+    let a = vm.alloc_cell()?;
+    let val = vm.pop_data()?;
+    vm.heap[a] = val;
+    vm.dict_insert(name, Entry::Variable(a))?;
+    OK
+}
+
+fn core_word_nested_begin(vm: &mut VM) -> Xresult {
+    vm.ctx_nested.push(CtxState {
+        ds_len: vm.ctx.ds.len(),
+        cs_len: vm.ctx.code.len(),
+        rs_len: vm.ctx.rs.len(),
+        fs_len: vm.ctx.fs.len(),
+        ls_len: vm.ctx.ls.len(),
+        autoexec: true,        
+    });
+    OK
+}
+
+fn core_word_nested_end(vm: &mut VM) -> Xresult {
+    let s = vm.ctx_nested.last().ok_or(Xerr::ControlFlowError)?.clone();
+    if vm.ctx.fs.len() > s.fs_len || vm.ctx.ls.len() > s.ls_len {
+        return Err(Xerr::ControlFlowError);
+    }
+    vm.assemble(Inst::Ret)?;
+    vm.ctx_nested.pop();
+    if s.autoexec {
+        vm.run(Xfn::Interp(s.cs_len + 1))
+        // drop code
+    } else {
+        OK
     }
 }
 
@@ -720,7 +796,8 @@ fn test_begin_repeat() {
     it.next().unwrap();
     it.next().unwrap();
     assert_eq!(&Inst::JumpIf(-2), it.next().unwrap());
-    vm.interpret("var x 1 -> x begin x while 0 -> x repeat").unwrap();
+    vm.interpret("var x 1 -> x begin x while 0 -> x repeat")
+        .unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("if begin then repeat"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("repeat begin"));
     assert_eq!(Err(Xerr::ControlFlowError), vm.load("begin then while"));
