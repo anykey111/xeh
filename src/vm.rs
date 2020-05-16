@@ -55,10 +55,10 @@ struct CtxState {
 
 #[derive(Clone, Default)]
 struct Ctx {
-    ds: Vec<Cell>,
-    rs: Vec<usize>,
-    fs: Vec<Flow>,
-    ls: Vec<Loop>,
+    data_stack: Vec<Cell>,
+    return_stack: Vec<usize>,
+    flow_stack: Vec<Flow>,
+    loops: Vec<Loop>,
     autoexec: bool,
 }
 
@@ -165,7 +165,7 @@ impl VM {
     }
 
     fn has_pending_flow(&self) -> bool {
-        self.ctx.fs.len() > 0
+        self.ctx.flow_stack.len() > 0
     }
 
     fn finish_building(&mut self) -> Xresult {
@@ -280,12 +280,12 @@ impl VM {
             Xfn::Native(x) => x(self),
             Xfn::Interp(x) => {
                 let old_ip = self.ip;
-                let depth = self.ctx.rs.len();
+                let depth = self.ctx.return_stack.len();
                 self.push_return(old_ip)?;
                 self.set_ip(x)?;
                 loop {
                     self.run_inst()?;
-                    if depth == self.ctx.rs.len() {
+                    if depth == self.ctx.return_stack.len() {
                         assert_eq!(old_ip, self.ip);
                         break OK;
                     }
@@ -376,26 +376,26 @@ impl VM {
     }
 
     fn pop_flow(&mut self) -> Result<Flow, Xerr> {
-        self.ctx.fs.pop().ok_or(Xerr::ControlFlowError)
+        self.ctx.flow_stack.pop().ok_or(Xerr::ControlFlowError)
     }
 
     fn push_flow(&mut self, flow: Flow) -> Xresult {
-        self.ctx.fs.push(flow);
+        self.ctx.flow_stack.push(flow);
         OK
     }
 
     fn dropn(&mut self, len: usize) -> Xresult {
-        let ds_len = self.ctx.ds.len();
+        let ds_len = self.ctx.data_stack.len();
         if ds_len < len {
             Err(Xerr::StackUnderflow)
         } else {
-            self.ctx.ds.truncate(ds_len - len);
+            self.ctx.data_stack.truncate(ds_len - len);
             OK
         }
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
-        self.ctx.ds.push(data);
+        self.ctx.data_stack.push(data);
         OK
     }
 
@@ -405,40 +405,40 @@ impl VM {
 
     pub fn pop_data(&mut self) -> Result<Cell, Xerr> {
         let frozen_len = self.ctx_nested.last().map(|s| s.ds_len).unwrap_or(0);
-        if self.ctx.ds.len() <= frozen_len {
+        if self.ctx.data_stack.len() <= frozen_len {
             return Err(Xerr::StackUnderflow);
         }
-        self.ctx.ds.pop().ok_or(Xerr::StackUnderflow)
+        self.ctx.data_stack.pop().ok_or(Xerr::StackUnderflow)
     }
 
     pub fn top_data(&mut self) -> Option<&Cell> {
-        self.ctx.ds.last()
+        self.ctx.data_stack.last()
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
-        self.ctx.rs.push(return_to);
+        self.ctx.return_stack.push(return_to);
         OK
     }
 
     fn pop_return(&mut self) -> Result<usize, Xerr> {
         let frozen_len = self.ctx_nested.last().map(|s| s.rs_len).unwrap_or(0);
-        if self.ctx.rs.len() <= frozen_len {
+        if self.ctx.return_stack.len() <= frozen_len {
             return Err(Xerr::ReturnStackUnderflow);
         }
-        self.ctx.rs.pop().ok_or(Xerr::ReturnStackUnderflow)
+        self.ctx.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)
     }
 
     fn push_loop(&mut self, l: Loop) -> Xresult {
-        self.ctx.ls.push(l);
+        self.ctx.loops.push(l);
         OK
     }
 
     fn pop_loop(&mut self) -> Result<Loop, Xerr> {
         let frozen_len = self.ctx_nested.last().map(|s| s.ls_len).unwrap_or(0);
-        if self.ctx.ls.len() <= frozen_len {
+        if self.ctx.loops.len() <= frozen_len {
             return Err(Xerr::ReturnStackUnderflow);
         }
-        self.ctx.ls.pop().ok_or(Xerr::LoopStackUnderflow)
+        self.ctx.loops.pop().ok_or(Xerr::LoopStackUnderflow)
     }
 }
 
@@ -567,19 +567,19 @@ fn core_word_vec_end(vm: &mut VM) -> Xresult {
 }
 
 fn vec_builder_begin(vm: &mut VM) -> Xresult {
-    let stack_ptr = vm.ctx.ds.len();
+    let stack_ptr = vm.ctx.data_stack.len();
     vm.push_loop(Loop::VecBuilder { stack_ptr })
 }
 
 fn vec_builder_end(vm: &mut VM) -> Xresult {
     match vm.pop_loop()? {
         Loop::VecBuilder { stack_ptr } => {
-            let top_ptr = vm.ctx.ds.len();
+            let top_ptr = vm.ctx.data_stack.len();
             if top_ptr < stack_ptr {
                 Err(Xerr::StackNotBalanced)
             } else {
                 let mut v = Xvec::new();
-                for x in &vm.ctx.ds[stack_ptr..] {
+                for x in &vm.ctx.data_stack[stack_ptr..] {
                     v.push_back_mut(x.clone());
                 }
                 vm.dropn(top_ptr - stack_ptr)?;
@@ -603,19 +603,19 @@ fn core_word_map_end(vm: &mut VM) -> Xresult {
 }
 
 fn map_builder_begin(vm: &mut VM) -> Xresult {
-    let stack_ptr = vm.ctx.ds.len();
+    let stack_ptr = vm.ctx.data_stack.len();
     vm.push_loop(Loop::MapBuilder { stack_ptr })
 }
 
 fn map_builder_end(vm: &mut VM) -> Xresult {
     match vm.pop_loop()? {
         Loop::MapBuilder { stack_ptr } => {
-            let top_ptr = vm.ctx.ds.len();
+            let top_ptr = vm.ctx.data_stack.len();
             if top_ptr < stack_ptr || (top_ptr - stack_ptr) % 2 == 1 {
                 Err(Xerr::StackNotBalanced)
             } else {
                 let mut m = Xmap::new();
-                for kv in vm.ctx.ds[stack_ptr..].chunks(2) {
+                for kv in vm.ctx.data_stack[stack_ptr..].chunks(2) {
                     m.push_back_mut((kv[0].clone(), kv[1].clone()));
                 }
                 vm.dropn(top_ptr - stack_ptr)?;
@@ -627,7 +627,7 @@ fn map_builder_end(vm: &mut VM) -> Xresult {
 }
 
 fn is_building_word(vm: &mut VM) -> bool {
-    vm.ctx.fs.iter().any(|x| match x {
+    vm.ctx.flow_stack.iter().any(|x| match x {
         Flow::Fun { .. } => true,
         _ => false,
     })
@@ -716,11 +716,11 @@ fn core_word_const(vm: &mut VM) -> Xresult {
 
 fn core_word_nested_begin(vm: &mut VM) -> Xresult {
     vm.ctx_nested.push(CtxState {
-        ds_len: vm.ctx.ds.len(),
+        ds_len: vm.ctx.data_stack.len(),
         cs_len: vm.code.len(),
-        rs_len: vm.ctx.rs.len(),
-        fs_len: vm.ctx.fs.len(),
-        ls_len: vm.ctx.ls.len(),
+        rs_len: vm.ctx.return_stack.len(),
+        fs_len: vm.ctx.flow_stack.len(),
+        ls_len: vm.ctx.loops.len(),
         autoexec: true,        
     });
     OK
@@ -728,7 +728,7 @@ fn core_word_nested_begin(vm: &mut VM) -> Xresult {
 
 fn core_word_nested_end(vm: &mut VM) -> Xresult {
     let s = vm.ctx_nested.last().ok_or(Xerr::ControlFlowError)?.clone();
-    if vm.ctx.fs.len() > s.fs_len || vm.ctx.ls.len() > s.ls_len {
+    if vm.ctx.flow_stack.len() > s.fs_len || vm.ctx.loops.len() > s.ls_len {
         return Err(Xerr::ControlFlowError);
     }
     vm.code_emit(Inst::Ret)?;
