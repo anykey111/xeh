@@ -1,8 +1,8 @@
 extern crate minifb;
 extern crate xeh;
 use minifb::{Key, Window, WindowOptions};
-use std::any::Any;
-use xeh::vm::State;
+
+use xeh::state::State;
 use xeh::cell::{Cell};
 use xeh::error::*;
 
@@ -60,7 +60,7 @@ fn minifb_is_open(vm: &mut State) -> Xresult {
 }
 
 fn main() {
-    let mut vm = State::boot().unwrap();
+    let mut vm = State::new().unwrap();
     
     vm.defword("minifb-new", minifb_new).unwrap();
     vm.defword("minifb-is-open", minifb_is_open).unwrap();

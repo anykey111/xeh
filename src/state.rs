@@ -3,26 +3,13 @@ use num_traits::ToPrimitive;
 use crate::cell::*;
 use crate::error::*;
 use crate::lex::*;
+use crate::opcodes::*;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     Deferred,
     Variable(usize),
     Function { immediate: bool, xf: Xfn },
-}
-
-#[derive(Clone)]
-pub enum Inst {
-    Nop,
-    Call(usize),
-    Deferred(usize),
-    NativeCall(XfnType),
-    Ret,
-    JumpIf(isize),
-    JumpIfNot(isize),
-    Jump(isize),
-    Load(usize),
-    Store(usize),
 }
 
 #[derive(Clone)]
@@ -75,7 +62,7 @@ struct Context {
 pub struct State {
     dict: Vec<(String, Entry)>,
     heap: Vec<Cell>,
-    code: Vec<Inst>,
+    code: Vec<Opcode>,
     data_stack: Vec<Cell>,
     return_stack: Vec<usize>,
     flow_stack: Vec<Flow>,
@@ -102,7 +89,7 @@ impl State {
                 && !self.has_pending_flow()
                 && start < self.code_offset()
             {
-                self.code_emit(Inst::Ret)?;
+                self.code_emit(Opcode::Ret)?;
                 self.ctx.code_start = self.code_offset();
                 self.run(Xfn::Interp(start))?;
             }
@@ -112,7 +99,7 @@ impl State {
                         break Err(Xerr::ControlFlowError);
                     }
                     if start < self.code_offset() {
-                        self.code_emit(Inst::Ret)?;
+                        self.code_emit(Opcode::Ret)?;
                         self.ctx.code_start = self.code_offset();
                         let xf = Xfn::Interp(start);
                         if self.ctx.mode == ContextMode::Load {
@@ -126,11 +113,11 @@ impl State {
                 Tok::Num(n) => {
                     let n = n.to_i64().ok_or(Xerr::IntegerOverflow)?;
                     let a = self.readonly_cell(Cell::Int(n));
-                    self.code_emit(Inst::Load(a))?;
+                    self.code_emit(Opcode::Load(a))?;
                 }
                 Tok::Str(s) => {
                     let a = self.readonly_cell(Cell::Str(s));
-                    self.code_emit(Inst::Load(a))?;
+                    self.code_emit(Opcode::Load(a))?;
                 }
                 Tok::Word(name) => {
                     // get entry address or insert deferred
@@ -140,10 +127,10 @@ impl State {
                         self.dict_insert(name, Entry::Deferred)?
                     };
                     match self.dict_at(idx).unwrap() {
-                        Entry::Deferred => self.code_emit(Inst::Deferred(idx))?,
+                        Entry::Deferred => self.code_emit(Opcode::Deferred(idx))?,
                         Entry::Variable(a) => {
                             let a = *a;
-                            self.code_emit(Inst::Load(a))?;
+                            self.code_emit(Opcode::Load(a))?;
                         }
                         Entry::Function {
                             immediate: true,
@@ -157,14 +144,14 @@ impl State {
                             xf: Xfn::Interp(x),
                         } => {
                             let x = *x;
-                            self.code_emit(Inst::Call(x))?;
+                            self.code_emit(Opcode::Call(x))?;
                         }
                         Entry::Function {
                             immediate: false,
                             xf: Xfn::Native(x),
                         } => {
                             let x = *x;
-                            self.code_emit(Inst::NativeCall(x))?;
+                            self.code_emit(Opcode::NativeCall(x))?;
                         }
                     }
                 }
@@ -286,21 +273,21 @@ impl State {
         self.code.len()
     }
 
-    fn code_emit(&mut self, inst: Inst) -> Xresult {
+    fn code_emit(&mut self, inst: Opcode) -> Xresult {
         self.code.push(inst);
         OK
     }
 
-    fn patch_insn(&mut self, at: usize, insn: Inst) -> Xresult {
+    fn patch_insn(&mut self, at: usize, insn: Opcode) -> Xresult {
         self.code[at] = insn;
         OK
     }
 
     fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
         let insn = match &self.code[at] {
-            Inst::Jump(_) => Inst::Jump(offs),
-            Inst::JumpIf(_) => Inst::JumpIf(offs),
-            Inst::JumpIfNot(_) => Inst::JumpIfNot(offs),
+            Opcode::Jump(_) => Opcode::Jump(offs),
+            Opcode::JumpIf(_) => Opcode::JumpIf(offs),
+            Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
             _ => panic!("not a jump instruction at={}", at),
         };
         self.patch_insn(at, insn)
@@ -340,53 +327,53 @@ impl State {
     fn run_inst(&mut self) -> Xresult {
         let ip = self.ip();
         match self.code[ip] {
-            Inst::Nop => self.next_ip(),
-            Inst::Jump(offs) => self.jump_to(offs),
-            Inst::JumpIf(offs) => {
+            Opcode::Nop => self.next_ip(),
+            Opcode::Jump(offs) => self.jump_to(offs),
+            Opcode::JumpIf(offs) => {
                 let t = self.pop_data()?;
                 self.jump_if(t.is_true(), offs)
             }
-            Inst::JumpIfNot(offs) => {
+            Opcode::JumpIfNot(offs) => {
                 let t = self.pop_data()?;
                 self.jump_if(!t.is_true(), offs)
             }
-            Inst::Call(a) => {
+            Opcode::Call(a) => {
                 self.push_return(ip + 1)?;
                 self.set_ip(a)
             }
-            Inst::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
+            Opcode::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
                 Entry::Deferred => Err(Xerr::UnknownWord),
                 Entry::Variable(a) => {
                     let a = *a;
-                    self.patch_insn(ip, Inst::Load(a))
+                    self.patch_insn(ip, Opcode::Load(a))
                 }
                 Entry::Function {
                     xf: Xfn::Interp(x), ..
                 } => {
                     let x = *x;
-                    self.patch_insn(ip, Inst::Call(x))
+                    self.patch_insn(ip, Opcode::Call(x))
                 }
                 Entry::Function {
                     xf: Xfn::Native(x), ..
                 } => {
                     let x = *x;
-                    self.patch_insn(ip, Inst::NativeCall(x))
+                    self.patch_insn(ip, Opcode::NativeCall(x))
                 }
             },
-            Inst::NativeCall(x) => {
+            Opcode::NativeCall(x) => {
                 x(self)?;
                 self.next_ip()
             }
-            Inst::Ret => {
+            Opcode::Ret => {
                 let new_ip = self.pop_return()?;
                 self.set_ip(new_ip)
             }
-            Inst::Load(a) => {
+            Opcode::Load(a) => {
                 let val = self.heap[a].clone();
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Inst::Store(a) => {
+            Opcode::Store(a) => {
                 let val = self.pop_data()?;
                 self.heap[a] = val;
                 self.next_ip()
@@ -497,7 +484,7 @@ fn core_insert_imm_word(xs: &mut State, name: &str, x: XfnType) -> Xresult {
 
 fn core_word_if(xs: &mut State) -> Xresult {
     let fwd = Flow::If(xs.code_offset());
-    xs.code_emit(Inst::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(0))?;
     xs.push_flow(fwd)
 }
 
@@ -505,7 +492,7 @@ fn core_word_else(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
         Flow::If(if_org) => {
             let fwd = Flow::If(xs.code_offset());
-            xs.code_emit(Inst::Jump(0))?;
+            xs.code_emit(Opcode::Jump(0))?;
             xs.push_flow(fwd)?;
             let offs = jump_offset(if_org, xs.code_offset());
             xs.patch_jump(if_org, offs)
@@ -532,7 +519,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
         Flow::Begin(begin_org) => {
             let offs = jump_offset(xs.code_offset(), begin_org);
-            xs.code_emit(Inst::JumpIf(offs))
+            xs.code_emit(Opcode::JumpIf(offs))
         }
         _ => Err(Xerr::ControlFlowError),
     }
@@ -540,7 +527,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
 
 fn core_word_while(xs: &mut State) -> Xresult {
     let cond = Flow::While(xs.code_offset());
-    xs.code_emit(Inst::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(0))?;
     xs.push_flow(cond)
 }
 
@@ -553,7 +540,7 @@ fn core_word_again(xs: &mut State) -> Xresult {
             }
             Flow::Begin(begin_org) => {
                 let offs = jump_offset(xs.code_offset(), begin_org);
-                break xs.code_emit(Inst::Jump(offs));
+                break xs.code_emit(Opcode::Jump(offs));
             }
             _ => break Err(Xerr::ControlFlowError),
         }
@@ -572,7 +559,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
                     let offs = jump_offset(cond_org, xs.code_offset());
                     xs.patch_jump(cond_org, offs)?;
                     let offs = jump_offset(xs.code_offset(), begin_org);
-                    break xs.code_emit(Inst::Jump(offs));
+                    break xs.code_emit(Opcode::Jump(offs));
                 }
                 _ => break Err(Xerr::ControlFlowError),
             },
@@ -583,7 +570,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
 
 fn core_word_leave(xs: &mut State) -> Xresult {
     let leave = Flow::Leave(xs.code_offset());
-    xs.code_emit(Inst::Jump(0))?;
+    xs.code_emit(Opcode::Jump(0))?;
     xs.push_flow(leave)?;
     OK
 }
@@ -598,12 +585,12 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
 
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Vec)?;
-    xs.code_emit(Inst::NativeCall(vec_builder_begin))
+    xs.code_emit(Opcode::NativeCall(vec_builder_begin))
 }
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Vec => xs.code_emit(Inst::NativeCall(vec_builder_end)),
+        Flow::Vec => xs.code_emit(Opcode::NativeCall(vec_builder_end)),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -634,12 +621,12 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 
 fn core_word_map_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Map)?;
-    xs.code_emit(Inst::NativeCall(map_builder_begin))
+    xs.code_emit(Opcode::NativeCall(map_builder_begin))
 }
 
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Map => xs.code_emit(Inst::NativeCall(map_builder_end)),
+        Flow::Map => xs.code_emit(Opcode::NativeCall(map_builder_end)),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -685,7 +672,7 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     };
     let start = xs.code_offset();
     // jump over function body
-    xs.code_emit(Inst::Jump(0))?;
+    xs.code_emit(Opcode::Jump(0))?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_offset());
     let dict_idx = xs.dict_insert(
@@ -701,7 +688,7 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
 fn core_word_def_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
         Flow::Fun { start, .. } => {
-            xs.code_emit(Inst::Ret)?;
+            xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_offset());
             xs.patch_jump(start, offs)
         }
@@ -735,7 +722,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
         Entry::Deferred => Err(Xerr::UnknownWord),
         Entry::Variable(a) => {
             let a = *a;
-            xs.code_emit(Inst::Store(a))
+            xs.code_emit(Opcode::Store(a))
         }
         _ => Err(Xerr::ReadonlyAddress),
     }
@@ -782,14 +769,14 @@ fn test_if_flow() {
     xs.load("1 if 222 then").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
-    assert_eq!(&Inst::JumpIfNot(2), it.next().unwrap());
+    assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
     let mut xs = State::new().unwrap();
     xs.load("1 if 222 else 333 then").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
-    assert_eq!(&Inst::JumpIfNot(3), it.next().unwrap());
+    assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
     it.next().unwrap();
-    assert_eq!(&Inst::Jump(2), it.next().unwrap());
+    assert_eq!(&Opcode::Jump(2), it.next().unwrap());
     // test errors
     let mut xs = State::new().unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else 333"));
@@ -808,22 +795,22 @@ fn test_begin_repeat() {
     xs.load("begin 5 while 1 - repeat").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
-    assert_eq!(&Inst::JumpIfNot(3), it.next().unwrap());
+    assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
     it.next().unwrap();
     it.next().unwrap();
-    assert_eq!(&Inst::Jump(-4), it.next().unwrap());
+    assert_eq!(&Opcode::Jump(-4), it.next().unwrap());
     let mut xs = State::new().unwrap();
     xs.load("begin leave again").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
-    assert_eq!(&Inst::Jump(-1), it.next().unwrap());
+    assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
     let mut xs = State::new().unwrap();
     xs.load("0 begin 1 + until").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
     it.next().unwrap();
     it.next().unwrap();
-    assert_eq!(&Inst::JumpIf(-2), it.next().unwrap());
+    assert_eq!(&Opcode::JumpIf(-2), it.next().unwrap());
     xs.interpret("var x 1 -> x begin x while 0 -> x repeat")
         .unwrap();
     assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
