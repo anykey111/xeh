@@ -39,12 +39,10 @@ impl fmt::Debug for Cell {
             Cell::Vector(v) => write!(f, "{:?}", v),
             Cell::Map(v) => write!(f, "{:?}", v),
             Cell::Fun(x) => write!(f, "{:?}", x),
-            Cell::AnyRc(x) => {
-                match x.try_borrow() {
-                    Ok(p) => write!(f, "<{:?}>", p.type_id()),
-                    Err(_) => write!(f, "<any>"),
-                }
-            }
+            Cell::AnyRc(x) => match x.try_borrow() {
+                Ok(p) => write!(f, "<{:?}>", p.type_id()),
+                Err(_) => write!(f, "<any>"),
+            },
         }
     }
 }
@@ -63,6 +61,21 @@ impl PartialEq for Xfn {
         match (self, other) {
             (Xfn::Interp(a), Xfn::Interp(b)) => a == b,
             (Xfn::Native(a), Xfn::Native(b)) => *a as usize == *b as usize,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq for Cell {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Cell::Nil, Cell::Nil) => true,
+            (Cell::Int(a), Cell::Int(b)) => a == b,
+            (Cell::Real(a), Cell::Real(b)) => a == b,
+            (Cell::Str(a), Cell::Str(b)) => a == b,
+            (Cell::Vector(a), Cell::Vector(b)) => a == b,
+            (Cell::Map(a), Cell::Map(b)) => a == b,
+            (Cell::Fun(a), Cell::Fun(b)) => a == b,
             _ => false,
         }
     }
@@ -99,7 +112,10 @@ impl Cell {
         }
     }
 
-    pub fn from_any<T>(val: T) -> Self where T: 'static{
+    pub fn from_any<T>(val: T) -> Self
+    where
+        T: 'static,
+    {
         Cell::AnyRc(std::rc::Rc::new(std::cell::RefCell::new(val)))
     }
 }
