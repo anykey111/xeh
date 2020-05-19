@@ -5,7 +5,7 @@ pub type Xvec<T> = rpds::Vector<T>;
 pub type Xmap = rpds::Vector<(Cell, Cell)>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut State) -> Xresult;
-pub type Xint = i64;
+pub type Xint = i128;
 pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 
@@ -98,6 +98,18 @@ impl Cell {
         }
     }
 
+    pub fn to_f64(&self) -> Result<f64, Xerr> {
+        match self {
+            Cell::Real(r) => Ok(*r),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
+    pub fn to_f32(&self) -> Result<f32, Xerr> {
+        let f = self.to_f64()?;
+        Ok(f as f32)
+    }
+
     pub fn is_true(&self) -> bool {
         match self {
             Cell::Nil | Cell::Int(0) => false,
@@ -117,6 +129,24 @@ impl Cell {
         T: 'static,
     {
         Cell::AnyRc(std::rc::Rc::new(std::cell::RefCell::new(val)))
+    }
+}
+
+impl From<usize> for Cell {
+    fn from(x: usize) -> Self {
+        Cell::Int(x as i128)
+    }
+}
+
+impl From<f32> for Cell {
+    fn from(x: f32) -> Self {
+        Cell::Real(x as f64)
+    }
+}
+
+impl From<f64> for Cell {
+    fn from(x: f64) -> Self {
+        Cell::Real(x)
     }
 }
 

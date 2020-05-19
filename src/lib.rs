@@ -8,3 +8,9 @@ pub mod lex;
 pub mod opcodes;
 pub mod cell;
 pub mod state;
+
+pub mod prelude {
+    pub type Xstate = crate::state::State;
+    pub type Xcell = crate::cell::Cell;
+    pub use crate::error::{Xerr, Xresult};
+}

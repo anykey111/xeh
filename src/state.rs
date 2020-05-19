@@ -75,6 +75,8 @@ pub struct State {
     nested: Vec<Context>,
 }
 
+pub struct Xvar(usize);
+
 impl State {
     pub fn load(&mut self, source: &str) -> Xresult {
         self.context_open(ContextMode::Load, Some(Lex::from_str(source)))?;
@@ -88,7 +90,7 @@ impl State {
 
     fn build(&mut self) -> Xresult {
         loop {
-            let start = self.ctx.code_start;
+            let mut start = self.ctx.code_start;
             if self.ctx.mode != ContextMode::Load
                 && !self.has_pending_flow()
                 && start < self.code_offset()
@@ -96,6 +98,7 @@ impl State {
                 self.code_emit(Opcode::Ret)?;
                 self.ctx.code_start = self.code_offset();
                 self.run(Xfn::Interp(start))?;
+                start = self.ctx.code_start;
             }
             match self.next_token()? {
                 Tok::EndOfInput => {
@@ -112,10 +115,10 @@ impl State {
                             break self.run(xf);
                         }
                     }
-                    break OK;
+                    break self.context_close();
                 }
                 Tok::Num(n) => {
-                    let n = n.to_i64().ok_or(Xerr::IntegerOverflow)?;
+                    let n = n.to_i128().ok_or(Xerr::IntegerOverflow)?;
                     self.code_emit(Opcode::LoadInt(n))?;
                 }
                 Tok::Str(s) => {
@@ -218,11 +221,19 @@ impl State {
         Ok(xs)
     }
 
-    pub fn defvar(&mut self, name: &str, value: Cell) -> Xresult {
-        let a = self.alloc_cell()?;
-        self.heap[a] = value;
-        self.dict_insert(name.to_string(), Entry::Variable(a))?;
-        OK
+    pub fn defonce(&mut self, name: &str, value: Cell) -> Result<Xvar, Xerr> {
+        if let Some(a) = self.dict_find(name) {
+            Ok(Xvar(a))
+        } else {
+            let a = self.alloc_cell()?;
+            self.heap[a] = value;
+            self.dict_insert(name.to_string(), Entry::Variable(a))?;
+            Ok(Xvar(a))
+        }
+    }
+
+    pub fn get_var(&self, var: &Xvar) -> Result<&Cell, Xerr> {
+        self.heap.get(var.0).ok_or(Xerr::InvalidAddress)
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
@@ -236,6 +247,13 @@ impl State {
             },
         )?;
         OK
+    }
+
+    pub fn code_section(&self) -> &[Opcode] {
+        &self.code[..]
+    }
+    pub fn code_fmt(&self, at: usize) -> Option<String> {
+        self.code.get(at).map(|op| format_opcode(op, at))
     }
 
     fn load_core(&mut self) -> Xresult {
@@ -770,28 +788,31 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
-fn print_opcode(op: &Opcode, ip: usize) {
+fn format_opcode(op: &Opcode, ip: usize) -> String {
     let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
-    print!("${:05x}\t", ip);
-    match op {
-        Opcode::Nop => println!("nop"),
-        Opcode::Call(a) => println!("call ${:05x}", a),
-        Opcode::Deferred(a) => println!("deferred {}", a),
-        Opcode::NativeCall(x) => println!("callx ${:05x}", *x as usize),
-        Opcode::Ret => println!("ret"),
-        Opcode::JumpIf(offs) => println!("jumpif ${:05x}", jumpaddr(ip, offs)),
-        Opcode::JumpIfNot(offs) => println!("jumpifnot ${:05x}", jumpaddr(ip, offs)),
-        Opcode::Jump(offs) => println!("jump ${:05x}", jumpaddr(ip, offs)),
-        Opcode::Load(a) => println!("load {}", a),
-        Opcode::LoadInt(i) => println!("loadint {}", i),
-        Opcode::Store(a) => println!("store {}", a),
-    }
+    format!(
+        "{:05x} {}",
+        ip,
+        match op {
+            Opcode::Nop => format!("nop"),
+            Opcode::Call(a) => format!("call ${:05x}", a),
+            Opcode::Deferred(a) => format!("deferred {}", a),
+            Opcode::NativeCall(x) => format!("callx ${:05x}", *x as usize),
+            Opcode::Ret => format!("ret"),
+            Opcode::JumpIf(offs) => format!("jumpif ${:05x}", jumpaddr(ip, offs)),
+            Opcode::JumpIfNot(offs) => format!("jumpifnot ${:05x}", jumpaddr(ip, offs)),
+            Opcode::Jump(offs) => format!("jump ${:05x}", jumpaddr(ip, offs)),
+            Opcode::Load(a) => format!("load {}", a),
+            Opcode::LoadInt(i) => format!("loadint {}", i),
+            Opcode::Store(a) => format!("store {}", a),
+        }
+    )
 }
 
 fn try_print_code(xs: &mut State, start: usize) -> Xresult {
     for ip in start..xs.code.len() {
         let op = &xs.code[ip];
-        print_opcode(op, ip);
+        println!("{}", format_opcode(op, ip));
         if *op == Opcode::Ret {
             break;
         }
@@ -842,7 +863,7 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
             );
             for (i, op) in xs.code[start..end].iter().enumerate() {
                 let ip = start + i;
-                print_opcode(op, ip)
+                println!("{}", format_opcode(op, ip));
             }
         }
     }

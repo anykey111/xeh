@@ -9,7 +9,7 @@
 // Jump(isize),
 // Load(usize),
 // Store
-use crate::cell::XfnType;
+use crate::cell::*;
 
 // impl Inst {
 //     fn native_call(x: XfnType) -> Self {
@@ -33,7 +33,7 @@ pub enum Opcode {
     JumpIfNot(isize),
     Jump(isize),
     Load(usize),
-    LoadInt(i64),
+    LoadInt(Xint),
     Store(usize),
 }
 
