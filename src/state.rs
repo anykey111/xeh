@@ -35,7 +35,7 @@ enum Loop {
 
 #[derive(Clone, PartialEq)]
 enum ContextMode {
-    // assemble function and return address
+    // assemble function
     Load,
     // normal evaluation
     Eval,
@@ -101,14 +101,9 @@ impl State {
                     if self.has_pending_flow() {
                         break Err(Xerr::ControlFlowError);
                     }
-                    if self.ip() < self.code_offset() {
-                        if self.ctx.mode == ContextMode::Load {
-                            self.code_emit(Opcode::Ret)?;
-                            let xf = Xfn::Interp(self.ip());
-                            self.push_data(Cell::Fun(xf))?;
-                        } else {
-                            self.run_loop()?;
-                        }
+                    if self.ctx.mode != ContextMode::Load && self.ip() < self.code_offset() {
+                        self.code_emit(Opcode::Next)?;
+                        self.run_loop()?;
                     }
                     break self.context_close();
                 }
@@ -205,12 +200,12 @@ impl State {
             // clear context code after evaluation
             self.code.truncate(tmp.cs_len);
         }
-        std::mem::swap(&mut self.ctx, &mut tmp);
+        self.ctx = tmp;
         OK
     }
 
     fn has_pending_flow(&self) -> bool {
-        self.flow_stack.len() > 0
+        (self.flow_stack.len() - self.ctx.fs_len) > 0
     }
 
     pub fn new() -> Result<State, Xerr> {
@@ -306,8 +301,8 @@ impl State {
         self.code.len()
     }
 
-    fn code_emit(&mut self, inst: Opcode) -> Xresult {
-        self.code.push(inst);
+    fn code_emit(&mut self, op: Opcode) -> Xresult {
+        self.code.push(op);
         OK
     }
 
@@ -818,7 +813,7 @@ fn format_opcode(op: &Opcode, ip: usize) -> String {
     )
 }
 
-fn try_print_code(xs: &mut State, start: usize) -> Xresult {
+fn try_print_address(xs: &mut State, start: usize) -> Xresult {
     for ip in start..xs.code.len() {
         let op = &xs.code[ip];
         println!("{}", format_opcode(op, ip));
@@ -832,7 +827,7 @@ fn try_print_code(xs: &mut State, start: usize) -> Xresult {
 fn core_word_see_code(xs: &mut State) -> Xresult {
     let name = match xs.next_token()? {
         Tok::Word(name) => name,
-        Tok::Num(n) => return try_print_code(xs, n.to_usize().ok_or(Xerr::InvalidAddress)?),
+        Tok::Num(n) => return try_print_address(xs, n.to_usize().ok_or(Xerr::InvalidAddress)?),
         _other => return Err(Xerr::ExpectingName),
     };
     let e = xs
