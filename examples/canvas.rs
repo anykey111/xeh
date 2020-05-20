@@ -33,8 +33,8 @@ impl MiniFb {
 }
 
 fn minifb_new(vm: &mut State) -> Xresult {
-    let height = vm.pop_data()?.to_usize()?;
-    let width = vm.pop_data()?.to_usize()?;
+    let height: usize = vm.pop_data()?.try_into()?;
+    let width: usize = vm.pop_data()?.try_into()?;
     let fb = MiniFb::new(width, height);
     vm.push_data(Cell::from_any(fb))
 }

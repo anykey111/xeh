@@ -82,32 +82,13 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
-    pub fn to_usize(&self) -> Result<usize, Xerr> {
-        let i = self.to_int()?;
+    pub fn to_address(self) -> Result<usize, Xerr> {
+        let i: Xint = self.try_into()?;
         if i.is_positive() {
             Ok(i as usize)
         } else {
             Err(Xerr::IntegerOverflow)
         }
-    }
-
-    pub fn to_int(&self) -> Result<Xint, Xerr> {
-        match self {
-            Cell::Int(i) => Ok(*i),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-
-    pub fn to_f64(&self) -> Result<f64, Xerr> {
-        match self {
-            Cell::Real(r) => Ok(*r),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-
-    pub fn to_f32(&self) -> Result<f32, Xerr> {
-        let f = self.to_f64()?;
-        Ok(f as f32)
     }
 
     pub fn is_true(&self) -> bool {
@@ -147,6 +128,62 @@ impl From<f32> for Cell {
 impl From<f64> for Cell {
     fn from(x: f64) -> Self {
         Cell::Real(x)
+    }
+}
+
+use std::convert::TryInto;
+
+impl TryInto<f64> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<f64, Self::Error> {
+        match self {
+            Cell::Real(r) => Ok(r),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+}
+
+impl TryInto<f32> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<f32, Self::Error> {
+        let r: f64 = self.try_into()?;
+        Ok(r as f32)
+    }
+}
+
+impl TryInto<Xint> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<Xint, Self::Error> {
+        match self {
+            Cell::Int(i) => Ok(i),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+}
+
+impl TryInto<usize> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<usize, Self::Error> {
+        let i: Xint = self.try_into()?;
+        Ok(i as usize)
+    }
+}
+
+impl TryInto<isize> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<isize, Self::Error> {
+        let i: Xint = self.try_into()?;
+        Ok(i as isize)
+    }
+}
+
+impl TryInto<bool> for Cell {
+    type Error = Xerr;
+    fn try_into(self) -> Result<bool, Self::Error> {
+        Ok(match self {
+            Cell::Nil | Cell::Int(0) => false,
+            _ => true,
+        })
     }
 }
 

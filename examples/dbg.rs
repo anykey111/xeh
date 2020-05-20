@@ -16,12 +16,12 @@ fn main() -> Xresult {
     let xd_bg_color = xs.defonce("xd-background-color", Xcell::from(0x272822))?;
     let xd_text_color = xs.defonce("xd-text-color", Xcell::from(0xf8f8f2))?;
 
-    let _ = xs.interpret("203344 -> xd-text-color");
+    //let _ = xs.interpret("203344 -> xd-text-color");
 
     let mut window = Window::new(
         "XEH Debugger",
-        xs.get_var(&xd_width)?.to_usize()?,
-        xs.get_var(&xd_height)?.to_usize()?,
+        xs.get_var(&xd_width)?.try_into()?,
+        xs.get_var(&xd_height)?.try_into()?,
         WindowOptions {
             ..WindowOptions::default()
         },
@@ -40,8 +40,8 @@ fn main() -> Xresult {
     while window.is_open() {
         let width = size.0 as f32;
         let height = size.1 as f32;
-        let background_color = solid_color(xs.get_var(&xd_bg_color)?.to_usize()?);
-        let text_color = solid_color(xs.get_var(&xd_text_color)?.to_usize()?);
+        let background_color = solid_color(xs.get_var(&xd_bg_color)?.try_into()?);
+        let text_color = solid_color(xs.get_var(&xd_text_color)?.try_into()?);
         let text_size = xs.get_var(&xd_text_size)?.to_f32()?;
 
         dt.clear(background_color);
@@ -68,7 +68,7 @@ fn main() -> Xresult {
             );
         }
 
-        if let Some(pos) = window.get_mouse_pos(MouseMode::Clamp) {}
+        //if let Some(pos) = window.get_mouse_pos(MouseMode::Clamp) {}
 
         window
             .update_with_buffer(dt.get_data(), size.0, size.1)
