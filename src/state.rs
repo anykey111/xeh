@@ -90,29 +90,25 @@ impl State {
 
     fn build(&mut self) -> Xresult {
         loop {
-            let mut start = self.ctx.code_start;
             if self.ctx.mode != ContextMode::Load
                 && !self.has_pending_flow()
-                && start < self.code_offset()
+                && self.ip() < self.code_offset()
             {
-                self.code_emit(Opcode::Ret)?;
-                self.ctx.code_start = self.code_offset();
-                self.run(Xfn::Interp(start))?;
-                start = self.ctx.code_start;
+                self.code_emit(Opcode::Next)?;
+                self.run_loop()?;
             }
             match self.next_token()? {
                 Tok::EndOfInput => {
                     if self.has_pending_flow() {
                         break Err(Xerr::ControlFlowError);
                     }
-                    if start < self.code_offset() {
-                        self.code_emit(Opcode::Ret)?;
-                        self.ctx.code_start = self.code_offset();
-                        let xf = Xfn::Interp(start);
+                    if self.ip() < self.code_offset() {
                         if self.ctx.mode == ContextMode::Load {
-                            break self.push_data(Cell::Fun(xf));
+                            self.code_emit(Opcode::Ret)?;
+                            let xf = Xfn::Interp(self.ip());
+                            self.push_data(Cell::Fun(xf))?;
                         } else {
-                            break self.run(xf);
+                            self.run_loop()?;
                         }
                     }
                     break self.context_close();
@@ -144,7 +140,7 @@ impl State {
                             ..
                         } => {
                             let xf = xf.clone();
-                            self.run(xf)?;
+                            self.call_fn(xf)?;
                         }
                         Entry::Function {
                             immediate: false,
@@ -341,29 +337,36 @@ impl State {
         a
     }
 
-    fn run(&mut self, x: Xfn) -> Xresult {
+    fn call_fn(&mut self, x: Xfn) -> Xresult {
         match x {
             Xfn::Native(x) => x(self),
             Xfn::Interp(x) => {
                 let old_ip = self.ip();
-                let depth = self.return_stack.len();
                 self.push_return(old_ip)?;
                 self.set_ip(x)?;
-                loop {
-                    self.run_inst()?;
-                    if depth == self.return_stack.len() {
-                        assert_eq!(old_ip, self.ip());
-                        break OK;
-                    }
-                }
+                self.run_loop()
             }
         }
     }
 
-    fn run_inst(&mut self) -> Xresult {
+    fn run_loop(&mut self) -> Xresult {
+        let mut exec = || loop {
+            self.run_next()?;
+        };
+        match exec() {
+            Err(Xerr::Next) => OK,
+            result => result,
+        }
+    }
+
+    fn run_next(&mut self) -> Xresult {
         let ip = self.ip();
         match self.code[ip] {
             Opcode::Nop => self.next_ip(),
+            Opcode::Next => {
+                self.next_ip()?;
+                Err(Xerr::Next)
+            }
             Opcode::Jump(offs) => self.jump_to(offs),
             Opcode::JumpIf(offs) => {
                 let t = self.pop_data()?;
@@ -795,6 +798,7 @@ fn format_opcode(op: &Opcode, ip: usize) -> String {
         ip,
         match op {
             Opcode::Nop => format!("nop"),
+            Opcode::Next => format!("next"),
             Opcode::Call(a) => format!("call ${:05x}", a),
             Opcode::Deferred(a) => format!("deferred {}", a),
             Opcode::NativeCall(x) => format!("callx ${:05x}", *x as usize),

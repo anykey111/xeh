@@ -25,6 +25,7 @@ use crate::cell::*;
 #[derive(Clone)]
 pub enum Opcode {
     Nop,
+    Next,
     Call(usize),
     Deferred(usize),
     NativeCall(XfnType),
@@ -43,6 +44,7 @@ impl fmt::Debug for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
+            Self::Next => write!(f, "next"),
             Self::Call(a) => write!(f, "call {}", a),
             Self::Deferred(a) => write!(f, "deferred {}", a),
             Self::NativeCall(x) => write!(f, "callx 0x{:x}", *x as usize),

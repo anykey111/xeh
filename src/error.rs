@@ -18,6 +18,8 @@ pub enum Xerr {
     InvalidAddress,
     ReadonlyAddress,
     CustomError,
+    // return to interpreter loop
+    Next,
 }
 
 pub type Xresult = Result<(), Xerr>;
