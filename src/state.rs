@@ -56,7 +56,6 @@ struct Context {
     rs_len: usize,
     fs_len: usize,
     ls_len: usize,
-    code_start: usize,
     ip: usize,
     mode: ContextMode,
     source: Option<Lex>,
@@ -174,19 +173,22 @@ impl State {
 
     fn context_open(&mut self, mode: ContextMode, source: Option<Lex>) -> Xresult {
         let mut tmp = Context {
-            ds_len: self.data_stack.len(),
+            ds_len: 0,
             cs_len: self.code.len(),
             rs_len: self.return_stack.len(),
             fs_len: self.flow_stack.len(),
             ls_len: self.loops.len(),
-            code_start: self.code_offset(),
-            ip: self.ip(),
+            ip: self.code_offset(),
             mode,
             source,
         };
         if tmp.source.is_none() {
             // take source form previous context
             tmp.source = self.ctx.source.take();
+        }
+        if tmp.mode == ContextMode::Nested {
+            // set bottom stack limit for nested interpreter
+            tmp.ds_len = self.data_stack.len();
         }
         std::mem::swap(&mut self.ctx, &mut tmp);
         self.nested.push(tmp);
@@ -276,13 +278,12 @@ impl State {
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
             Def("see-code", core_word_see_code),
+            Def(".s", core_word_stack_dump),
+            Def("execute", core_word_execute),
         ]
         .iter()
         {
             core_insert_word(self, i.0, i.1, true)?;
-        }
-        for i in [Def("dump", core_word_stack_dump)].iter() {
-            core_insert_word(self, i.0, i.1, false)?;
         }
         OK
     }
@@ -380,6 +381,18 @@ impl State {
                 self.push_return(ip + 1)?;
                 self.set_ip(a)
             }
+            Opcode::NativeCall(x) => {
+                x(self)?;
+                self.next_ip()
+            }
+            Opcode::Ret => {
+                let new_ip = self.pop_return()?;
+                if self.return_stack.len() == self.ctx.rs_len {
+                    Err(Xerr::Next)
+                } else {
+                    self.set_ip(new_ip)
+                }
+            }
             Opcode::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
                 Entry::Deferred => Err(Xerr::UnknownWord),
                 Entry::Variable(a) => {
@@ -399,14 +412,6 @@ impl State {
                     self.patch_insn(ip, Opcode::NativeCall(x))
                 }
             },
-            Opcode::NativeCall(x) => {
-                x(self)?;
-                self.next_ip()
-            }
-            Opcode::Ret => {
-                let new_ip = self.pop_return()?;
-                self.set_ip(new_ip)
-            }
             Opcode::LoadInt(n) => {
                 self.push_data(Cell::Int(n))?;
                 self.next_ip()
@@ -879,6 +884,13 @@ fn core_word_stack_dump(xs: &mut State) -> Xresult {
         println!("\t{:?}", val);
     }
     OK
+}
+
+fn core_word_execute(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Fun(x) => xs.call_fn(x),
+        _ => Err(Xerr::TypeError),
+    }
 }
 
 #[test]

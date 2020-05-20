@@ -40,8 +40,8 @@ impl fmt::Debug for Cell {
             Cell::Map(v) => write!(f, "{:?}", v),
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::AnyRc(x) => match x.try_borrow() {
-                Ok(p) => write!(f, "<{:?}>", p.type_id()),
-                Err(_) => write!(f, "<any>"),
+                Ok(p) => write!(f, "any:{:?}", p.type_id()),
+                Err(_) => write!(f, "any"),
             },
         }
     }
@@ -50,8 +50,8 @@ impl fmt::Debug for Cell {
 impl fmt::Debug for Xfn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Xfn::Interp(x) => write!(f, "{:?}", x),
-            Xfn::Native(x) => write!(f, "{:?}", *x as usize),
+            Xfn::Interp(x) => write!(f, "f:{:x}", x),
+            Xfn::Native(x) => write!(f, "xf:{:#x}", *x as usize),
         }
     }
 }
