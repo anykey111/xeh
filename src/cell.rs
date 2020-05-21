@@ -98,9 +98,9 @@ impl Cell {
         }
     }
 
-    pub fn to_any(&self) -> Result<Xanyrc, Xerr> {
+    pub fn into_any(self) -> Result<Xanyrc, Xerr> {
         match self {
-            Cell::AnyRc(p) => Ok(p.clone()),
+            Cell::AnyRc(rc) => Ok(rc),
             _ => Err(Xerr::TypeError),
         }
     }

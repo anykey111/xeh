@@ -20,8 +20,8 @@ fn main() -> Xresult {
 
     let mut window = Window::new(
         "XEH Debugger",
-        xs.get_var(&xd_width)?.try_into()?,
-        xs.get_var(&xd_height)?.try_into()?,
+        xs.fetch_var(&xd_width)?.try_into()?,
+        xs.fetch_var(&xd_height)?.try_into()?,
         WindowOptions {
             ..WindowOptions::default()
         },
@@ -40,9 +40,9 @@ fn main() -> Xresult {
     while window.is_open() {
         let width = size.0 as f32;
         let height = size.1 as f32;
-        let background_color = solid_color(xs.get_var(&xd_bg_color)?.try_into()?);
-        let text_color = solid_color(xs.get_var(&xd_text_color)?.try_into()?);
-        let text_size = xs.get_var(&xd_text_size)?.to_f32()?;
+        let background_color = solid_color(xs.fetch_var(&xd_bg_color)?.try_into()?);
+        let text_color = solid_color(xs.fetch_var(&xd_text_color)?.try_into()?);
+        let text_size: f32 = xs.fetch_var(&xd_text_size)?.try_into()?;
 
         dt.clear(background_color);
         let mut pb = PathBuilder::new();
@@ -67,6 +67,7 @@ fn main() -> Xresult {
                 &DrawOptions::new(),
             );
         }
+
 
         //if let Some(pos) = window.get_mouse_pos(MouseMode::Clamp) {}
 

@@ -225,8 +225,8 @@ impl State {
         }
     }
 
-    pub fn get_var(&self, var: &Xvar) -> Result<&Cell, Xerr> {
-        self.heap.get(var.0).ok_or(Xerr::InvalidAddress)
+    pub fn fetch_var(&self, var: &Xvar) -> Result<Cell, Xerr> {
+        self.heap.get(var.0).cloned().ok_or(Xerr::InvalidAddress)
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {

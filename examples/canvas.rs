@@ -40,7 +40,7 @@ fn minifb_new(vm: &mut State) -> Xresult {
 }
 
 fn minifb_update(vm: &mut State) -> Xresult {
-    let p = vm.pop_data()?.to_any()?;
+    let p = vm.pop_data()?.into_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let buf = &fb.buffer[..];
@@ -51,7 +51,7 @@ fn minifb_update(vm: &mut State) -> Xresult {
 }
 
 fn minifb_is_open(vm: &mut State) -> Xresult {
-    let p = vm.pop_data()?.to_any()?;
+    let p = vm.pop_data()?.into_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let t = fb.window.is_open() && !fb.window.is_key_down(Key::Escape);
