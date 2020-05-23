@@ -28,7 +28,7 @@ enum Flow {
     Do { test_org: usize, jump_org: usize },
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Loop {
     VecBuilder { stack_ptr: usize },
     MapBuilder { stack_ptr: usize },
@@ -89,6 +89,16 @@ impl State {
         self.build()
     }
 
+    pub fn interpret_interactive(&mut self, source: &str) -> Xresult {
+        if self.has_pending_flow() {
+            // don't open new context, use still typing
+            self.ctx.source = Some(Lex::from_str(source));
+        } else {
+            self.context_open(ContextMode::Eval, Some(Lex::from_str(source)))?;
+        }
+        self.build()
+    }
+
     fn build(&mut self) -> Xresult {
         loop {
             if self.ctx.mode != ContextMode::Load
@@ -118,12 +128,7 @@ impl State {
                     self.code_emit(Opcode::Load(a))?;
                 }
                 Tok::Word(name) => {
-                    // get entry address or insert deferred
-                    let idx = if let Some(idx) = self.dict_find(&name) {
-                        idx
-                    } else {
-                        self.dict_insert(name, Entry::Deferred)?
-                    };
+                    let idx = self.dict_find(&name).ok_or(Xerr::UnknownWord)?;
                     match self.dict_at(idx).unwrap() {
                         Entry::Deferred => self.code_emit(Opcode::Deferred(idx))?,
                         Entry::Variable(a) => {
@@ -244,10 +249,6 @@ impl State {
         OK
     }
 
-    pub fn code_fmt(&self, at: usize) -> Option<String> {
-        self.code.get(at).map(|op| format_opcode(op, at))
-    }
-
     fn load_core(&mut self) -> Xresult {
         struct Def(&'static str, XfnType);
         for i in [
@@ -272,14 +273,25 @@ impl State {
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
             Def("see-code", core_word_see_code),
+            Def("see-state", core_word_see_state),
             Def(".s", core_word_stack_dump),
             Def("execute", core_word_execute),
+            Def("defer", core_word_defer),
             Def("do", core_word_do),
             Def("loop", core_word_loop),
         ]
         .iter()
         {
             core_insert_word(self, i.0, i.1, true)?;
+        }
+        for i in [
+            Def("i", core_word_counter_i),
+            Def("j", core_word_counter_j),
+            Def("k", core_word_counter_k),
+        ]
+        .iter()
+        {
+            core_insert_word(self, i.0, i.1, false)?;
         }
         OK
     }
@@ -456,7 +468,11 @@ impl State {
     }
 
     fn pop_flow(&mut self) -> Result<Flow, Xerr> {
-        self.flow_stack.pop().ok_or(Xerr::ControlFlowError)
+        if self.flow_stack.len() > self.ctx.fs_len {
+            self.flow_stack.pop().ok_or(Xerr::ControlFlowError)
+        } else {
+            Err(Xerr::ControlFlowError)
+        }
     }
 
     fn push_flow(&mut self, flow: Flow) -> Xresult {
@@ -509,7 +525,11 @@ impl State {
     }
 
     fn top_loop(&self) -> Result<&Loop, Xerr> {
-        self.loops.last().ok_or(Xerr::LoopStackUnderflow)
+        if self.loops.len() > self.ctx.ls_len {
+            self.loops.last().ok_or(Xerr::LoopStackUnderflow)
+        } else {
+            Err(Xerr::LoopStackUnderflow)
+        }
     }
 
     fn pop_loop(&mut self) -> Result<Loop, Xerr> {
@@ -798,21 +818,22 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
-fn format_opcode(op: &Opcode, ip: usize) -> String {
+fn format_opcode(xs: &State, at: usize) -> String {
     let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
     format!(
-        "{:08x}  {:<30} #",
-        ip,
-        match op {
+        "{:08x}{} {:<30} #",
+        at,
+        if xs.ip() == at { '*' } else { ' ' },
+        match &xs.code[at] {
             Opcode::Nop => format!("nop"),
             Opcode::Next => format!("next"),
             Opcode::Call(a) => format!("call       {:#x}", a),
-            Opcode::Deferred(a) => format!("deffer     {:#x}", a),
+            Opcode::Deferred(a) => format!("defer      {:#x}", a),
             Opcode::NativeCall(x) => format!("callx      {:#x}", *x as usize),
             Opcode::Ret => format!("ret"),
-            Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(ip, offs)),
-            Opcode::JumpIfNot(offs) => format!("jumpifnot  ${:05x}", jumpaddr(ip, offs)),
-            Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(ip, offs)),
+            Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(at, offs)),
+            Opcode::JumpIfNot(offs) => format!("jumpifnot  ${:05x}", jumpaddr(at, offs)),
+            Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
             Opcode::Store(a) => format!("store      {}", a),
@@ -821,12 +842,9 @@ fn format_opcode(op: &Opcode, ip: usize) -> String {
 }
 
 fn try_print_address(xs: &mut State, start: usize) -> Xresult {
-    for ip in start..xs.code.len() {
-        let op = &xs.code[ip];
-        println!("{}", format_opcode(op, ip));
-        if *op == Opcode::Ret {
-            break;
-        }
+    let end = (start + 25).min(xs.code.len());
+    for i in start..end {
+        println!("{}", format_opcode(xs, i));
     }
     OK
 }
@@ -872,11 +890,25 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
                 start,
                 if *immediate { " <immediate>" } else { "" }
             );
-            for (i, op) in xs.code[start..end].iter().enumerate() {
-                let ip = start + i;
-                println!("{}", format_opcode(op, ip));
+            for i in start..end {
+                println!("{}", format_opcode(xs, i));
             }
         }
+    }
+    OK
+}
+
+fn core_word_see_state(xs: &mut State) -> Xresult {
+    let cols = 80;
+    let rows = 25;
+    let start = xs.ip() - 5.min(xs.ip());
+    let end = (start + rows).min(xs.code.len());
+    for i in start..end {
+        let s = format_opcode(xs, i);
+        println!("{}", s);
+    }
+    if xs.ip() == xs.code.len() {
+        println!("{:08x}* <unreachable>", xs.ip());
     }
     OK
 }
@@ -893,6 +925,17 @@ fn core_word_execute(xs: &mut State) -> Xresult {
         Cell::Fun(x) => xs.call_fn(x),
         _ => Err(Xerr::TypeError),
     }
+}
+
+fn core_word_defer(xs: &mut State) -> Xresult {
+    let name = match xs.next_token()? {
+        Tok::Word(name) => name,
+        _ => return Err(Xerr::ExpectingName),
+    };
+    if xs.dict_find(&name).is_none() {
+        xs.dict_insert(name, Entry::Deferred)?;
+    }
+    OK
 }
 
 fn core_word_do(xs: &mut State) -> Xresult {
@@ -947,11 +990,26 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_debug_render(xs: &mut State) -> Xresult {
-    let cols = xs.pop_data()?.into_i64()?;
-    let rows = xs.pop_data()?.into_i64()?;
+fn counter_value(xs: &mut State, n: usize) -> Xresult {
+    match &xs.loops[xs.ctx.ls_len..].iter().nth_back(n) {
+        Some(Loop::Do { start, .. }) => {
+            let val = *start;
+            xs.push_data(Cell::Int(val))
+        }
+        _ => Err(Xerr::LoopStackUnderflow),
+    }
+}
 
-    OK
+fn core_word_counter_i(xs: &mut State) -> Xresult {
+    counter_value(xs, 0)
+}
+
+fn core_word_counter_j(xs: &mut State) -> Xresult {
+    counter_value(xs, 1)
+}
+
+fn core_word_counter_k(xs: &mut State) -> Xresult {
+    counter_value(xs, 2)
 }
 
 #[test]
@@ -989,7 +1047,7 @@ fn test_if_flow() {
 #[test]
 fn test_begin_repeat() {
     let mut xs = State::new().unwrap();
-    xs.load("begin 5 while 1 - repeat").unwrap();
+    xs.load("begin 5 while 1 2 repeat").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
     assert_eq!(&Opcode::JumpIfNot(4), it.next().unwrap());
@@ -1002,7 +1060,7 @@ fn test_begin_repeat() {
     it.next().unwrap();
     assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
     let mut xs = State::new().unwrap();
-    xs.load("0 begin 1 + until").unwrap();
+    xs.load("0 begin 1 2 until").unwrap();
     let mut it = xs.code.iter();
     it.next().unwrap();
     it.next().unwrap();
@@ -1033,8 +1091,19 @@ fn test_loop_leave() {
 #[test]
 fn test_do_loop() {
     let mut xs = State::new().unwrap();
-    xs.interpret("10 0 do 1 loop").unwrap();
-    for i in 0..10 {
-        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    xs.interpret("10 0 do i loop").unwrap();
+    for i in (0..10).rev() {
+        assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
+    }
+    let mut xs = State::new().unwrap();
+    xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop").unwrap();
+    for i in (100..102).rev() {
+        for j in (10..12).rev() {
+            for k in (0..2).rev() {
+                assert_eq!(Cell::Int(i), xs.pop_data().unwrap());
+                assert_eq!(Cell::Int(j), xs.pop_data().unwrap());
+                assert_eq!(Cell::Int(k), xs.pop_data().unwrap());
+            }
+        }
     }
 }

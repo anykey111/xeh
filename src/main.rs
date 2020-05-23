@@ -13,7 +13,7 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                let res = xs.interpret(line.as_str());
+                let res = xs.interpret_interactive(line.as_str());
                 if res.is_err() {
                     println!("Error: {:?}", res);
                 }
