@@ -105,6 +105,17 @@ impl Cell {
         }
     }
 
+    pub fn into_int(self) -> Result<Xint, Xerr> {
+        match self {
+            Cell::Int(i) => Ok(i),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
+    pub fn into_i64(self) -> Result<i64, Xerr> {
+        self.into_int().map(|i| i as i64)
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
@@ -115,6 +126,12 @@ impl Cell {
 
 impl From<usize> for Cell {
     fn from(x: usize) -> Self {
+        Cell::Int(x as i128)
+    }
+}
+
+impl From<isize> for Cell {
+    fn from(x: isize) -> Self {
         Cell::Int(x as i128)
     }
 }
@@ -188,3 +205,4 @@ impl TryInto<bool> for Cell {
 }
 
 pub const ZERO: Cell = Cell::Int(0);
+pub const ONE: Cell = Cell::Int(1);

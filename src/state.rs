@@ -25,12 +25,14 @@ enum Flow {
     Vec,
     Map,
     Fun { dict_idx: usize, start: usize },
+    Do(usize),
 }
 
 #[derive(Clone)]
 enum Loop {
     VecBuilder { stack_ptr: usize },
     MapBuilder { stack_ptr: usize },
+    Do { start: Xint, end: Xint },
 }
 
 #[derive(Clone, PartialEq)]
@@ -275,6 +277,8 @@ impl State {
             Def("see-code", core_word_see_code),
             Def(".s", core_word_stack_dump),
             Def("execute", core_word_execute),
+            Def("do", core_word_do),
+            Def("loop", core_word_loop),
         ]
         .iter()
         {
@@ -503,6 +507,10 @@ impl State {
     fn push_loop(&mut self, l: Loop) -> Xresult {
         self.loops.push(l);
         OK
+    }
+
+    fn top_loop(&self) -> Result<&Loop, Xerr> {
+        self.loops.last().ok_or(Xerr::LoopStackUnderflow)
     }
 
     fn pop_loop(&mut self) -> Result<Loop, Xerr> {
@@ -885,6 +893,62 @@ fn core_word_execute(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Fun(x) => xs.call_fn(x),
         _ => Err(Xerr::TypeError),
+    }
+}
+
+fn core_word_do(xs: &mut State) -> Xresult {
+    let init: XfnType = |xs| {
+        let start = xs.pop_data()?.into_int()?;
+        let end = xs.pop_data()?.into_int()?;
+        xs.push_loop(Loop::Do { start, end })
+    };
+    let test: XfnType = |xs| {
+        match xs.top_loop()? {
+            Loop::Do {start, end} if start < end => xs.push_data(ONE),
+            _ => xs.push_data(ZERO),
+        }
+    };
+    xs.code_emit(Opcode::NativeCall(init))?;
+    xs.code_emit(Opcode::NativeCall(test))?;
+    let cond = xs.ip();
+    xs.code_emit(Opcode::JumpIfNot(0))?;
+    xs.push_flow(Flow::Do(cond))
+}
+
+fn core_word_loop(xs: &mut State) -> Xresult {
+    let loop_inc: XfnType = |xs| {
+        match xs.pop_loop()? {
+            Loop::Do{start,end} => 
+                xs.push_loop(Loop::Do{start:start+1,end}),
+            _ => Err(Xerr::ControlFlowError),
+        }
+    };
+    let loop_leave: XfnType = |xs| {
+        match xs.pop_loop()? {
+            Loop::Do{..} => OK,
+            _ => Err(Xerr::ControlFlowError),
+        }
+    };
+    xs.code_emit(Opcode::NativeCall(loop_inc))?;
+    let next_addr = xs.ip();
+    xs.code_emit(Opcode::Jump(0))?;
+    let break_addr = xs.ip();
+    xs.code_emit(Opcode::NativeCall(loop_leave))?;
+    
+    loop { 
+        match xs.pop_flow()? {
+            Flow::Leave(leave_org) => {
+                let offs = jump_offset(leave_org, break_addr);
+                xs.patch_jump(leave_org, offs)?;
+            }
+            Flow::Do(test_addr) => {
+                let offs = jump_offset(test_addr, next_addr);
+                xs.patch_jump(test_addr, offs)?;
+                let offs = jump_offset(next_addr, test_addr);
+                break xs.patch_jump(next_addr, offs);
+            }
+            _ => break Err(Xerr::ControlFlowError),
+        }
     }
 }
 
