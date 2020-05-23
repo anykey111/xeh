@@ -288,6 +288,7 @@ impl State {
             Def("i", core_word_counter_i),
             Def("j", core_word_counter_j),
             Def("k", core_word_counter_k),
+            Def("length", core_word_length),
         ]
         .iter()
         {
@@ -503,7 +504,11 @@ impl State {
     }
 
     pub fn top_data(&mut self) -> Option<&Cell> {
-        self.data_stack.last()
+        if self.data_stack.len() > self.ctx.ds_len {
+            self.data_stack.last()
+        } else {
+            None
+        }
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
@@ -1012,6 +1017,25 @@ fn core_word_counter_k(xs: &mut State) -> Xresult {
     counter_value(xs, 2)
 }
 
+fn core_word_length(xs: &mut State) -> Xresult {
+    match xs.top_data() {
+        None => Err(Xerr::StackUnderflow),
+        Some(Cell::Vector(x)) => {
+            let len = x.len();
+            xs.push_data(Cell::from(len))
+        }
+        Some(Cell::Map(x)) => {
+            let len = x.len();
+            xs.push_data(Cell::from(len))
+        }
+        Some(Cell::Str(x)) => {
+            let len = x.len();
+            xs.push_data(Cell::from(len))
+        }
+        _ => Err(Xerr::TypeError),
+    }
+}
+
 #[test]
 fn test_jump_offset() {
     assert_eq!(2, jump_offset(2, 4));
@@ -1077,6 +1101,22 @@ fn test_begin_repeat() {
 }
 
 #[test]
+fn test_length() {
+    let mut xs = State::new().unwrap();
+    xs.interpret("[1 2 3] length").unwrap();
+    assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+    xs.interpret("{\"a\" 1 \"b\" 1 } length").unwrap();
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    xs.interpret("\"12345\" length").unwrap();
+    assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+    let mut xs = State::new().unwrap();
+    let res = xs.interpret("length");
+    assert_eq!(Err(Xerr::StackUnderflow), res);
+    let res = xs.interpret("1 length");
+    assert_eq!(Err(Xerr::TypeError), res);
+}
+
+#[test]
 fn test_loop_leave() {
     let mut xs = State::new().unwrap();
     xs.interpret("begin 1 leave again").unwrap();
@@ -1096,7 +1136,8 @@ fn test_do_loop() {
         assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
     }
     let mut xs = State::new().unwrap();
-    xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop").unwrap();
+    xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop")
+        .unwrap();
     for i in (100..102).rev() {
         for j in (10..12).rev() {
             for k in (0..2).rev() {
