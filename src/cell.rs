@@ -116,6 +116,10 @@ impl Cell {
         self.into_int().map(|i| i as i64)
     }
 
+    pub fn into_usize(self) -> Result<usize, Xerr> {
+        self.into_int().map(|i| i as usize)
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
@@ -132,6 +136,12 @@ impl From<usize> for Cell {
 
 impl From<isize> for Cell {
     fn from(x: isize) -> Self {
+        Cell::Int(x as i128)
+    }
+}
+
+impl From<u32> for Cell {
+    fn from(x: u32) -> Self {
         Cell::Int(x as i128)
     }
 }

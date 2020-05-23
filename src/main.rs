@@ -17,21 +17,20 @@ fn main() {
                 if res.is_err() {
                     println!("Error: {:?}", res);
                 }
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                break
-            },
+                break;
+            }
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }
     rl.save_history("history.txt").unwrap();
 }
-
