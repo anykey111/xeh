@@ -289,6 +289,9 @@ impl State {
             Def("j", core_word_counter_j),
             Def("k", core_word_counter_k),
             Def("length", core_word_length),
+            Def("dup", |xs| xs.dup_data()),
+            Def("drop", |xs| xs.drop_data()),
+            Def("swap", |xs| xs.swap_data()),
         ]
         .iter()
         {
@@ -509,6 +512,23 @@ impl State {
         } else {
             None
         }
+    }
+
+    fn drop_data(&mut self) -> Xresult {
+        self.pop_data()?;
+        OK
+    }
+
+    fn dup_data(&mut self) -> Xresult {
+        let val = self.top_data().ok_or(Xerr::StackUnderflow)?.clone();
+        self.push_data(val)
+    }
+
+    fn swap_data(&mut self) -> Xresult {
+        let a = self.pop_data()?;
+        let b = self.pop_data()?;
+        self.push_data(a)?;
+        self.push_data(b)
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
@@ -1040,6 +1060,24 @@ fn core_word_length(xs: &mut State) -> Xresult {
 fn test_jump_offset() {
     assert_eq!(2, jump_offset(2, 4));
     assert_eq!(-2, jump_offset(4, 2));
+}
+
+#[test]
+fn test_data_stack() {
+    let mut xs = State::new().unwrap();
+    xs.interpret("1 \"s\" 2").unwrap();
+    xs.interpret("dup").unwrap();
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    xs.interpret("drop").unwrap();
+    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    let res = xs.interpret("drop");
+    assert_eq!(Err(Xerr::StackUnderflow), res);
+    let res = xs.interpret("dup");
+    assert_eq!(Err(Xerr::StackUnderflow), res);
+    xs.interpret("5 6 swap").unwrap();
+    assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
 }
 
 #[test]
