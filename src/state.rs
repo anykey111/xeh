@@ -1,5 +1,6 @@
 use num_traits::ToPrimitive;
 
+use crate::arith::*;
 use crate::cell::*;
 use crate::error::*;
 use crate::lex::*;
@@ -292,6 +293,17 @@ impl State {
             Def("dup", |xs| xs.dup_data()),
             Def("drop", |xs| xs.drop_data()),
             Def("swap", |xs| xs.swap_data()),
+            Def("+", core_word_add),
+            Def("-", core_word_sub),
+            Def("*", core_word_mul),
+            Def("/", core_word_div),
+            Def("rem", core_word_rem),
+            Def("bitand", core_word_bitand),
+            Def("bitor", core_word_bitor),
+            Def("bitxor", core_word_bitxor),
+            Def("bitshl", core_word_bitshl),
+            Def("bitshr", core_word_bitshr),
+            Def("bitnot", core_word_bitnot),
         ]
         .iter()
         {
