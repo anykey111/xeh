@@ -17,7 +17,7 @@ pub enum Xerr {
     NotAnExecutable,
     InvalidAddress,
     ReadonlyAddress,
-    CustomError,
+    IOError,
     // return to interpreter loop
     Next,
 }

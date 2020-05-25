@@ -10,60 +10,91 @@ pub enum Tok {
     Str(String),
 }
 
-#[derive(Clone, Debug)]
-pub struct Lex {
+#[derive(Clone, Debug, PartialEq)]
+pub struct Location {
     line: usize,
     col: usize,
     pos: usize,
-    src: String,
+    len: usize,
 }
 
-impl Default for Lex {
-    fn default() -> Lex {
-        Self {
-            line: 1,
-            col: 1,
-            pos: 0,
-            src: String::new(),
-        }
-    }
+#[derive(Clone, Debug)]
+pub struct Lex {
+    cursor: Location,
+    buffer: String,
+    path: Option<String>,
+    last: Option<Location>,
 }
 
 impl Lex {
     pub fn from_str(s: &str) -> Self {
+        Self::from_string(s.to_string())
+    }
+
+    pub fn from_string(s: String) -> Self {
         Self {
-            line: 1,
-            col: 1,
-            pos: 0,
-            src: s.to_string(),
+            cursor: Location {
+                line: 1,
+                col: 1,
+                pos: 0,
+                len: 0,
+            },
+            buffer: s,
+            path: None,
+            last: None,
         }
     }
 
-    pub fn push_str(&mut self, s: &str) {
-        self.src.push_str(s);
+    pub fn from_file(path: &str) -> Result<Self, std::io::Error> {
+        let buf = std::fs::read_to_string(path)?;
+        let mut lex = Self::from_string(buf);
+        lex.path = Some(path.to_string());
+        Ok(lex)
     }
 
-    pub fn linecol(&self) -> (usize, usize) {
-        (self.line, self.col)
+    pub fn print_location(&self) {
+        if let Some((_tok, l)) = self.last_token() {
+            let s = self.buffer.lines().nth(l.line - 1).unwrap();
+            let name = self.path.as_ref().map(|p| p.as_str()).unwrap_or("<buffer>");
+            eprintln!(
+                "{}:{}:{}:\n{}",
+                name,
+                l.line,
+                l.col,
+                s
+            );
+            for _ in 1..l.col {
+                eprint!("-");
+            }
+            eprintln!("^");
+        }
+    }
+
+    pub fn last_token(&self) -> Option<(&str, &Location)> {
+        self.last.as_ref().map(|loc| {
+            let start = loc.pos;
+            let end = start + loc.len;
+            (&self.buffer[start..end], loc)
+        })
     }
 
     fn peek(&self) -> Option<(usize, char)> {
-        let mut it = self.src[self.pos..].char_indices();
+        let mut it = self.buffer[self.cursor.pos..].char_indices();
         let x = it.next()?;
         match (x, it.next()) {
             ((i, c), Some((i2, _c2))) => Some((i2 - i, c)),
-            ((_, c), None) => Some((self.src.len() - self.pos, c)),
+            ((_, c), None) => Some((self.buffer.len() - self.cursor.pos, c)),
         }
     }
 
     fn take(&mut self) -> Option<char> {
         let x = self.peek()?;
-        self.pos += x.0;
+        self.cursor.pos += x.0;
         if x.1 == '\n' {
-            self.line += 1;
-            self.col = 1;
+            self.cursor.line += 1;
+            self.cursor.col = 1;
         } else {
-            self.col += 1;
+            self.cursor.col += 1;
         }
         Some(x.1)
     }
@@ -100,17 +131,20 @@ impl Lex {
     }
 
     fn parse_word(&mut self) -> Result<Tok, Xerr> {
-        let start = self.pos;
+        let start = self.cursor.pos;
+        let mut loc = self.cursor.clone();
         while let Some((_, c)) = self.peek() {
             if c.is_ascii_whitespace() || Self::is_special(c) {
-                if self.pos == start && Self::is_schar(c) {
+                if self.cursor.pos == start && Self::is_schar(c) {
                     self.take();
                 }
                 break;
             }
             self.take();
         }
-        let w = &self.src[start..self.pos];
+        let w = &self.buffer[start..self.cursor.pos];
+        loc.len = self.cursor.pos - start;
+        self.last = Some(loc);
         // maybe number
         let mut it = w.chars();
         let mut x = it.next();
@@ -142,7 +176,7 @@ impl Lex {
                 }
                 None => digits.push('0' as u8),
                 _ => {
-                    self.pos = start;
+                    self.cursor.pos = start;
                     return Err(Xerr::InputParseError);
                 }
             }
@@ -154,25 +188,28 @@ impl Lex {
             if c.is_digit(radix) {
                 digits.push(c as u8);
             } else {
-                self.pos = start;
+                self.cursor.pos = start;
                 return Err(Xerr::InputParseError);
             }
         }
         if let Some(i) = BigInt::parse_bytes(&digits, radix) {
             return Ok(Tok::Num(i));
         }
-        self.pos = start;
+        self.cursor.pos = start;
         return Err(Xerr::InputParseError);
     }
 
     fn parse_string(&mut self) -> Result<Tok, Xerr> {
-        let start = self.pos;
+        let start = self.cursor.pos;
+        let mut loc = self.cursor.clone();
         self.take();
         let mut s = String::new();
         loop {
             match self.take() {
                 None => {
-                    self.pos = start;
+                    loc.len = self.cursor.pos - start;
+                    self.last = Some(loc);
+                    self.cursor.pos = start;
                     return Err(Xerr::InputIncomplete);
                 }
                 Some('"') => break,
@@ -183,6 +220,8 @@ impl Lex {
                 }
             }
         }
+        loc.len = self.cursor.pos - start;
+        self.last = Some(loc);
         Ok(Tok::Str(s))
     }
 
@@ -206,12 +245,25 @@ impl Lex {
 fn test_lex_ws() {
     let mut lex = Lex::from_str("\n\t");
     assert_eq!(Ok(Tok::EndOfInput), lex.next());
-    assert_eq!((2, 2), lex.linecol());
+    assert_eq!(None, lex.last_token());
     let mut lex = Lex::from_str("\n\t#567");
     assert_eq!(Ok(Tok::EndOfInput), lex.next());
-    assert_eq!((2, 6), lex.linecol());
+    assert_eq!(None, lex.last_token());
     let mut lex = Lex::from_str("a#b");
     assert_eq!(Ok(Tok::Word("a".to_string())), lex.next());
+    let mut lex = Lex::from_str(" abcde \n123");
+    lex.next().unwrap();
+    let (s, loc) = lex.last_token().unwrap();
+    assert_eq!(s, "abcde");
+    assert_eq!(loc.len, 5);
+    assert_eq!(loc.line, 1);
+    assert_eq!(loc.col, 2);
+    lex.next().unwrap();
+    let (s, loc) = lex.last_token().unwrap();
+    assert_eq!(s, "123");
+    assert_eq!(loc.len, 3);
+    assert_eq!(loc.line, 2);
+    assert_eq!(loc.col, 1);
 }
 
 #[test]
@@ -219,7 +271,6 @@ fn test_lex_num() {
     use num_bigint::ToBigInt;
     let mut lex = Lex::from_str("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
     assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
-    assert_eq!((1, 3), lex.linecol());
     assert_eq!(Tok::Word("+".to_string()), lex.next().unwrap());
     assert_eq!(Tok::Word("-".to_string()), lex.next().unwrap());
     assert_eq!(Tok::Num((-1).to_bigint().unwrap()), lex.next().unwrap());
@@ -249,9 +300,8 @@ fn text_lex_schar() {
 fn test_lex_str() {
     let mut lex = Lex::from_str(" \"))\n[[\" ");
     assert_eq!(Ok(Tok::Str("))[[".to_string())), lex.next());
-
     let mut lex = Lex::from_str(" \" xx\n ");
     assert_eq!(Err(Xerr::InputIncomplete), lex.next());
-    lex.push_str("\"");
+    lex.buffer.push_str("\"");
     assert_eq!(Ok(Tok::Str(" xx ".to_string())), lex.next());
 }

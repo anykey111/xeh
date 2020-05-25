@@ -98,6 +98,13 @@ impl Cell {
         }
     }
 
+    pub fn into_string(self) -> Result<String, Xerr> {
+        match self {
+            Cell::Str(s) => Ok(s),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn into_any(self) -> Result<Xanyrc, Xerr> {
         match self {
             Cell::AnyRc(rc) => Ok(rc),

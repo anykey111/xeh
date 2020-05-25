@@ -2,21 +2,21 @@ use font_kit::family_name::FamilyName;
 use font_kit::properties::Properties;
 use font_kit::source::SystemSource;
 use minifb::{MouseMode, Scale, ScaleMode, Window, WindowOptions};
-use raqote::{
-    DrawOptions, DrawTarget, PathBuilder, Point, SolidSource, Source, StrokeStyle, Transform,
-};
+use raqote::{DrawOptions, DrawTarget, PathBuilder, Point, SolidSource, Source, StrokeStyle};
 
 use xeh::prelude::*;
 
 fn main() -> Xresult {
     let mut xs = Xstate::new().unwrap();
-    let xd_width = xs.defonce("xd-width", Xcell::from(640))?;
-    let xd_height = xs.defonce("xd-height", Xcell::from(480))?;
+    let xd_width = xs.defonce("xd-width", Xcell::from(640u32))?;
+    let xd_height = xs.defonce("xd-height", Xcell::from(480u32))?;
     let xd_text_size = xs.defonce("xd-text-size", Xcell::from(16.0))?;
-    let xd_bg_color = xs.defonce("xd-background-color", Xcell::from(0x272822))?;
-    let xd_text_color = xs.defonce("xd-text-color", Xcell::from(0xf8f8f2))?;
+    let xd_bg_color = xs.defonce("xd-background-color", Xcell::from(0x272822u32))?;
+    let xd_text_color = xs.defonce("xd-text-color", Xcell::from(0xf8f8f2u32))?;
 
-    //let _ = xs.interpret("203344 -> xd-text-color");
+    let s = std::fs::read_to_string("examples/doom-fire.xs").unwrap();
+    let res = xs.load(&s);
+    println!("Load result {:?}", res);
 
     let mut window = Window::new(
         "XEH Debugger",
@@ -56,18 +56,19 @@ fn main() -> Xresult {
             &DrawOptions::new(),
         );
 
-        for (i, _) in xs.code_section().iter().enumerate().take(10) {
-            let mut s = xs.code_fmt(i).unwrap();
-            dt.draw_text(
-                &font,
-                text_size,
-                s.as_str(),
-                Point::new(0., (i + 1) as f32 * text_size),
-                &Source::Solid(text_color),
-                &DrawOptions::new(),
-            );
+        if xs.interpret("see-state>string").is_ok() {
+            let screen = xs.pop_data().unwrap().into_string().unwrap();
+            for (i, text) in screen.lines().enumerate() {
+                dt.draw_text(
+                    &font,
+                    text_size,
+                    text,
+                    Point::new(0., i as f32 * text_size),
+                    &Source::Solid(text_color),
+                    &DrawOptions::new(),
+                );
+            }
         }
-
 
         //if let Some(pos) = window.get_mouse_pos(MouseMode::Clamp) {}
 

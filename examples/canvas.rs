@@ -2,9 +2,9 @@ extern crate minifb;
 extern crate xeh;
 use minifb::{Key, Window, WindowOptions};
 
-use xeh::state::State;
-use xeh::cell::{Cell};
+use xeh::cell::Cell;
 use xeh::error::*;
+use xeh::state::State;
 
 struct MiniFb {
     width: usize,
@@ -27,20 +27,23 @@ impl MiniFb {
         });
         window.limit_update_rate(Some(std::time::Duration::from_secs(1)));
         MiniFb {
-            width, height,window,buffer,
+            width,
+            height,
+            window,
+            buffer,
         }
     }
 }
 
-fn minifb_new(vm: &mut State) -> Xresult {
-    let height: usize = vm.pop_data()?.try_into()?;
-    let width: usize = vm.pop_data()?.try_into()?;
+fn minifb_new(xs: &mut State) -> Xresult {
+    let height = xs.pop_data()?.into_usize()?;
+    let width = xs.pop_data()?.into_usize()?;
     let fb = MiniFb::new(width, height);
-    vm.push_data(Cell::from_any(fb))
+    xs.push_data(Cell::from_any(fb))
 }
 
-fn minifb_update(vm: &mut State) -> Xresult {
-    let p = vm.pop_data()?.into_any()?;
+fn minifb_update(xs: &mut State) -> Xresult {
+    let p = xs.pop_data()?.into_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let buf = &fb.buffer[..];
@@ -50,28 +53,35 @@ fn minifb_update(vm: &mut State) -> Xresult {
     OK
 }
 
-fn minifb_is_open(vm: &mut State) -> Xresult {
-    let p = vm.pop_data()?.into_any()?;
+fn minifb_put_pixel(xs: &mut State) -> Xresult {
+    let p = xs.pop_data()?.into_any()?;
+    let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
+    let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
+    let color = xs.pop_data()?.into_int()?;
+    let y = xs.pop_data()?.into_usize()?;
+    let x = xs.pop_data()?.into_usize()?;
+    fb.buffer[y * fb.width + x] = color as u32;
+    OK
+}
+
+fn minifb_is_open(xs: &mut State) -> Xresult {
+    let p = xs.pop_data()?.into_any()?;
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let t = fb.window.is_open() && !fb.window.is_key_down(Key::Escape);
-    let c = Cell::Int(if t {1} else {0});
-    vm.push_data(c)
+    let c = Cell::Int(if t { 1 } else { 0 });
+    xs.push_data(c)
 }
 
 fn main() {
-    let mut vm = State::new().unwrap();
-    
-    vm.defword("minifb-new", minifb_new).unwrap();
-    vm.defword("minifb-is-open", minifb_is_open).unwrap();
-    vm.defword("minifb-update", minifb_update).unwrap();
-    
-    vm.interpret("
-    var fb
-    320 200 minifb-new -> fb
+    let mut xs = State::new().unwrap();
 
-    begin fb minifb-is-open while
-       fb minifb-update
-    repeat
-    ").unwrap();
+    xs.defword("minifb_new", minifb_new).unwrap();
+    xs.defword("minifb_is_open", minifb_is_open).unwrap();
+    xs.defword("minifb_update", minifb_update).unwrap();
+    xs.defword("minifb_put_pixel", minifb_put_pixel).unwrap();
+
+    let file = std::env::args().nth(1).expect("filename");
+    xs.load_file(&file).unwrap();
+    xs.run().unwrap();
 }

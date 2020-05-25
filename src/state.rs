@@ -80,9 +80,38 @@ pub struct State {
 pub struct Xvar(usize);
 
 impl State {
+    pub fn print_error(&self, err: &Xerr) {
+        eprintln!("error: {:?}", err);
+        if let Some(src) = &self.ctx.source {
+            src.print_location();
+        }
+    }
+
     pub fn load(&mut self, source: &str) -> Xresult {
         self.context_open(ContextMode::Load, Some(Lex::from_str(source)))?;
         self.build()
+    }
+
+    pub fn load_file(&mut self, filename: &str) -> Xresult {
+        let lex = Lex::from_file(filename).map_err(|e| {
+            eprintln!("{}: {:?}", filename, e);
+            Xerr::IOError
+        })?;
+        let ctx_depth = self.nested.len();
+        let t = std::time::Instant::now();
+        self.context_open(ContextMode::Load, Some(lex))?;
+        match self.build() {
+            Ok(_) =>  {
+                eprintln!("Done {:?}", std::time::Instant::now() - t);
+                OK
+            }
+            Err(e) => {
+                // cleanup context
+                self.nested.truncate(ctx_depth);
+                self.print_error(&e);
+                Err(e)
+            }
+        }
     }
 
     pub fn interpret(&mut self, source: &str) -> Xresult {
@@ -90,7 +119,7 @@ impl State {
         self.build()
     }
 
-    pub fn interpret_interactive(&mut self, source: &str) -> Xresult {
+    pub fn interpret_continue(&mut self, source: &str) -> Xresult {
         if self.has_pending_flow() {
             // don't open new context, use still typing
             self.ctx.source = Some(Lex::from_str(source));
@@ -107,16 +136,18 @@ impl State {
                 && self.ip() < self.code_origin()
             {
                 self.code_emit(Opcode::Next)?;
-                self.run_loop()?;
+                self.run()?;
             }
             match self.next_token()? {
                 Tok::EndOfInput => {
                     if self.has_pending_flow() {
                         break Err(Xerr::ControlFlowError);
                     }
-                    if self.ctx.mode != ContextMode::Load && self.ip() < self.code_origin() {
+                    if self.ip() < self.code_origin() {
                         self.code_emit(Opcode::Next)?;
-                        self.run_loop()?;
+                        if self.ctx.mode != ContextMode::Load {
+                            self.run()?;
+                        }
                     }
                     break self.context_close();
                 }
@@ -275,6 +306,7 @@ impl State {
             Def(")", core_word_nested_end),
             Def("see-code", core_word_see_code),
             Def("see-state", core_word_see_state),
+            Def("see-state>string", core_word_debug_state),
             Def(".s", core_word_stack_dump),
             Def("execute", core_word_execute),
             Def("defer", core_word_defer),
@@ -343,7 +375,7 @@ impl State {
     }
 
     fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
-        let insn = match &self.code[at] {
+        let insn = match self.code.get(at).ok_or(Xerr::InvalidAddress)? {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
             Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
@@ -371,12 +403,12 @@ impl State {
                 let old_ip = self.ip();
                 self.push_return(old_ip)?;
                 self.set_ip(x)?;
-                self.run_loop()
+                self.run()
             }
         }
     }
 
-    fn run_loop(&mut self) -> Xresult {
+    pub fn run(&mut self) -> Xresult {
         let mut exec = || loop {
             self.run_next()?;
         };
@@ -388,6 +420,7 @@ impl State {
 
     fn run_next(&mut self) -> Xresult {
         let ip = self.ip();
+        assert!(ip < self.code.len(), ip);
         match self.code[ip] {
             Opcode::Nop => self.next_ip(),
             Opcode::Next => {
@@ -935,18 +968,25 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
     OK
 }
 
-fn core_word_see_state(xs: &mut State) -> Xresult {
-    let cols = 80;
+fn core_word_debug_state(xs: &mut State) -> Xresult {
+    //let cols = 80;
     let rows = 25;
     let start = xs.ip() - 5.min(xs.ip());
     let end = (start + rows).min(xs.code.len());
+    let mut buf = Vec::new();
     for i in start..end {
-        let s = format_opcode(xs, i);
-        println!("{}", s);
+        buf.push(format_opcode(xs, i));
     }
     if xs.ip() == xs.code.len() {
-        println!("{:08x}* <unreachable>", xs.ip());
+        buf.push(format!("{:08x}* <unreachable>", xs.ip()));
     }
+    xs.push_data(Cell::Str(buf.join("\n")))
+}
+
+fn core_word_see_state(xs: &mut State) -> Xresult {
+    core_word_debug_state(xs)?;
+    let s = xs.pop_data()?.into_string()?;
+    print!("{}", s);
     OK
 }
 
@@ -1050,20 +1090,10 @@ fn core_word_counter_k(xs: &mut State) -> Xresult {
 }
 
 fn core_word_length(xs: &mut State) -> Xresult {
-    match xs.top_data() {
-        None => Err(Xerr::StackUnderflow),
-        Some(Cell::Vector(x)) => {
-            let len = x.len();
-            xs.push_data(Cell::from(len))
-        }
-        Some(Cell::Map(x)) => {
-            let len = x.len();
-            xs.push_data(Cell::from(len))
-        }
-        Some(Cell::Str(x)) => {
-            let len = x.len();
-            xs.push_data(Cell::from(len))
-        }
+    match xs.pop_data()? {
+        Cell::Vector(x) => xs.push_data(Cell::from(x.len())),
+        Cell::Map(x) => xs.push_data(Cell::from(x.len())),
+        Cell::Str(x) => xs.push_data(Cell::from(x.len())),
         _ => Err(Xerr::TypeError),
     }
 }
