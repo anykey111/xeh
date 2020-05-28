@@ -18,6 +18,13 @@ enum Entry {
 }
 
 #[derive(Clone)]
+struct FunctionFlow {
+    dict_idx: usize,
+    start: usize,
+    locals: Vec<String>,
+}
+
+#[derive(Clone)]
 enum Flow {
     If(usize),
     Begin(usize),
@@ -25,7 +32,7 @@ enum Flow {
     Leave(usize),
     Vec,
     Map,
-    Fun { dict_idx: usize, start: usize },
+    Fun(FunctionFlow),
     Do { test_org: usize, jump_org: usize },
 }
 
@@ -65,12 +72,27 @@ struct Context {
 }
 
 #[derive(Clone, Default)]
+struct Frame {
+    return_to: usize,
+    locals: Vec<Cell>,
+}
+
+impl Frame {
+    fn from_addr(return_to: usize) -> Self {
+        Self {
+            return_to,
+            locals: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct State {
     dict: Vec<(String, Entry)>,
     heap: Vec<Cell>,
     code: Vec<Opcode>,
     data_stack: Vec<Cell>,
-    return_stack: Vec<usize>,
+    return_stack: Vec<Frame>,
     flow_stack: Vec<Flow>,
     loops: Vec<Loop>,
     ctx: Context,
@@ -101,7 +123,7 @@ impl State {
         let t = std::time::Instant::now();
         self.context_open(ContextMode::Load, Some(lex))?;
         match self.build() {
-            Ok(_) =>  {
+            Ok(_) => {
                 eprintln!("Done {:?}", std::time::Instant::now() - t);
                 OK
             }
@@ -160,7 +182,17 @@ impl State {
                     self.code_emit(Opcode::Load(a))?;
                 }
                 Tok::Word(name) => {
-                    let idx = self.dict_find(&name).ok_or(Xerr::UnknownWord)?;
+                    let idx = match self.dict_find(&name) {
+                        Some(idx) => idx,
+                        None => {
+                            let idx = self
+                                .top_function_flow()
+                                .and_then(|ff| ff.locals.iter().rposition(|x| x == &name))
+                                .ok_or(Xerr::UnknownWord)?;
+                            self.code_emit(Opcode::LoadLocal(idx))?;
+                            continue;
+                        }
+                    };
                     match self.dict_at(idx).unwrap() {
                         Entry::Deferred => self.code_emit(Opcode::Deferred(idx))?,
                         Entry::Variable(a) => {
@@ -299,6 +331,7 @@ impl State {
             Def("}", core_word_map_end),
             Def(":", core_word_def_begin),
             Def(";", core_word_def_end),
+            Def("local", core_word_def_local),
             Def("var", core_word_var),
             Def("->", core_word_setvar),
             Def("const", core_word_const),
@@ -338,6 +371,8 @@ impl State {
             Def("bitshl", core_word_bitshl),
             Def("bitshr", core_word_bitshr),
             Def("bitnot", core_word_bitnot),
+            Def("random", core_word_random),
+            Def("round", core_word_round),
         ]
         .iter()
         {
@@ -447,11 +482,12 @@ impl State {
                 self.next_ip()
             }
             Opcode::Ret => {
-                let new_ip = self.pop_return()?;
+                let frame = self.pop_return()?;
                 if self.return_stack.len() == self.ctx.rs_len {
+                    self.set_ip(frame.return_to)?;
                     Err(Xerr::Next)
                 } else {
-                    self.set_ip(new_ip)
+                    self.set_ip(frame.return_to)
                 }
             }
             Opcode::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
@@ -485,6 +521,19 @@ impl State {
             Opcode::Store(a) => {
                 let val = self.pop_data()?;
                 self.heap[a] = val;
+                self.next_ip()
+            }
+            Opcode::InitLocal(i) => {
+                let val = self.pop_data()?;
+                let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
+                assert_eq!(i, frame.locals.len());
+                frame.locals.push(val);
+                self.next_ip()
+            }
+            Opcode::LoadLocal(i) => {
+                let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
+                let val = frame.locals.get(i).cloned().ok_or(Xerr::InvalidAddress)?;
+                self.push_data(val)?;
                 self.next_ip()
             }
         }
@@ -529,6 +578,16 @@ impl State {
     fn push_flow(&mut self, flow: Flow) -> Xresult {
         self.flow_stack.push(flow);
         OK
+    }
+
+    fn top_function_flow(&mut self) -> Option<&mut FunctionFlow> {
+        self.flow_stack[self.ctx.fs_len..]
+            .iter_mut()
+            .rev()
+            .find_map(|i| match i {
+                Flow::Fun(ref mut ff) => Some(ff),
+                _ => None,
+            })
     }
 
     fn dropn(&mut self, len: usize) -> Xresult {
@@ -579,15 +638,23 @@ impl State {
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
-        self.return_stack.push(return_to);
+        self.return_stack.push(Frame::from_addr(return_to));
         OK
     }
 
-    fn pop_return(&mut self) -> Result<usize, Xerr> {
+    fn pop_return(&mut self) -> Result<Frame, Xerr> {
         if self.return_stack.len() > self.ctx.rs_len {
             self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)
         } else {
             Err(Xerr::ReturnStackUnderflow)
+        }
+    }
+
+    fn top_frame(&mut self) -> Option<&mut Frame> {
+        if self.return_stack.len() > self.ctx.rs_len {
+            self.return_stack.last_mut()
+        } else {
+            None
         }
     }
 
@@ -816,12 +883,18 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
             len: None,
         },
     )?;
-    xs.push_flow(Flow::Fun { dict_idx, start })
+    xs.push_flow(Flow::Fun(FunctionFlow {
+        dict_idx,
+        start,
+        locals: Default::default(),
+    }))
 }
 
 fn core_word_def_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Fun { start, dict_idx } => {
+        Flow::Fun(FunctionFlow {
+            start, dict_idx, ..
+        }) => {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
@@ -833,6 +906,17 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
         }
         _ => Err(Xerr::ControlFlowError),
     }
+}
+
+fn core_word_def_local(xs: &mut State) -> Xresult {
+    let name = match xs.next_token()? {
+        Tok::Word(name) => name,
+        _ => return Err(Xerr::ExpectingName),
+    };
+    let ff = xs.top_function_flow().ok_or(Xerr::ControlFlowError)?;
+    let idx = ff.locals.len();
+    ff.locals.push(name);
+    xs.code_emit(Opcode::InitLocal(idx))
 }
 
 fn core_word_var(xs: &mut State) -> Xresult {
@@ -909,6 +993,8 @@ fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
             Opcode::Store(a) => format!("store      {}", a),
+            Opcode::InitLocal(i) => format!("initlocal  {}", i),
+            Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
         }
     )
 }
@@ -1310,4 +1396,15 @@ fn test_get_assoc() {
     assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
     xs.interpret("{} 1 get").unwrap();
     assert_eq!(Cell::Nil, xs.pop_data().unwrap());
+}
+
+#[test]
+fn test_locals() {
+    let mut xs = State::new().unwrap();
+    xs.interpret(": f local x local y x y y x ; 1 2 f").unwrap();
+    assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
+    assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
+    assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
+    assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
+    assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
 }

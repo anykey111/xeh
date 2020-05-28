@@ -36,6 +36,8 @@ pub enum Opcode {
     Load(usize),
     LoadInt(Xint),
     Store(usize),
+    InitLocal(usize),
+    LoadLocal(usize),
 }
 
 use std::fmt;
@@ -43,18 +45,20 @@ use std::fmt;
 impl fmt::Debug for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Nop => write!(f, "nop"),
-            Self::Next => write!(f, "next"),
-            Self::Call(a) => write!(f, "call {}", a),
-            Self::Deferred(a) => write!(f, "deferred {}", a),
-            Self::NativeCall(x) => write!(f, "callx 0x{:x}", *x as usize),
-            Self::Ret => write!(f, "ret"),
-            Self::JumpIf(offs) => write!(f, "jumpif {}", offs),
-            Self::JumpIfNot(offs) => write!(f, "jumpifnot {}", offs),
-            Self::Jump(offs) => write!(f, "jump {}", offs),
-            Self::Load(a) => write!(f, "load {}", a),
-            Self::LoadInt(i) => write!(f, "loadint {}", i),
-            Self::Store(a) => write!(f, "store {}", a),
+            Self::Nop => write!(f, "Nop"),
+            Self::Next => write!(f, "Next"),
+            Self::Call(a) => write!(f, "Call({})", a),
+            Self::Deferred(a) => write!(f, "Deferred({})", a),
+            Self::NativeCall(x) => write!(f, "NativeCall({})", *x as usize),
+            Self::Ret => write!(f, "Ret"),
+            Self::JumpIf(offs) => write!(f, "JumpIf({})", offs),
+            Self::JumpIfNot(offs) => write!(f, "JumpIfNot({})", offs),
+            Self::Jump(offs) => write!(f, "Jump({})", offs),
+            Self::Load(a) => write!(f, "Load({})", a),
+            Self::LoadInt(i) => write!(f, "LoadInt({})", i),
+            Self::Store(a) => write!(f, "Store({})", a),
+            Self::InitLocal(i) => write!(f, "InitLocal({})", i),
+            Self::LoadLocal(i) => write!(f, "LoadLocal({})", i),
         }
     }
 }

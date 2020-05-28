@@ -13,6 +13,7 @@ num-traits = "0.2"
 sha-1 = "0.8.2"
 rustyline = "6.1.2"
 getopts = "0.2"
+rand = "*"
 
 [dev-dependencies]
 minifb = "0.16"

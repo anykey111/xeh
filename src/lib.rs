@@ -1,6 +1,7 @@
 extern crate num_bigint;
 extern crate num_traits;
 extern crate sha1;
+extern crate rand;
 
 mod lex;
 mod opcodes;

@@ -105,6 +105,27 @@ impl Cell {
         }
     }
 
+    pub fn into_vector(self) -> Result<Xvec<Cell>, Xerr> {
+        match self {
+            Cell::Vector(x) => Ok(x),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
+    pub fn into_map(self) -> Result<Xmap, Xerr> {
+        match self {
+            Cell::Map(x) => Ok(x),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
+    pub fn into_real(self) -> Result<Xreal, Xerr> {
+        match self {
+            Cell::Real(x) => Ok(x),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn into_any(self) -> Result<Xanyrc, Xerr> {
         match self {
             Cell::AnyRc(rc) => Ok(rc),

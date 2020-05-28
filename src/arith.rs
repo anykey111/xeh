@@ -73,6 +73,22 @@ pub fn core_word_bitnot(xs: &mut State) -> Xresult {
     }
 }
 
+use rand::prelude::*;
+
+pub fn core_word_random(xs: &mut State) -> Xresult {
+    let mut rng = rand::thread_rng();
+    let r: f64 = rng.gen();
+    xs.push_data(Cell::Real(r))
+}
+
+pub fn core_word_round(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        n @ Cell::Int(_) => xs.push_data(n),
+        Cell::Real(x) => xs.push_data(Cell::Int(x as Xint)),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
 #[test]
 fn test_arith() {
     let mut xs = State::new().unwrap();
@@ -103,4 +119,18 @@ fn test_arith() {
     assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     xs.interpret("3 16 bitshr").unwrap();
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+}
+
+#[test]
+fn test_random_round() {
+    let mut xs = State::new().unwrap();
+    xs.interpret("random").unwrap();
+    let r = xs.pop_data().unwrap().into_real().unwrap();
+    assert!(0.0 <= r && r <= 1.0);
+    xs.interpret("random round").unwrap();
+    let i = xs.pop_data().unwrap().into_int().unwrap();
+    assert!(0 <= i && i <= 1);
+    xs.interpret("1 round").unwrap();
+    assert_eq!(Ok(1), xs.pop_data().unwrap().into_int());
+    assert_eq!(Err(Xerr::TypeError), xs.interpret("[] round"));
 }

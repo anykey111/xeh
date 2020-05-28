@@ -18,6 +18,7 @@ pub enum Xerr {
     InvalidAddress,
     ReadonlyAddress,
     IOError,
+    OutOfBounds,
     // return to interpreter loop
     Next,
 }
