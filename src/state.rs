@@ -360,6 +360,7 @@ impl State {
             Def("dup", |xs| xs.dup_data()),
             Def("drop", |xs| xs.drop_data()),
             Def("swap", |xs| xs.swap_data()),
+            Def("rot", |xs| xs.rot_data()),
             Def("+", core_word_add),
             Def("-", core_word_sub),
             Def("*", core_word_mul),
@@ -631,10 +632,23 @@ impl State {
     }
 
     fn swap_data(&mut self) -> Xresult {
-        let a = self.pop_data()?;
-        let b = self.pop_data()?;
-        self.push_data(a)?;
-        self.push_data(b)
+        let len = self.data_stack.len();
+        if (len - self.ctx.ds_len) >= 2 {
+            self.data_stack.swap(len - 1, len - 2);
+            OK
+        } else {
+            Err(Xerr::StackUnderflow)
+        }
+    }
+
+    fn rot_data(&mut self) -> Xresult {
+        let len = self.data_stack.len();
+        if (len - self.ctx.ds_len) >= 3 {
+            self.data_stack.swap(len - 1, len - 3);
+            OK
+        } else {
+            Err(Xerr::StackUnderflow)
+        }
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
@@ -1261,6 +1275,16 @@ fn test_data_stack() {
     xs.interpret("5 6 swap").unwrap();
     assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
+    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 swap)"));
+    let mut xs = State::new().unwrap();
+    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
+    let mut xs = State::new().unwrap();
+    xs.interpret("1 2 3 rot").unwrap();
+    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+    let mut xs = State::new().unwrap();
+    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
 }
 
 #[test]
