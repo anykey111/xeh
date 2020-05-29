@@ -186,6 +186,12 @@ impl From<f64> for Cell {
     }
 }
 
+impl From<bool> for Cell {
+    fn from(x: bool) -> Self {
+        if x { ONE } else { ZERO }
+    }
+}
+
 use std::convert::TryInto;
 
 impl TryInto<f64> for Cell {
