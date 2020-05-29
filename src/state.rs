@@ -102,6 +102,10 @@ pub struct State {
 pub struct Xvar(usize);
 
 impl State {
+    pub fn builtin_repl(&mut self) {
+        crate::repl::console_repl(self, true);
+    }
+
     pub fn print_error(&self, err: &Xerr) {
         eprintln!("error: {:?}", err);
         if let Some(src) = &self.ctx.source {
@@ -456,7 +460,7 @@ impl State {
         }
     }
 
-    fn run_next(&mut self) -> Xresult {
+    pub fn run_next(&mut self) -> Xresult {
         let ip = self.ip();
         assert!(ip < self.code.len(), ip);
         match self.code[ip] {

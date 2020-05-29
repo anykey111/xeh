@@ -10,6 +10,7 @@ pub mod hash;
 pub mod error;
 pub mod cell;
 pub mod state;
+pub mod repl;
 
 pub mod prelude {
     pub use std::convert::TryInto;
