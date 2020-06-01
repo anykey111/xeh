@@ -2,6 +2,7 @@ use num_traits::ToPrimitive;
 
 use crate::arith::*;
 use crate::cell::*;
+use crate::debug::*;
 use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
@@ -86,11 +87,12 @@ impl Frame {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct State {
     dict: Vec<(String, Entry)>,
     heap: Vec<Cell>,
     code: Vec<Opcode>,
+    debug_map: DebugMap,
     data_stack: Vec<Cell>,
     return_stack: Vec<Frame>,
     flow_stack: Vec<Flow>,
@@ -161,7 +163,7 @@ impl State {
                 && !self.has_pending_flow()
                 && self.ip() < self.code_origin()
             {
-                self.code_emit(Opcode::Next)?;
+                self.code_emit(Opcode::Next, DebugInfo::Empty)?;
                 self.run()?;
             }
             match self.next_token()? {
@@ -170,7 +172,7 @@ impl State {
                         break Err(Xerr::ControlFlowError);
                     }
                     if self.ip() < self.code_origin() {
-                        self.code_emit(Opcode::Next)?;
+                        self.code_emit(Opcode::Next, DebugInfo::Empty)?;
                         if self.ctx.mode != ContextMode::Load {
                             self.run()?;
                         }
@@ -179,11 +181,11 @@ impl State {
                 }
                 Tok::Num(n) => {
                     let n = n.to_i128().ok_or(Xerr::IntegerOverflow)?;
-                    self.code_emit(Opcode::LoadInt(n))?;
+                    self.code_emit(Opcode::LoadInt(n), DebugInfo::Empty)?;
                 }
                 Tok::Str(s) => {
                     let a = self.readonly_cell(Cell::Str(s));
-                    self.code_emit(Opcode::Load(a))?;
+                    self.code_emit(Opcode::Load(a), DebugInfo::Empty)?;
                 }
                 Tok::Word(name) => {
                     let idx = match self.dict_find(&name) {
@@ -193,15 +195,17 @@ impl State {
                                 .top_function_flow()
                                 .and_then(|ff| ff.locals.iter().rposition(|x| x == &name))
                                 .ok_or(Xerr::UnknownWord)?;
-                            self.code_emit(Opcode::LoadLocal(idx))?;
+                            self.code_emit(Opcode::LoadLocal(idx), DebugInfo::Local(name))?;
                             continue;
                         }
                     };
                     match self.dict_at(idx).unwrap() {
-                        Entry::Deferred => self.code_emit(Opcode::Deferred(idx))?,
+                        Entry::Deferred => {
+                            self.code_emit(Opcode::Deferred(idx), DebugInfo::Word(idx))?
+                        }
                         Entry::Variable(a) => {
                             let a = *a;
-                            self.code_emit(Opcode::Load(a))?;
+                            self.code_emit(Opcode::Load(a), DebugInfo::Word(idx))?;
                         }
                         Entry::Function {
                             immediate: true,
@@ -217,7 +221,7 @@ impl State {
                             ..
                         } => {
                             let x = *x;
-                            self.code_emit(Opcode::Call(x))?;
+                            self.code_emit(Opcode::Call(x), DebugInfo::Word(idx))?;
                         }
                         Entry::Function {
                             immediate: false,
@@ -225,7 +229,7 @@ impl State {
                             ..
                         } => {
                             let x = *x;
-                            self.code_emit(Opcode::NativeCall(x))?;
+                            self.code_emit(Opcode::NativeCall(x), DebugInfo::Word(idx))?;
                         }
                     }
                 }
@@ -404,9 +408,9 @@ impl State {
         self.code.len()
     }
 
-    fn code_emit(&mut self, op: Opcode) -> Xresult {
-        // let ip = self.code.len();
-        // println!("{:#x}\t{}", ip, format_opcode(&op, ip));
+    fn code_emit(&mut self, op: Opcode, dinfo: DebugInfo) -> Xresult {
+        let at = self.code.len();
+        self.debug_map.insert(Xfn::Interp(at), dinfo);
         self.code.push(op);
         OK
     }
@@ -712,7 +716,7 @@ fn core_insert_word(xs: &mut State, name: &str, x: XfnType, immediate: bool) -> 
 
 fn core_word_if(xs: &mut State) -> Xresult {
     let fwd = Flow::If(xs.code_origin());
-    xs.code_emit(Opcode::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Comment("if"))?;
     xs.push_flow(fwd)
 }
 
@@ -720,7 +724,7 @@ fn core_word_else(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
         Flow::If(if_org) => {
             let fwd = Flow::If(xs.code_origin());
-            xs.code_emit(Opcode::Jump(0))?;
+            xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("else"))?;
             xs.push_flow(fwd)?;
             let offs = jump_offset(if_org, xs.code_origin());
             xs.patch_jump(if_org, offs)
@@ -747,7 +751,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
         Flow::Begin(begin_org) => {
             let offs = jump_offset(xs.code_origin(), begin_org);
-            xs.code_emit(Opcode::JumpIf(offs))
+            xs.code_emit(Opcode::JumpIf(offs), DebugInfo::Comment("until"))
         }
         _ => Err(Xerr::ControlFlowError),
     }
@@ -755,7 +759,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
 
 fn core_word_while(xs: &mut State) -> Xresult {
     let cond = Flow::While(xs.code_origin());
-    xs.code_emit(Opcode::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Comment("while"))?;
     xs.push_flow(cond)
 }
 
@@ -768,7 +772,7 @@ fn core_word_again(xs: &mut State) -> Xresult {
             }
             Flow::Begin(begin_org) => {
                 let offs = jump_offset(xs.code_origin(), begin_org);
-                break xs.code_emit(Opcode::Jump(offs));
+                break xs.code_emit(Opcode::Jump(offs), DebugInfo::Comment("again"));
             }
             _ => break Err(Xerr::ControlFlowError),
         }
@@ -787,7 +791,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
                     let offs = jump_offset(cond_org, xs.code_origin() + 1);
                     xs.patch_jump(cond_org, offs)?;
                     let offs = jump_offset(xs.code_origin(), begin_org);
-                    break xs.code_emit(Opcode::Jump(offs));
+                    break xs.code_emit(Opcode::Jump(offs), DebugInfo::Comment("repeat"));
                 }
                 _ => break Err(Xerr::ControlFlowError),
             },
@@ -798,7 +802,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
 
 fn core_word_leave(xs: &mut State) -> Xresult {
     let leave = Flow::Leave(xs.code_origin());
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("leave"))?;
     xs.push_flow(leave)?;
     OK
 }
@@ -813,12 +817,15 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
 
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Vec)?;
-    xs.code_emit(Opcode::NativeCall(vec_builder_begin))
+    xs.code_emit(
+        Opcode::NativeCall(vec_builder_begin),
+        DebugInfo::Comment("["),
+    )
 }
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Vec => xs.code_emit(Opcode::NativeCall(vec_builder_end)),
+        Flow::Vec => xs.code_emit(Opcode::NativeCall(vec_builder_end), DebugInfo::Comment("]")),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -849,12 +856,15 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 
 fn core_word_map_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Map)?;
-    xs.code_emit(Opcode::NativeCall(map_builder_begin))
+    xs.code_emit(
+        Opcode::NativeCall(map_builder_begin),
+        DebugInfo::Comment("{"),
+    )
 }
 
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Map => xs.code_emit(Opcode::NativeCall(map_builder_end)),
+        Flow::Map => xs.code_emit(Opcode::NativeCall(map_builder_end), DebugInfo::Comment("}")),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -890,7 +900,7 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     };
     let start = xs.code_origin();
     // jump over function body
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(0), DebugInfo::Comment(":"))?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
     let dict_idx = xs.dict_insert(
@@ -913,7 +923,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
         Flow::Fun(FunctionFlow {
             start, dict_idx, ..
         }) => {
-            xs.code_emit(Opcode::Ret)?;
+            xs.code_emit(Opcode::Ret, DebugInfo::Comment(";"))?;
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
             match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)? {
@@ -932,9 +942,10 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
         _ => return Err(Xerr::ExpectingName),
     };
     let ff = xs.top_function_flow().ok_or(Xerr::ControlFlowError)?;
+    let dinfo = DebugInfo::Local(name.clone());
     let idx = ff.locals.len();
     ff.locals.push(name);
-    xs.code_emit(Opcode::InitLocal(idx))
+    xs.code_emit(Opcode::InitLocal(idx), dinfo)
 }
 
 fn core_word_var(xs: &mut State) -> Xresult {
@@ -960,7 +971,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
         Entry::Deferred => Err(Xerr::UnknownWord),
         Entry::Variable(a) => {
             let a = *a;
-            xs.code_emit(Opcode::Store(a))
+            xs.code_emit(Opcode::Store(a), DebugInfo::Word(a))
         }
         _ => Err(Xerr::ReadonlyAddress),
     }
@@ -994,8 +1005,22 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
 
 fn format_opcode(xs: &State, at: usize) -> String {
     let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
+    let debug_comment = xs
+        .debug_map
+        .find(at)
+        .map(|di| match di {
+            DebugInfo::Empty => "",
+            DebugInfo::Comment(text) => text,
+            DebugInfo::Local(name) => name.as_str(),
+            DebugInfo::Word(a) => xs
+                .dict
+                .get(*a)
+                .map(|e| e.0.as_str())
+                .unwrap_or("<entry not found>"),
+        })
+        .unwrap_or("");
     format!(
-        "{:08x}{} {:<30} #",
+        "{:08x}{} {:<30} # {}",
         at,
         if xs.ip() == at { '*' } else { ' ' },
         match &xs.code[at] {
@@ -1013,7 +1038,8 @@ fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
-        }
+        },
+        debug_comment,
     )
 }
 
@@ -1121,41 +1147,63 @@ fn core_word_defer(xs: &mut State) -> Xresult {
     OK
 }
 
-fn core_word_do(xs: &mut State) -> Xresult {
-    let init: XfnType = |xs| {
-        let start = xs.pop_data()?.into_int()?;
-        let end = xs.pop_data()?.into_int()?;
-        xs.push_loop(Loop::Do { start, end })
-    };
-    let test: XfnType = |xs| match xs.top_loop()? {
+fn core_word_do_init(xs: &mut State) -> Xresult {
+    let start = xs.pop_data()?.into_int()?;
+    let end = xs.pop_data()?.into_int()?;
+    xs.push_loop(Loop::Do { start, end })
+}
+
+fn core_word_do_test(xs: &mut State) -> Xresult {
+    match xs.top_loop()? {
         Loop::Do { start, end } if start < end => xs.push_data(ONE),
         _ => xs.push_data(ZERO),
-    };
-    xs.code_emit(Opcode::NativeCall(init))?;
+    }
+}
+
+fn core_word_do(xs: &mut State) -> Xresult {
+    xs.code_emit(
+        Opcode::NativeCall(core_word_do_init),
+        DebugInfo::Comment("do init"),
+    )?;
     let test_org = xs.code_origin();
-    xs.code_emit(Opcode::NativeCall(test))?;
+    xs.code_emit(
+        Opcode::NativeCall(core_word_do_test),
+        DebugInfo::Comment("do test"),
+    )?;
     let jump_org = xs.code_origin();
-    xs.code_emit(Opcode::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Comment("do"))?;
     xs.push_flow(Flow::Do { test_org, jump_org })
 }
 
-fn core_word_loop(xs: &mut State) -> Xresult {
-    let loop_inc: XfnType = |xs| match xs.pop_loop()? {
+fn core_word_loop_inc(xs: &mut State) -> Xresult {
+    match xs.pop_loop()? {
         Loop::Do { start, end } => xs.push_loop(Loop::Do {
             start: start + 1,
             end,
         }),
         _ => Err(Xerr::ControlFlowError),
-    };
-    let loop_leave: XfnType = |xs| match xs.pop_loop()? {
+    }
+}
+
+fn core_word_loop_leave(xs: &mut State) -> Xresult {
+    match xs.pop_loop()? {
         Loop::Do { .. } => OK,
         _ => Err(Xerr::ControlFlowError),
-    };
-    xs.code_emit(Opcode::NativeCall(loop_inc))?;
+    }
+}
+
+fn core_word_loop(xs: &mut State) -> Xresult {
+    xs.code_emit(
+        Opcode::NativeCall(core_word_loop_inc),
+        DebugInfo::Comment("loop increment counter"),
+    )?;
     let next_org = xs.code_origin();
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("loop"))?;
     let break_org = xs.code_origin();
-    xs.code_emit(Opcode::NativeCall(loop_leave))?;
+    xs.code_emit(
+        Opcode::NativeCall(core_word_loop_leave),
+        DebugInfo::Comment("loop leave"),
+    )?;
     loop {
         match xs.pop_flow()? {
             Flow::Leave(leave_org) => {

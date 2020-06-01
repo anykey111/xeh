@@ -3,8 +3,6 @@ use xeh::state::*;
 use getopts::Options;
 
 fn main() {
-    let o = 1usize - 0usize;
-    println!("{}", o);
     let args: Vec<String> = std::env::args().collect();
     let mut opts = Options::new();
     opts.optopt("s", "", "set script file name", "NAME");
