@@ -1,26 +1,4 @@
-// enum Opcode {
-//     CallNative = 0,
-//     Call
-// Deferred(usize),
-// NativeCall(XfnType),
-// Ret,
-// JumpIf(isize),
-// JumpIfNot(isize),
-// Jump(isize),
-// Load(usize),
-// Store
 use crate::cell::*;
-
-// impl Inst {
-//     fn native_call(x: XfnType) -> Self {
-//         assert_eq!(std::mem::size_of::<XfnType>(), usize);
-//         Inst(x as usize)
-//     }
-
-//     fn call(a: usize) -> Self {
-//         Inst
-//     }
-// }
 
 #[derive(Clone)]
 pub enum Opcode {
