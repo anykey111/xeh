@@ -6,6 +6,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut opts = Options::new();
     opts.optopt("s", "", "set script file name", "NAME");
+    opts.optopt("d", "", "enable debugging", "NAME");
     let matches = opts.parse(&args[1..]).unwrap();
 
     let mut xs = State::new().unwrap();

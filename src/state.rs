@@ -87,6 +87,12 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
+pub enum StateChange {
+    SetIp(usize),
+    NextIp,
+}
+
 #[derive(Default)]
 pub struct State {
     dict: Vec<(String, Entry)>,
@@ -99,6 +105,7 @@ pub struct State {
     loops: Vec<Loop>,
     ctx: Context,
     nested: Vec<Context>,
+    state_rec: Option<Vec<StateChange>>,
 }
 
 pub struct Xvar(usize);
@@ -245,7 +252,11 @@ impl State {
         }
     }
 
-    fn context_open(&mut self, mode: ContextMode, source: Option<Lex>) -> Xresult {
+    fn context_open(&mut self, mode: ContextMode, mut source: Option<Lex>) -> Xresult {
+        if let Some(source) = source.as_mut() {
+            let id = self.debug_map.add_buffer(source.buffer());
+            source.set_source_id(id);
+        }
         let mut tmp = Context {
             ds_len: 0,
             cs_len: self.code.len(),
@@ -291,6 +302,10 @@ impl State {
         let mut xs = State::default();
         xs.load_core()?;
         Ok(xs)
+    }
+
+    pub fn set_state_recording(&mut self, t: bool) {
+        self.state_rec = if t { Some(Vec::default()) } else { None };
     }
 
     pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xvar> {
@@ -410,7 +425,8 @@ impl State {
 
     fn code_emit(&mut self, op: Opcode, dinfo: DebugInfo) -> Xresult {
         let at = self.code.len();
-        self.debug_map.insert(Xfn::Interp(at), dinfo);
+        let lex = self.ctx.source.as_ref();
+        self.debug_map.insert_with_source(at, dinfo, lex);
         self.code.push(op);
         OK
     }
@@ -456,7 +472,7 @@ impl State {
 
     pub fn run(&mut self) -> Xresult {
         let mut exec = || loop {
-            self.run_next()?;
+            self.next()?;
         };
         match exec() {
             Err(Xerr::Next) => OK,
@@ -464,9 +480,8 @@ impl State {
         }
     }
 
-    pub fn run_next(&mut self) -> Xresult {
+    pub fn next(&mut self) -> Xresult {
         let ip = self.ip();
-        assert!(ip < self.code.len(), ip);
         match self.code[ip] {
             Opcode::Nop => self.next_ip(),
             Opcode::Next => {
@@ -548,10 +563,24 @@ impl State {
         }
     }
 
+    pub fn rnext(&mut self) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            match rec.pop() {
+                None => (),
+                Some(StateChange::NextIp) => {
+                    self.ctx.ip -= 1;
+                }
+                Some(StateChange::SetIp(ip)) => {
+                    self.ctx.ip = ip;
+                }
+            }
+        }
+        OK
+    }
+
     fn jump_to(&mut self, offs: isize) -> Xresult {
         let new_ip = (self.ip() as isize + offs) as usize;
-        self.ctx.ip = new_ip;
-        OK
+        self.set_ip(new_ip)
     }
 
     fn jump_if(&mut self, t: bool, offs: isize) -> Xresult {
@@ -567,11 +596,17 @@ impl State {
     }
 
     fn set_ip(&mut self, new_ip: usize) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            rec.push(StateChange::SetIp(self.ctx.ip));
+        }
         self.ctx.ip = new_ip;
         OK
     }
 
     fn next_ip(&mut self) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            rec.push(StateChange::NextIp);
+        }
         self.ctx.ip += 1;
         OK
     }
@@ -1003,11 +1038,11 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
-fn format_opcode(xs: &State, at: usize) -> String {
+pub fn format_opcode(xs: &State, at: usize) -> String {
     let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
     let debug_comment = xs
         .debug_map
-        .find(at)
+        .find_debug_info(at)
         .map(|di| match di {
             DebugInfo::Empty => "",
             DebugInfo::Comment(text) => text,
@@ -1020,9 +1055,9 @@ fn format_opcode(xs: &State, at: usize) -> String {
         })
         .unwrap_or("");
     format!(
-        "{:08x}{} {:<30} # {}",
+        "{:08x}{}{:<30} # {}",
         at,
-        if xs.ip() == at { '*' } else { ' ' },
+        if xs.ip() == at { " * " } else { "   " },
         match &xs.code[at] {
             Opcode::Nop => format!("nop"),
             Opcode::Next => format!("next"),
@@ -1100,7 +1135,7 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
     OK
 }
 
-fn core_word_debug_state(xs: &mut State) -> Xresult {
+pub fn format_xstate(xs: &mut State) -> Vec<String> {
     //let cols = 80;
     let rows = 25;
     let start = xs.ip() - 5.min(xs.ip());
@@ -1110,8 +1145,13 @@ fn core_word_debug_state(xs: &mut State) -> Xresult {
         buf.push(format_opcode(xs, i));
     }
     if xs.ip() == xs.code.len() {
-        buf.push(format!("{:08x}* <unreachable>", xs.ip()));
+        buf.push(format!("{:08x}* <allocation-pointer>", xs.ip()));
     }
+    buf
+}
+
+fn core_word_debug_state(xs: &mut State) -> Xresult {
+    let buf = format_xstate(xs);
     xs.push_data(Cell::Str(buf.join("\n")))
 }
 

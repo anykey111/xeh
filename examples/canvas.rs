@@ -4,7 +4,7 @@ use minifb::{Key, Window, WindowOptions};
 
 use xeh::cell::Cell;
 use xeh::error::*;
-use xeh::state::State;
+use xeh::state::*;
 
 struct MiniFb {
     width: usize,
@@ -69,12 +69,13 @@ fn minifb_is_open(xs: &mut State) -> Xresult {
     let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let fb = p.downcast_mut::<MiniFb>().ok_or(Xerr::TypeError)?;
     let t = fb.window.is_open() && !fb.window.is_key_down(Key::Escape);
-    let c = Cell::Int(if t { 1 } else { 0 });
+    let c = Cell::from(t);
     xs.push_data(c)
 }
 
 fn main() {
     let mut xs = State::new().unwrap();
+    xs.set_state_recording(true);
 
     xs.defword("minifb_new", minifb_new).unwrap();
     xs.defword("minifb_is_open", minifb_is_open).unwrap();
@@ -83,5 +84,8 @@ fn main() {
 
     let file = std::env::args().nth(1).expect("filename");
     xs.load_file(&file).unwrap();
-    xs.run().unwrap();
+    if let Err(e) = xs.run() {
+        println!("error: {:?}\n{}", e, format_xstate(&mut xs).join("\n"));
+        xs.builtin_repl();
+    }
 }

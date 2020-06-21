@@ -1,6 +1,6 @@
+use crate::state::*;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use crate::state::State;
 
 pub fn console_repl(xs: &mut State, load_history: bool) {
     let mut rl = Editor::<()>::new();
@@ -12,8 +12,20 @@ pub fn console_repl(xs: &mut State, load_history: bool) {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                if let Err(e) = xs.interpret_continue(line.as_str()) {
-                    xs.print_error(&e);
+                if line.trim() == ".next" {
+                    if let Err(e) = xs.next() {
+                        xs.print_error(&e);
+                    }
+                } else if line.trim() == ".rnext" {
+                    if let Err(e) = xs.rnext() {
+                        xs.print_error(&e);
+                    } else {
+                        println!("{}", format_opcode(xs, xs.ip()));
+                    }
+                } else {
+                    if let Err(e) = xs.interpret_continue(line.as_str()) {
+                        xs.print_error(&e);
+                    }
                 }
             }
             Err(ReadlineError::Interrupted) => {

@@ -24,6 +24,7 @@ pub struct Lex {
     buffer: String,
     path: Option<String>,
     last: Option<Location>,
+    source_id: Option<usize>,
 }
 
 impl Lex {
@@ -42,6 +43,7 @@ impl Lex {
             buffer: s,
             path: None,
             last: None,
+            source_id: None,
         }
     }
 
@@ -52,17 +54,23 @@ impl Lex {
         Ok(lex)
     }
 
+    pub fn buffer(&mut self) -> &String {
+        &self.buffer
+    }
+
+    pub fn set_source_id(&mut self, id: usize) {
+        self.source_id = Some(id);
+    }
+
+    pub fn source_id(&self) -> Option<usize> {
+        self.source_id
+    }
+
     pub fn print_location(&self) {
         if let Some((_tok, l)) = self.last_token() {
             let s = self.buffer.lines().nth(l.line - 1).unwrap();
             let name = self.path.as_ref().map(|p| p.as_str()).unwrap_or("<buffer>");
-            eprintln!(
-                "{}:{}:{}:\n{}",
-                name,
-                l.line,
-                l.col,
-                s
-            );
+            eprintln!("{}:{}:{}:\n{}", name, l.line, l.col, s);
             for _ in 1..l.col {
                 eprint!("-");
             }
