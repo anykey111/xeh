@@ -23,6 +23,8 @@ pub enum Xerr {
     Next,
 }
 
-pub type Xresult = Result<(), Xerr>;
+pub type Xresult = Xresult1<()>;
+
+pub type Xresult1<T> = Result<T, Xerr>;
 
 pub const OK: Xresult = Ok(());

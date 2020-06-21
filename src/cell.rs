@@ -1,4 +1,4 @@
-use crate::error::{Xerr, Xresult};
+use crate::error::{Xerr, Xresult, Xresult1};
 use crate::state::State;
 
 pub type Xvec<T> = rpds::Vector<T>;
@@ -82,7 +82,7 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
-    pub fn to_address(self) -> Result<usize, Xerr> {
+    pub fn to_address(self) -> Xresult1<usize> {
         let i: Xint = self.try_into()?;
         if i.is_positive() {
             Ok(i as usize)
@@ -98,7 +98,7 @@ impl Cell {
         }
     }
 
-    pub fn into_string(self) -> Result<String, Xerr> {
+    pub fn into_string(self) -> Xresult1<String> {
         match self {
             Cell::Str(s) => Ok(s),
             _ => Err(Xerr::TypeError),
@@ -112,39 +112,39 @@ impl Cell {
         }
     }
 
-    pub fn into_map(self) -> Result<Xmap, Xerr> {
+    pub fn into_map(self) -> Xresult1<Xmap> {
         match self {
             Cell::Map(x) => Ok(x),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_real(self) -> Result<Xreal, Xerr> {
+    pub fn into_real(self) -> Xresult1<Xreal> {
         match self {
             Cell::Real(x) => Ok(x),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_any(self) -> Result<Xanyrc, Xerr> {
+    pub fn into_any(self) -> Xresult1<Xanyrc> {
         match self {
             Cell::AnyRc(rc) => Ok(rc),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_int(self) -> Result<Xint, Xerr> {
+    pub fn into_int(self) -> Xresult1<Xint> {
         match self {
             Cell::Int(i) => Ok(i),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_i64(self) -> Result<i64, Xerr> {
+    pub fn into_i64(self) -> Xresult1<i64> {
         self.into_int().map(|i| i as i64)
     }
 
-    pub fn into_usize(self) -> Result<usize, Xerr> {
+    pub fn into_usize(self) -> Xresult1<usize> {
         self.into_int().map(|i| i as usize)
     }
 

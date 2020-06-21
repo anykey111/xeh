@@ -1,6 +1,6 @@
 use num_bigint::BigInt;
 
-use crate::error::Xerr;
+use crate::error::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Tok {
@@ -130,7 +130,7 @@ impl Lex {
         Self::is_schar(c) || c == '"' || c == '#'
     }
 
-    fn parse_word(&mut self) -> Result<Tok, Xerr> {
+    fn parse_word(&mut self) -> Xresult1<Tok> {
         let start = self.cursor.pos;
         let mut loc = self.cursor.clone();
         while let Some((_, c)) = self.peek() {
@@ -199,7 +199,7 @@ impl Lex {
         return Err(Xerr::InputParseError);
     }
 
-    fn parse_string(&mut self) -> Result<Tok, Xerr> {
+    fn parse_string(&mut self) -> Xresult1<Tok> {
         let start = self.cursor.pos;
         let mut loc = self.cursor.clone();
         self.take();
@@ -225,7 +225,7 @@ impl Lex {
         Ok(Tok::Str(s))
     }
 
-    pub fn next(&mut self) -> Result<Tok, Xerr> {
+    pub fn next(&mut self) -> Xresult1<Tok> {
         let c = loop {
             match self.skip_whitespaces() {
                 None => return Ok(Tok::EndOfInput),

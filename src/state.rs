@@ -237,7 +237,7 @@ impl State {
         }
     }
 
-    fn next_token(&mut self) -> Result<Tok, Xerr> {
+    fn next_token(&mut self) -> Xresult1<Tok> {
         if let Some(lex) = &mut self.ctx.source {
             lex.next()
         } else {
@@ -287,13 +287,13 @@ impl State {
         (self.flow_stack.len() - self.ctx.fs_len) > 0
     }
 
-    pub fn new() -> Result<State, Xerr> {
+    pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
         xs.load_core()?;
         Ok(xs)
     }
 
-    pub fn defonce(&mut self, name: &str, value: Cell) -> Result<Xvar, Xerr> {
+    pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xvar> {
         if let Some(a) = self.dict_find(name) {
             Ok(Xvar(a))
         } else {
@@ -304,7 +304,7 @@ impl State {
         }
     }
 
-    pub fn fetch_var(&self, var: &Xvar) -> Result<Cell, Xerr> {
+    pub fn fetch_var(&self, var: &Xvar) -> Xresult1<Cell> {
         self.heap.get(var.0).cloned().ok_or(Xerr::InvalidAddress)
     }
 
@@ -390,7 +390,7 @@ impl State {
         OK
     }
 
-    fn dict_insert(&mut self, name: String, e: Entry) -> Result<usize, Xerr> {
+    fn dict_insert(&mut self, name: String, e: Entry) -> Xresult1<usize> {
         let wa = self.dict.len();
         self.dict.push((name, e));
         Ok(wa)
@@ -430,7 +430,7 @@ impl State {
         self.patch_insn(at, insn)
     }
 
-    fn alloc_cell(&mut self) -> Result<usize, Xerr> {
+    fn alloc_cell(&mut self) -> Xresult1<usize> {
         let a = self.heap.len();
         self.heap.push(Cell::Nil);
         Ok(a)
@@ -576,7 +576,7 @@ impl State {
         OK
     }
 
-    fn pop_flow(&mut self) -> Result<Flow, Xerr> {
+    fn pop_flow(&mut self) -> Xresult1<Flow> {
         if self.flow_stack.len() > self.ctx.fs_len {
             self.flow_stack.pop().ok_or(Xerr::ControlFlowError)
         } else {
@@ -613,7 +613,7 @@ impl State {
         OK
     }
 
-    pub fn pop_data(&mut self) -> Result<Cell, Xerr> {
+    pub fn pop_data(&mut self) -> Xresult1<Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
             self.data_stack.pop().ok_or(Xerr::StackUnderflow)
         } else {
@@ -664,7 +664,7 @@ impl State {
         OK
     }
 
-    fn pop_return(&mut self) -> Result<Frame, Xerr> {
+    fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
             self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)
         } else {
@@ -693,7 +693,7 @@ impl State {
         }
     }
 
-    fn pop_loop(&mut self) -> Result<Loop, Xerr> {
+    fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
             self.loops.pop().ok_or(Xerr::LoopStackUnderflow)
         } else {
