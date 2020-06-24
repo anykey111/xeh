@@ -1,7 +1,7 @@
 use font_kit::family_name::FamilyName;
 use font_kit::properties::Properties;
 use font_kit::source::SystemSource;
-use minifb::{MouseMode, Scale, ScaleMode, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, MouseMode, Scale, ScaleMode, Window, WindowOptions};
 use raqote::{DrawOptions, DrawTarget, PathBuilder, Point, SolidSource, Source, StrokeStyle};
 
 use xeh::prelude::*;
@@ -14,9 +14,8 @@ fn main() -> Xresult {
     let xd_bg_color = xs.defonce("xd-background-color", Xcell::from(0x272822u32))?;
     let xd_text_color = xs.defonce("xd-text-color", Xcell::from(0xf8f8f2u32))?;
 
-    let s = std::fs::read_to_string("examples/doom-fire.xs").unwrap();
-    let res = xs.load(&s);
-    println!("Load result {:?}", res);
+    let filename = std::env::args().nth(1).expect("source file");
+    xs.load_file(&filename).unwrap();
 
     let mut window = Window::new(
         "XEH Debugger",
@@ -36,6 +35,7 @@ fn main() -> Xresult {
     let size = window.get_size();
     let mut dt = DrawTarget::new(size.0 as i32, size.1 as i32);
     let text_stroke = StrokeStyle::default();
+    let mut last_err = None;
 
     while window.is_open() {
         let width = size.0 as f32;
@@ -71,6 +71,12 @@ fn main() -> Xresult {
         }
 
         //if let Some(pos) = window.get_mouse_pos(MouseMode::Clamp) {}
+        for k in window.get_keys_pressed(KeyRepeat::No).iter().flatten() {
+            match k {
+                Key::F10 => last_err = xs.next().map_err(|e| format!("{:?}", e)).ok(),
+                _ => continue,
+            }
+        }
 
         window
             .update_with_buffer(dt.get_data(), size.0, size.1)
