@@ -91,6 +91,8 @@ impl Frame {
 pub enum StateChange {
     SetIp(usize),
     NextIp,
+    PushData(Cell),
+    PopData,
 }
 
 #[derive(Default)]
@@ -564,16 +566,33 @@ impl State {
     }
 
     pub fn rnext(&mut self) -> Xresult {
-        if let Some(rec) = self.state_rec.as_mut() {
+        while let Some(rec) = self.state_rec.as_mut() {
             match rec.pop() {
                 None => (),
                 Some(StateChange::NextIp) => {
                     self.ctx.ip -= 1;
+                    break;
                 }
                 Some(StateChange::SetIp(ip)) => {
                     self.ctx.ip = ip;
+                    break;
+                }
+                Some(StateChange::PopData) => {
+                    if self.data_stack.len() > self.ctx.ds_len {
+                        self.data_stack.pop();
+                    }
+                }
+                Some(StateChange::PushData(val)) => {
+                    self.data_stack.push(val);
                 }
             }
+        }
+        OK
+    }
+
+    pub fn rdump(&self) -> Xresult {
+        for i in self.state_rec.iter().map(|v| v.iter()).flatten().rev().take(25) {
+            println!("{:?}", i);
         }
         OK
     }
@@ -644,13 +663,20 @@ impl State {
         }
     }
     pub fn push_data(&mut self, data: Cell) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            rec.push(StateChange::PopData);
+        }
         self.data_stack.push(data);
         OK
     }
 
     pub fn pop_data(&mut self) -> Xresult1<Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
-            self.data_stack.pop().ok_or(Xerr::StackUnderflow)
+            let val = self.data_stack.pop().ok_or(Xerr::StackUnderflow)?;
+            if let Some(rec) = self.state_rec.as_mut() {
+                rec.push(StateChange::PushData(val.clone()));
+            }
+            Ok(val)
         } else {
             Err(Xerr::StackUnderflow)
         }
@@ -1139,7 +1165,7 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
     OK
 }
 
-pub fn format_xstate(xs: &mut State) -> Vec<String> {
+pub fn format_xstate(xs: &State) -> Vec<String> {
     //let cols = 80;
     let rows = 25;
     let start = xs.ip() - 5.min(xs.ip());

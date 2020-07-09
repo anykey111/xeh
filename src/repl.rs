@@ -22,6 +22,10 @@ pub fn console_repl(xs: &mut State, load_history: bool) {
                     } else {
                         println!("{}", format_opcode(xs, xs.ip()));
                     }
+                } else if line.trim() == ".rdump" {
+                    if let Err(e) = xs.rdump() {
+                        xs.print_error(&e);
+                    }
                 } else {
                     if let Err(e) = xs.interpret_continue(line.as_str()) {
                         xs.print_error(&e);
