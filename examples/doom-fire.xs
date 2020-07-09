@@ -44,7 +44,7 @@ var palette
 
 var fire_img
 [ 
-    FIRE_HEIGHT 1 - FIRE_WIDTH * 0 do 0 loop
+    1 FIRE_HEIGHT - FIRE_WIDTH * 0 do 0 loop
     FIRE_WIDTH 0 do 36 loop
 ] -> fire_img
 
@@ -54,7 +54,7 @@ var fire_img
 
 : spread_fire
     local idx
-    idx fire_img get local color
+    fire_img idx get local color
     color if
         random 3 * round
         dup 1 bitand color -
