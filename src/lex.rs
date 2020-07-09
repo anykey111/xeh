@@ -12,10 +12,10 @@ pub enum Tok {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Location {
-    line: usize,
-    col: usize,
-    pos: usize,
-    len: usize,
+    pub line: usize,
+    pub col: usize,
+    pub pos: usize,
+    pub len: usize,
 }
 
 #[derive(Clone, Debug)]

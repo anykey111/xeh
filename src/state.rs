@@ -1078,6 +1078,10 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
     )
 }
 
+pub fn format_source_location(xs: &State, at: usize) -> String {
+    xs.debug_map.format_location(at).unwrap()
+}
+
 fn try_print_address(xs: &mut State, start: usize) -> Xresult {
     let end = (start + 25).min(xs.code.len());
     for i in start..end {

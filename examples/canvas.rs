@@ -85,7 +85,9 @@ fn main() {
     let file = std::env::args().nth(1).expect("filename");
     xs.load_file(&file).unwrap();
     if let Err(e) = xs.run() {
-        println!("error: {:?}\n{}", e, format_xstate(&mut xs).join("\n"));
+        println!("error: {:?}", e);
+        println!("{}", format_source_location(&xs, xs.ip()));
+        println!("{}", format_xstate(&xs).join("\n"));
         xs.builtin_repl();
     }
 }
