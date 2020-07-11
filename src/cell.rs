@@ -31,18 +31,34 @@ use std::fmt;
 
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Cell::Nil => write!(f, "nil"),
-            Cell::Int(n) => write!(f, "{}", n),
-            Cell::Real(r) => write!(f, "{}", r),
-            Cell::Str(s) => write!(f, "{}", s),
-            Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
-            Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
-            Cell::Fun(x) => write!(f, "{:?}", x),
-            Cell::AnyRc(x) => match x.try_borrow() {
-                Ok(p) => write!(f, "any:{:?}", p.type_id()),
-                Err(_) => write!(f, "any"),
-            },
+        if let Some(1) = f.width() {
+            match self {
+                Cell::Nil => write!(f, "nil"),
+                Cell::Int(n) => write!(f, "{}", n),
+                Cell::Real(r) => write!(f, "{}", r),
+                Cell::Str(s) => write!(f, "str:{}", s.len()),
+                Cell::Vector(v) => write!(f, "vec:{}", v.len()),
+                Cell::Map(v) => write!(f, "map:{}", v.len()),
+                Cell::Fun(x) => write!(f, "{:?}", x),
+                Cell::AnyRc(x) => match x.try_borrow() {
+                    Ok(p) => write!(f, "any:{:?}", p.type_id()),
+                    Err(_) => write!(f, "any"),
+                },
+            }
+        } else {
+            match self {
+                Cell::Nil => write!(f, "nil"),
+                Cell::Int(n) => write!(f, "{}", n),
+                Cell::Real(r) => write!(f, "{}", r),
+                Cell::Str(s) => write!(f, "{}", s),
+                Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
+                Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
+                Cell::Fun(x) => write!(f, "{:?}", x),
+                Cell::AnyRc(x) => match x.try_borrow() {
+                    Ok(p) => write!(f, "any:{:?}", p.type_id()),
+                    Err(_) => write!(f, "any"),
+                },
+            }
         }
     }
 }
