@@ -90,7 +90,7 @@ impl Frame {
 #[derive(Debug)]
 pub enum StateChange {
     SetIp(usize),
-    NextIp,
+    DecrementIp,
     PushData(Cell),
     PopData,
 }
@@ -364,8 +364,8 @@ impl State {
             Def(")", core_word_nested_end),
             Def("see-code", core_word_see_code),
             Def("see-state", core_word_see_state),
-            Def("see-state>string", core_word_debug_state),
             Def(".s", core_word_stack_dump),
+            Def(".sc", core_word_stack_compact_dump),
             Def("execute", core_word_execute),
             Def("defer", core_word_defer),
             Def("do", core_word_do),
@@ -569,8 +569,10 @@ impl State {
         while let Some(rec) = self.state_rec.as_mut() {
             match rec.pop() {
                 None => (),
-                Some(StateChange::NextIp) => {
-                    self.ctx.ip -= 1;
+                Some(StateChange::DecrementIp) => {
+                    if self.ctx.ip > 0 {
+                        self.ctx.ip -= 1;
+                    }
                     break;
                 }
                 Some(StateChange::SetIp(ip)) => {
@@ -624,7 +626,7 @@ impl State {
 
     fn next_ip(&mut self) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::NextIp);
+            rec.push(StateChange::DecrementIp);
         }
         self.ctx.ip += 1;
         OK
@@ -1180,21 +1182,23 @@ pub fn format_xstate(xs: &State) -> Vec<String> {
     buf
 }
 
-fn core_word_debug_state(xs: &mut State) -> Xresult {
-    let buf = format_xstate(xs);
-    xs.push_data(Cell::Str(buf.join("\n")))
-}
-
 fn core_word_see_state(xs: &mut State) -> Xresult {
-    core_word_debug_state(xs)?;
-    let s = xs.pop_data()?.into_string()?;
-    print!("{}", s);
+    for s in format_xstate(xs) {
+        println!("{}", s);
+    }
     OK
 }
 
 fn core_word_stack_dump(xs: &mut State) -> Xresult {
     for val in xs.data_stack.iter().rev() {
         println!("\t{:?}", val);
+    }
+    OK
+}
+
+fn core_word_stack_compact_dump(xs: &mut State) -> Xresult {
+    for val in xs.data_stack.iter().rev() {
+        println!("\t{:1?}", val);
     }
     OK
 }
