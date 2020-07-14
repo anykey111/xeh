@@ -7,6 +7,8 @@ use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
 
+use std::io::{Write, BufWriter};
+
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     Deferred,
@@ -108,20 +110,31 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
+    pub output_buf: Option<BufWriter<Vec<u8>>>,
 }
 
 pub struct Xvar(usize);
 
 impl State {
     pub fn builtin_repl(&mut self) {
-        crate::repl::console_repl(self, true);
+        //crate::repl::run_tty_repl(self, true);
+        crate::repl::run_tcp_repl(self);
     }
 
-    pub fn print_error(&self, err: &Xerr) {
-        eprintln!("error: {:?}", err);
-        if let Some(src) = &self.ctx.source {
-            src.print_location();
+    pub fn println(&mut self, s: &str) {
+        if let Some(buf) = self.output_buf.as_mut() {
+            buf.write(s.as_bytes());
+        } else {
+            println!("{}", s);
         }
+    }
+
+    pub fn print_error(&mut self, err: &Xerr) {
+        let mut buf = format!("error: {:?}", err);
+        if let Some(src) = &self.ctx.source {
+            buf.push_str(&src.format_location());
+        }
+        self.println(&buf);
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
@@ -131,7 +144,7 @@ impl State {
 
     pub fn load_file(&mut self, filename: &str) -> Xresult {
         let lex = Lex::from_file(filename).map_err(|e| {
-            eprintln!("{}: {:?}", filename, e);
+            self.println(&format!("{}: {:?}", filename, e));
             Xerr::IOError
         })?;
         let ctx_depth = self.nested.len();
@@ -139,7 +152,7 @@ impl State {
         self.context_open(ContextMode::Load, Some(lex))?;
         match self.build() {
             Ok(_) => {
-                eprintln!("Done {:?}", std::time::Instant::now() - t);
+                self.println(&format!("Done {:?}", std::time::Instant::now() - t));
                 OK
             }
             Err(e) => {
@@ -1113,7 +1126,7 @@ pub fn format_source_location(xs: &State, at: usize) -> String {
 fn try_print_address(xs: &mut State, start: usize) -> Xresult {
     let end = (start + 25).min(xs.code.len());
     for i in start..end {
-        println!("{}", format_opcode(xs, i));
+        xs.println(&format!("{}", format_opcode(xs, i)));
     }
     OK
 }
@@ -1130,22 +1143,23 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
         .ok_or(Xerr::UnknownWord)?;
     match e {
         Entry::Deferred => {
-            println!("unknown word");
+            xs.println("unknown word");
         }
         Entry::Variable(a) => {
-            println!("heap address: {}", a);
-            println!("value: {:?}", xs.heap[*a]);
+            let buf = format!("heap address: {}\nvalue: {:?}", a, xs.heap[*a]);
+            xs.println(&buf);
         }
         Entry::Function {
             immediate,
             xf: Xfn::Native(x),
             ..
         } => {
-            println!(
+            let buf = &format!(
                 "native-function: 0x{:x}{}",
                 *x as usize,
                 if *immediate { " <immediate>" } else { "" }
             );
+            xs.println(&buf);
         }
         Entry::Function {
             immediate,
@@ -1154,13 +1168,15 @@ fn core_word_see_code(xs: &mut State) -> Xresult {
         } => {
             let start = *a;
             let end = start + len.unwrap_or(0);
-            println!(
+            let buf = format!(
                 "function: {}{}",
                 start,
                 if *immediate { " <immediate>" } else { "" }
             );
+            xs.println(&buf);
             for i in start..end {
-                println!("{}", format_opcode(xs, i));
+                let buf = format!("{}\n", format_opcode(xs, i));
+                xs.println(&buf);
             }
         }
     }
@@ -1184,22 +1200,26 @@ pub fn format_xstate(xs: &State) -> Vec<String> {
 
 fn core_word_see_state(xs: &mut State) -> Xresult {
     for s in format_xstate(xs) {
-        println!("{}", s);
+        xs.println(&s);
     }
     OK
 }
 
 fn core_word_stack_dump(xs: &mut State) -> Xresult {
+    let mut buf = String::new();
     for val in xs.data_stack.iter().rev() {
-        println!("\t{:?}", val);
+        buf.push_str(&format!("\t{:?}\n", val));
     }
+    xs.println(&buf);
     OK
 }
 
 fn core_word_stack_compact_dump(xs: &mut State) -> Xresult {
+    let mut buf = String::new();
     for val in xs.data_stack.iter().rev() {
-        println!("\t{:1?}", val);
+        buf.push_str(&format!("\t{:1?}\n", val));
     }
+    xs.println(&buf);
     OK
 }
 

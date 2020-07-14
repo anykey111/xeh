@@ -66,16 +66,18 @@ impl Lex {
         self.source_id
     }
 
-    pub fn print_location(&self) {
+    pub fn format_location(&self) -> String {
+        let mut buf = String::new();
         if let Some((_tok, l)) = self.last_token() {
             let s = self.buffer.lines().nth(l.line - 1).unwrap();
             let name = self.path.as_ref().map(|p| p.as_str()).unwrap_or("<buffer>");
-            eprintln!("{}:{}:{}:\n{}", name, l.line, l.col, s);
+            buf = format!("{}:{}:{}:\n{}", name, l.line, l.col, s);
             for _ in 1..l.col {
-                eprint!("-");
+                buf.push('-');
             }
-            eprintln!("^");
+            buf.push('^');
         }
+        buf
     }
 
     pub fn last_token(&self) -> Option<(&str, &Location)> {

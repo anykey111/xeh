@@ -2,7 +2,27 @@ use crate::state::*;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub fn console_repl(xs: &mut State, load_history: bool) {
+fn eval_line(xs: &mut State, line: &str) {
+    if line.trim() == ".next" {
+        if let Err(e) = xs.next() {
+            xs.print_error(&e);
+        }
+    } else if line.trim() == ".rnext" {
+        if let Err(e) = xs.rnext() {
+            xs.print_error(&e);
+        } else {
+            xs.println(&format!("{}", format_opcode(xs, xs.ip())));
+        }
+    } else if line.trim() == ".rdump" {
+        if let Err(e) = xs.rdump() {
+            xs.print_error(&e);
+        }
+    } else if let Err(e) = xs.interpret_continue(line) {
+        xs.print_error(&e);
+    }
+}
+
+pub fn run_tty_repl(xs: &mut State, load_history: bool) {
     let mut rl = Editor::<()>::new();
     if load_history {
         let _ = rl.load_history("history.txt");
@@ -12,43 +32,48 @@ pub fn console_repl(xs: &mut State, load_history: bool) {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                if line.trim() == ".next" {
-                    if let Err(e) = xs.next() {
-                        xs.print_error(&e);
-                    }
-                } else if line.trim() == ".rnext" {
-                    if let Err(e) = xs.rnext() {
-                        xs.print_error(&e);
-                    } else {
-                        println!("{}", format_opcode(xs, xs.ip()));
-                    }
-                } else if line.trim() == ".rdump" {
-                    if let Err(e) = xs.rdump() {
-                        xs.print_error(&e);
-                    }
-                } else {
-                    if let Err(e) = xs.interpret_continue(line.as_str()) {
-                        xs.print_error(&e);
-                    }
-                }
+                eval_line(xs, &line);
             }
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                xs.println("CTRL-C");
                 break;
             }
             Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
+                xs.println("CTRL-D");
                 break;
             }
             Err(err) => {
-                println!("Error: {:?}", err);
+                xs.println(&format!("Error: {:?}", err));
                 break;
             }
         }
     }
     if load_history {
         if let Err(e) = rl.save_history("history.txt") {
-            println!("history save faield: {:}", e);
+            xs.println(&format!("history save faield: {:}", e));
+        }
+    }
+}
+
+use crate::state::*;
+use std::net::{TcpListener, TcpStream};
+use std::io::{BufRead, BufReader, Write, BufWriter};
+
+pub fn run_tcp_repl(xs: &mut State) {
+    let listener = TcpListener::bind("0.0.0.0:1234").unwrap();
+    xs.output_buf = Some(BufWriter::new(Vec::default()));
+    let (mut sock, _addr) = listener.accept().unwrap();
+    loop {
+        let mut buf = BufReader::new(sock);
+        let mut line = String::new();
+        buf.read_line(&mut line).unwrap();
+        eval_line(xs, line.trim_end());
+        sock = buf.into_inner();
+        if let Some(xsbuf) = xs.output_buf.take() {
+            sock.write(xsbuf.buffer());
+            let mut vec = xsbuf.into_inner().unwrap();
+            vec.truncate(0);
+            xs.output_buf = Some(BufWriter::new(vec));
         }
     }
 }

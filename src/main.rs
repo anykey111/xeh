@@ -14,7 +14,7 @@ fn main() {
         let filename = matches.opt_str("s").expect("script file name");
         if xs.load_file(&filename).is_ok() {
             if let Err(e) = xs.run() {
-                xs.print_error(&e);
+                eprintln!("{}", xs.format_error(&e));
             }
         }
     }
