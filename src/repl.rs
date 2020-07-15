@@ -21,7 +21,7 @@ fn eval_line(xs: &mut State, line: &str) {
         if let Err(e) = xs.rnext() {
             xs.print_error(&e);
         } else {
-            xs.println(&format!("{}", format_opcode(xs, xs.ip())));
+            xs.print(&format!("{}\n", format_opcode(xs, xs.ip())));
         }
     } else if line.trim() == ".rdump" {
         if let Err(e) = xs.rdump() {
@@ -45,22 +45,22 @@ fn run_tty_repl(xs: &mut State, load_history: bool) {
                 eval_line(xs, &line);
             }
             Err(ReadlineError::Interrupted) => {
-                xs.println("CTRL-C");
+                println!("CTRL-C");
                 break;
             }
             Err(ReadlineError::Eof) => {
-                xs.println("CTRL-D");
+                println!("CTRL-D");
                 break;
             }
             Err(err) => {
-                xs.println(&format!("Error: {:?}", err));
+                println!("Error: {:?}", err);
                 break;
             }
         }
     }
     if load_history {
         if let Err(e) = rl.save_history("history.txt") {
-            xs.println(&format!("history save faield: {:}", e));
+            println!("history save faield: {:}", e);
         }
     }
 }
