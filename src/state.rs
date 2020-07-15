@@ -111,14 +111,15 @@ pub struct State {
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
     pub output_buf: Option<BufWriter<Vec<u8>>>,
+    pub repl_port: Xvar,
 }
 
-pub struct Xvar(usize);
+#[derive(Default)]
+pub struct Xvar(Option<usize>);
 
 impl State {
-    pub fn builtin_repl(&mut self) {
-        //crate::repl::run_tty_repl(self, true);
-        crate::repl::run_tcp_repl(self);
+    pub fn run_repl(&mut self) -> Xresult {
+        crate::repl::run(self)
     }
 
     pub fn println(&mut self, s: &str) {
@@ -315,6 +316,7 @@ impl State {
 
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
+        xs.repl_port = xs.defonce("XS-REPL-PORT", Cell::Nil)?;
         xs.load_core()?;
         Ok(xs)
     }
@@ -325,17 +327,20 @@ impl State {
 
     pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xvar> {
         if let Some(a) = self.dict_find(name) {
-            Ok(Xvar(a))
+            Ok(Xvar(Some(a)))
         } else {
             let a = self.alloc_cell()?;
             self.heap[a] = value;
             self.dict_insert(name.to_string(), Entry::Variable(a))?;
-            Ok(Xvar(a))
+            Ok(Xvar(Some(a)))
         }
     }
 
     pub fn fetch_var(&self, var: &Xvar) -> Xresult1<Cell> {
-        self.heap.get(var.0).cloned().ok_or(Xerr::InvalidAddress)
+        match var {
+            Xvar(Some(a)) => self.heap.get(*a).cloned().ok_or(Xerr::InvalidAddress),
+            _ => Err(Xerr::UnknownWord),
+        }
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {

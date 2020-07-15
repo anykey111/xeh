@@ -1,6 +1,16 @@
 use crate::state::*;
+use crate::error::*;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+
+pub fn run(xs: &mut State) -> Xresult {
+    let port = xs.fetch_var(&xs.repl_port)?;
+    match port.into_usize() {
+        Ok(num) => crate::repl::run_tcp_repl(xs, num as u16),
+        Err(_) => crate::repl::run_tty_repl(xs, true),
+    };
+    OK
+}
 
 fn eval_line(xs: &mut State, line: &str) {
     if line.trim() == ".next" {
@@ -22,7 +32,7 @@ fn eval_line(xs: &mut State, line: &str) {
     }
 }
 
-pub fn run_tty_repl(xs: &mut State, load_history: bool) {
+fn run_tty_repl(xs: &mut State, load_history: bool) {
     let mut rl = Editor::<()>::new();
     if load_history {
         let _ = rl.load_history("history.txt");
@@ -59,8 +69,8 @@ use crate::state::*;
 use std::net::{TcpListener, TcpStream};
 use std::io::{BufRead, BufReader, Write, BufWriter};
 
-pub fn run_tcp_repl(xs: &mut State) {
-    let listener = TcpListener::bind("0.0.0.0:1234").unwrap();
+fn run_tcp_repl(xs: &mut State, port: u16) {
+    let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
     xs.output_buf = Some(BufWriter::new(Vec::default()));
     let (mut sock, _addr) = listener.accept().unwrap();
     loop {

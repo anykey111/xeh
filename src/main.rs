@@ -19,5 +19,5 @@ fn main() {
         }
     }
 
-    xs.builtin_repl();
+    xs.run_repl();
 }

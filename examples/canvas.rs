@@ -88,6 +88,6 @@ fn main() {
         xs.println(&format!("error: {:?}", e));
         xs.println(&format!("{}", format_source_location(&xs, xs.ip())));
         xs.println(&format!("{}", format_xstate(&xs).join("\n")));
-        xs.builtin_repl();
+        xs.run_repl().unwrap();
     }
 }
