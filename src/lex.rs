@@ -66,12 +66,12 @@ impl Lex {
         self.source_id
     }
 
-    pub fn error_context(&self) -> String {
+    pub fn error_location(&self) -> String {
         let mut buf = String::new();
         if let Some((_tok, l)) = self.last_token() {
             let s = self.buffer.lines().nth(l.line - 1).unwrap();
             let name = self.path.as_ref().map(|p| p.as_str()).unwrap_or("<buffer>");
-            buf = format!("{}:{}:{}:\n{}", name, l.line, l.col, s);
+            buf = format!("{}:{}:{}:\n{}\n", name, l.line, l.col, s);
             for _ in 1..l.col {
                 buf.push('-');
             }

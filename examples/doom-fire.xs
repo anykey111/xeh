@@ -1,7 +1,7 @@
 (320 const FIRE_WIDTH)
 (168 const FIRE_HEIGHT)
 
-[
+([
     0x070707
     0x1F0707
     0x2F0F07
@@ -39,7 +39,7 @@
     0xDFDF9F
     0xEFEFC7
     0xFFFFFF
-] const PALETTE
+] const PALETTE)
 
 var fire_img
 [ 
@@ -62,7 +62,7 @@ var fire_img
     index fire_img get - # substract from color
     swap # offset color
     1 + # increase offset by 1
-    FIRE_WIDHT index -
+    FIRE_WIDTH index -
     -
     fire_img_update
 ;
@@ -71,7 +71,9 @@ var fire_img
     dup fire_img get if
         spread_fire_random
     else
-        0 index FIRE_WIDTH - fire_img_update
+        FIRE_WIDTH -
+        0 swap
+        fire_img_update
     then
 ;
 

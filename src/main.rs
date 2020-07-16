@@ -14,7 +14,7 @@ fn main() {
     if matches.opt_present("s") {
         let filename = matches.opt_str("s").expect("script file name");
         let src = Lex::from_file(&filename).unwrap();
-        if let Err(e) = xs.load(src) {
+        if let Err(e) = xs.load_source(src) {
             eprintln!("{}", xs.error_context(&e));
         } else if let Err(e) = xs.run() {
             eprintln!("{}", xs.error_context(&e));

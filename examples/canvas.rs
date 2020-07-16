@@ -85,9 +85,7 @@ fn main() {
 
     let filename = std::env::args().nth(1).expect("filename");
     let src = Lex::from_file(&filename).unwrap();
-    if let Err(e) = xs.load(src) {
-        println!("{}", xs.error_context(&e));
-    }
+    xs.load_source(src).unwrap();
     if let Err(e) = xs.run() {
         println!("{}", xs.error_context(&e));
         xs.run_repl().unwrap();

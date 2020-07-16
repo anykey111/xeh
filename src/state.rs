@@ -140,22 +140,34 @@ impl State {
         buf
     }
 
-    pub fn load(&mut self, source: Lex) -> Xresult {
-        let depth = self.nested.len();
+    pub fn load(&mut self, source: &str) -> Xresult {
+        self.load_source(Lex::from_str(source))
+    }
+
+    pub fn load_source(&mut self, source: Lex) -> Xresult {
         self.context_open(ContextMode::Load, Some(source))?;
+        let depth = self.nested.len();
         let result = self.build();
-        while result.is_err() && self.nested.len() > depth {
-            self.context_close()?;
+        if result.is_err() {
+            if let Some(lex) = self.ctx.source.as_ref() {
+                eprintln!("{}", lex.error_location());
+            }
+            while self.nested.len() > depth {
+                self.context_close()?;
+            }
         }
         result
     }
 
     pub fn interpret(&mut self, source: &str) -> Xresult {
-        let depth = self.nested.len();
         self.context_open(ContextMode::Eval, Some(Lex::from_str(source)))?;
+        let depth = self.nested.len();
         let result = self.build();
-        if result.is_err() && self.nested.len() > depth {
-            self.context_close()?;
+        if let Err(e) = result.as_ref() {
+            eprintln!("{}", self.error_context(e));
+            while self.nested.len() > depth {
+                self.context_close()?;
+            }
         }
         result
     }
@@ -1289,14 +1301,15 @@ fn core_word_length(xs: &mut State) -> Xresult {
 }
 
 fn core_word_get(xs: &mut State) -> Xresult {
-    let k = xs.pop_data()?;
     match xs.pop_data()? {
         Cell::Vector(x) => {
+            let k = xs.pop_data()?;
             let idx = k.into_usize()?;
             let val = x.get(idx).ok_or(Xerr::OutOfBounds)?;
             xs.push_data(val.clone())
         }
         Cell::Map(x) => {
+            let k = xs.pop_data()?;
             let val = x
                 .iter()
                 .find(|kv| kv.0 == k)
