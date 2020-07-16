@@ -36,9 +36,9 @@ impl fmt::Debug for Cell {
                 Cell::Nil => write!(f, "nil"),
                 Cell::Int(n) => write!(f, "{}", n),
                 Cell::Real(r) => write!(f, "{}", r),
-                Cell::Str(s) => write!(f, "str:{}", s.len()),
-                Cell::Vector(v) => write!(f, "vec:{}", v.len()),
-                Cell::Map(v) => write!(f, "map:{}", v.len()),
+                Cell::Str(s) => write!(f, "str(len={})", s.len()),
+                Cell::Vector(v) => write!(f, "vec(len={})", v.len()),
+                Cell::Map(v) => write!(f, "map(len={})", v.len()),
                 Cell::Fun(x) => write!(f, "{:?}", x),
                 Cell::AnyRc(x) => match x.try_borrow() {
                     Ok(p) => write!(f, "any:{:?}", p.type_id()),

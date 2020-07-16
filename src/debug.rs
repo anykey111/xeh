@@ -21,18 +21,17 @@ pub enum DebugInfo {
 
 impl DebugMap {
     pub fn insert_with_source(&mut self, at: usize, dinfo: DebugInfo, lex: Option<&Lex>) {
-        let pair = if dinfo == DebugInfo::Empty {
+        let pair = if dinfo == DebugInfo::Empty || lex.is_none() {
             (dinfo, None)
         } else {
             let mut dloc = None;
-            if let Some(lex) = lex {
-                if let Some((_, loc)) = lex.last_token() {
-                    if let Some(source_id) = lex.source_id() {
-                        dloc = Some(DebugLoc {
-                            source_id: source_id,
-                            location: loc.clone(),
-                        });
-                    }
+            let lex = lex.unwrap();
+            if let Some((_, loc)) = lex.last_token() {
+                if let Some(source_id) = lex.source_id() {
+                    dloc = Some(DebugLoc {
+                        source_id: source_id,
+                        location: loc.clone(),
+                    });
                 }
             }
             (dinfo, dloc)
@@ -58,7 +57,9 @@ impl DebugMap {
     }
 
     pub fn find_debug_location(&self, at: usize) -> Option<&DebugLoc> {
-        self.code_map.get(at).map(|x| x.1.as_ref().unwrap())
+        self.code_map.get(at).and_then(|x| {
+            x.1.as_ref()
+        })
     }
 
     pub fn format_location(&self, at: usize) -> Option<String> {

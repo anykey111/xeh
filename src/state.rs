@@ -7,8 +7,6 @@ use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
 
-use std::io::{Write, BufWriter};
-
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     Deferred,
@@ -40,7 +38,7 @@ enum Flow {
 }
 
 #[derive(Debug, Clone)]
-enum Loop {
+pub enum Loop {
     VecBuilder { stack_ptr: usize },
     MapBuilder { stack_ptr: usize },
     Do { start: Xint, end: Xint },
@@ -74,8 +72,8 @@ struct Context {
     source: Option<Lex>,
 }
 
-#[derive(Clone, Default)]
-struct Frame {
+#[derive(Debug, Clone, Default)]
+pub struct Frame {
     return_to: usize,
     locals: Vec<Cell>,
 }
@@ -95,6 +93,12 @@ pub enum StateChange {
     DecrementIp,
     PushData(Cell),
     PopData,
+    SwapData,
+    RotData,
+    PopReturn,
+    PushReturn(Frame),
+    PopLoop,
+    PushLoop(Loop),
 }
 
 #[derive(Default)]
@@ -110,8 +114,6 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
-    pub output_buf: Option<BufWriter<Vec<u8>>>,
-    pub repl_port: Xvar,
 }
 
 #[derive(Default)]
@@ -122,62 +124,40 @@ impl State {
         crate::repl::run(self)
     }
 
-    pub fn print(&mut self, s: &str) {
-        if let Some(buf) = self.output_buf.as_mut() {
-            buf.write(s.as_bytes());
-        } else {
-            println!("{}", s);
+    pub fn error_context(&mut self, err: &Xerr) -> String {
+        let mut error_text = format!("error: {:?}\n", err);
+        if let Some(loc) = self.debug_map.format_location(self.ip()) {
+            error_text.push_str(&loc);
         }
+        error_text
     }
 
-    pub fn print_error(&mut self, err: &Xerr) {
-        let mut buf = format!("error: {:?}", err);
-        if let Some(src) = &self.ctx.source {
-            buf.push_str(&src.format_location());
+    pub fn current_line(&self) -> String {
+        let mut buf = String::new();
+        if let Some(loc) = self.debug_map.format_location(self.ip()) {
+            buf.push_str(&loc);
         }
-        self.print(&buf);
+        buf
     }
 
-    pub fn load(&mut self, source: &str) -> Xresult {
-        self.context_open(ContextMode::Load, Some(Lex::from_str(source)))?;
-        self.build()
-    }
-
-    pub fn load_file(&mut self, filename: &str) -> Xresult {
-        let lex = Lex::from_file(filename).map_err(|e| {
-            self.print(&format!("{}: {:?}\n", filename, e));
-            Xerr::IOError
-        })?;
-        let ctx_depth = self.nested.len();
-        let t = std::time::Instant::now();
-        self.context_open(ContextMode::Load, Some(lex))?;
-        match self.build() {
-            Ok(_) => {
-                self.print(&format!("Done {:?}\n", std::time::Instant::now() - t));
-                OK
-            }
-            Err(e) => {
-                // cleanup context
-                self.nested.truncate(ctx_depth);
-                self.print_error(&e);
-                Err(e)
-            }
+    pub fn load(&mut self, source: Lex) -> Xresult {
+        let depth = self.nested.len();
+        self.context_open(ContextMode::Load, Some(source))?;
+        let result = self.build();
+        while result.is_err() && self.nested.len() > depth {
+            self.context_close()?;
         }
+        result
     }
 
     pub fn interpret(&mut self, source: &str) -> Xresult {
+        let depth = self.nested.len();
         self.context_open(ContextMode::Eval, Some(Lex::from_str(source)))?;
-        self.build()
-    }
-
-    pub fn interpret_continue(&mut self, source: &str) -> Xresult {
-        if self.has_pending_flow() {
-            // don't open new context, use still typing
-            self.ctx.source = Some(Lex::from_str(source));
-        } else {
-            self.context_open(ContextMode::Eval, Some(Lex::from_str(source)))?;
+        let result = self.build();
+        if result.is_err() && self.nested.len() > depth {
+            self.context_close()?;
         }
-        self.build()
+        result
     }
 
     fn build(&mut self) -> Xresult {
@@ -204,11 +184,11 @@ impl State {
                 }
                 Tok::Num(n) => {
                     let n = n.to_i128().ok_or(Xerr::IntegerOverflow)?;
-                    self.code_emit(Opcode::LoadInt(n), DebugInfo::Empty)?;
+                    self.code_emit(Opcode::LoadInt(n), DebugInfo::Comment("load int"))?;
                 }
                 Tok::Str(s) => {
                     let a = self.readonly_cell(Cell::Str(s));
-                    self.code_emit(Opcode::Load(a), DebugInfo::Empty)?;
+                    self.code_emit(Opcode::Load(a), DebugInfo::Comment("load str"))?;
                 }
                 Tok::Word(name) => {
                     let idx = match self.dict_find(&name) {
@@ -316,7 +296,6 @@ impl State {
 
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
-        xs.repl_port = xs.defonce("XS-REPL-PORT", Cell::Int(1234))?;
         xs.load_core()?;
         Ok(xs)
     }
@@ -380,10 +359,6 @@ impl State {
             Def("const", core_word_const),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
-            Def("see-code", core_word_see_code),
-            Def("see-state", core_word_see_state),
-            Def(".s", core_word_stack_dump),
-            Def(".sc", core_word_stack_compact_dump),
             Def("execute", core_word_execute),
             Def("defer", core_word_defer),
             Def("do", core_word_do),
@@ -449,6 +424,10 @@ impl State {
         self.debug_map.insert_with_source(at, dinfo, lex);
         self.code.push(op);
         OK
+    }
+
+    fn code(&self) -> &[Opcode] {
+        &self.code
     }
 
     fn patch_insn(&mut self, at: usize, insn: Opcode) -> Xresult {
@@ -600,10 +579,48 @@ impl State {
                 Some(StateChange::PopData) => {
                     if self.data_stack.len() > self.ctx.ds_len {
                         self.data_stack.pop();
+                    } else {
+                        return Err(Xerr::StackUnderflow);
                     }
                 }
                 Some(StateChange::PushData(val)) => {
                     self.data_stack.push(val);
+                }
+                Some(StateChange::SwapData) => {
+                    let len = self.data_stack.len();
+                    if (len - self.ctx.ds_len) >= 2 {
+                        self.data_stack.swap(len - 1, len - 2);
+                    } else {
+                        return Err(Xerr::StackUnderflow);
+                    }
+                }
+                Some(StateChange::RotData) => {
+                    let len = self.data_stack.len();
+                    if (len - self.ctx.ds_len) >= 3 {
+                        self.data_stack.swap(len - 1, len - 3);
+                    } else {
+                        return Err(Xerr::StackUnderflow);
+                    }
+                }
+                Some(StateChange::PopReturn) => {
+                    if self.return_stack.len() > self.ctx.rs_len {
+                        self.return_stack.pop();
+                    } else {
+                        return Err(Xerr::ReturnStackUnderflow);
+                    }
+                }
+                Some(StateChange::PushReturn(frame)) => {
+                    self.return_stack.push(frame);
+                }
+                Some(StateChange::PushLoop(l)) => {
+                    self.loops.push(l);
+                }
+                Some(StateChange::PopLoop) => {
+                    if self.loops.len() > self.ctx.ls_len {
+                        self.loops.pop();
+                    } else {
+                        return Err(Xerr::LoopStackUnderflow);
+                    }
                 }
             }
         }
@@ -702,7 +719,11 @@ impl State {
         }
     }
 
-    pub fn top_data(&mut self) -> Option<&Cell> {
+    pub fn get_data(&self, idx: usize) -> Option<&Cell> {
+        self.data_stack.iter().rev().nth(idx)
+    }
+
+    pub fn top_data(&self) -> Option<&Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
             self.data_stack.last()
         } else {
@@ -723,6 +744,9 @@ impl State {
     fn swap_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
+            if let Some(rec) = self.state_rec.as_mut() {
+                rec.push(StateChange::SwapData);
+            }
             self.data_stack.swap(len - 1, len - 2);
             OK
         } else {
@@ -733,6 +757,9 @@ impl State {
     fn rot_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 3 {
+            if let Some(rec) = self.state_rec.as_mut() {
+                rec.push(StateChange::RotData);
+            }
             self.data_stack.swap(len - 1, len - 3);
             OK
         } else {
@@ -741,13 +768,20 @@ impl State {
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            rec.push(StateChange::PopReturn);
+        }
         self.return_stack.push(Frame::from_addr(return_to));
         OK
     }
 
     fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
-            self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)
+            let ret = self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)?;
+            if let Some(rec) = self.state_rec.as_mut() {
+                rec.push(StateChange::PushReturn(ret.clone()));
+            }
+            Ok(ret)
         } else {
             Err(Xerr::ReturnStackUnderflow)
         }
@@ -762,6 +796,9 @@ impl State {
     }
 
     fn push_loop(&mut self, l: Loop) -> Xresult {
+        if let Some(rec) = self.state_rec.as_mut() {
+            rec.push(StateChange::PopLoop);
+        }
         self.loops.push(l);
         OK
     }
@@ -776,7 +813,11 @@ impl State {
 
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
-            self.loops.pop().ok_or(Xerr::LoopStackUnderflow)
+            let l = self.loops.pop().ok_or(Xerr::LoopStackUnderflow)?;
+            if let Some(rec) = self.state_rec.as_mut() {
+                rec.push(StateChange::PushLoop(l.clone()));
+            }
+            Ok(l)            
         } else {
             Err(Xerr::LoopStackUnderflow)
         }
@@ -1122,110 +1163,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         },
         debug_comment,
     )
-}
-
-pub fn format_source_location(xs: &State, at: usize) -> String {
-    xs.debug_map.format_location(at).unwrap()
-}
-
-fn try_print_address(xs: &mut State, start: usize) -> Xresult {
-    let end = (start + 25).min(xs.code.len());
-    for i in start..end {
-        xs.print(&format!("{}\n", format_opcode(xs, i)));
-    }
-    OK
-}
-
-fn core_word_see_code(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        Tok::Num(n) => return try_print_address(xs, n.to_usize().ok_or(Xerr::InvalidAddress)?),
-        _other => return Err(Xerr::ExpectingName),
-    };
-    let e = xs
-        .dict_find(&name)
-        .and_then(|i| xs.dict_at(i))
-        .ok_or(Xerr::UnknownWord)?;
-    match e {
-        Entry::Deferred => {
-            xs.print("unknown word\n");
-        }
-        Entry::Variable(a) => {
-            let buf = format!("heap address: {}\nvalue: {:?}\n", a, xs.heap[*a]);
-            xs.print(&buf);
-        }
-        Entry::Function {
-            immediate,
-            xf: Xfn::Native(x),
-            ..
-        } => {
-            let buf = &format!(
-                "native-function: 0x{:x}{}\n",
-                *x as usize,
-                if *immediate { " <immediate>" } else { "" }
-            );
-            xs.print(&buf);
-        }
-        Entry::Function {
-            immediate,
-            xf: Xfn::Interp(a),
-            len,
-        } => {
-            let start = *a;
-            let end = start + len.unwrap_or(0);
-            let buf = format!(
-                "function: {}{}\n",
-                start,
-                if *immediate { " <immediate>" } else { "" }
-            );
-            xs.print(&buf);
-            for i in start..end {
-                let buf = format!("{}\n", format_opcode(xs, i));
-                xs.print(&buf);
-            }
-        }
-    }
-    OK
-}
-
-pub fn format_xstate(xs: &State) -> Vec<String> {
-    //let cols = 80;
-    let rows = 25;
-    let start = xs.ip() - 5.min(xs.ip());
-    let end = (start + rows).min(xs.code.len());
-    let mut buf = Vec::new();
-    for i in start..end {
-        buf.push(format!("{}", format_opcode(xs, i)));
-    }
-    if xs.ip() == xs.code.len() {
-        buf.push(format!("{:08x}* <allocation-pointer>", xs.ip()));
-    }
-    buf
-}
-
-fn core_word_see_state(xs: &mut State) -> Xresult {
-    for s in format_xstate(xs) {
-        xs.print(&format!("{}\n", &s));
-    }
-    OK
-}
-
-fn core_word_stack_dump(xs: &mut State) -> Xresult {
-    let mut buf = String::new();
-    for val in xs.data_stack.iter().rev() {
-        buf.push_str(&format!("\t{:?}\n", val));
-    }
-    xs.print(&buf);
-    OK
-}
-
-fn core_word_stack_compact_dump(xs: &mut State) -> Xresult {
-    let mut buf = String::new();
-    for val in xs.data_stack.iter().rev() {
-        buf.push_str(&format!("\t{:1?}\n", val));
-    }
-    xs.print(&buf);
-    OK
 }
 
 fn core_word_execute(xs: &mut State) -> Xresult {

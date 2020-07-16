@@ -5,6 +5,7 @@ use minifb::{Key, Window, WindowOptions};
 use xeh::cell::Cell;
 use xeh::error::*;
 use xeh::state::*;
+use xeh::lex::*;
 
 struct MiniFb {
     width: usize,
@@ -82,12 +83,13 @@ fn main() {
     xs.defword("minifb_update", minifb_update).unwrap();
     xs.defword("minifb_put_pixel", minifb_put_pixel).unwrap();
 
-    let file = std::env::args().nth(1).expect("filename");
-    xs.load_file(&file).unwrap();
+    let filename = std::env::args().nth(1).expect("filename");
+    let src = Lex::from_file(&filename).unwrap();
+    if let Err(e) = xs.load(src) {
+        println!("{}", xs.error_context(&e));
+    }
     if let Err(e) = xs.run() {
-        println!("error: {:?}", e);
-        println!("{}", format_source_location(&xs, xs.ip()));
-        println!("{}", format_xstate(&xs).join("\n"));
+        println!("{}", xs.error_context(&e));
         xs.run_repl().unwrap();
     }
 }

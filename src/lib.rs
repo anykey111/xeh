@@ -3,7 +3,7 @@ extern crate num_traits;
 extern crate sha1;
 extern crate rand;
 
-mod lex;
+pub mod lex;
 mod opcodes;
 mod arith;
 pub mod hash;

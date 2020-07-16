@@ -66,7 +66,7 @@ impl Lex {
         self.source_id
     }
 
-    pub fn format_location(&self) -> String {
+    pub fn error_context(&self) -> String {
         let mut buf = String::new();
         if let Some((_tok, l)) = self.last_token() {
             let s = self.buffer.lines().nth(l.line - 1).unwrap();

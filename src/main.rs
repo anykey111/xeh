@@ -1,4 +1,5 @@
 use xeh::state::*;
+use xeh::lex::*;
 
 use getopts::Options;
 
@@ -12,12 +13,12 @@ fn main() {
     let mut xs = State::new().unwrap();
     if matches.opt_present("s") {
         let filename = matches.opt_str("s").expect("script file name");
-        if xs.load_file(&filename).is_ok() {
-            if let Err(e) = xs.run() {
-                eprintln!("{}", xs.format_error(&e));
-            }
+        let src = Lex::from_file(&filename).unwrap();
+        if let Err(e) = xs.load(src) {
+            eprintln!("{}", xs.error_context(&e));
+        } else if let Err(e) = xs.run() {
+            eprintln!("{}", xs.error_context(&e));
         }
     }
-
     xs.run_repl();
 }
