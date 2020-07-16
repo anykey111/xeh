@@ -1,7 +1,6 @@
 (320 const FIRE_WIDTH)
 (168 const FIRE_HEIGHT)
 
-var palette
 [
     0x070707
     0x1F0707
@@ -40,7 +39,7 @@ var palette
     0xDFDF9F
     0xEFEFC7
     0xFFFFFF
-] -> palette
+] const PALETTE
 
 var fire_img
 [ 
@@ -52,16 +51,27 @@ var fire_img
     fire_img rot assoc -> fire_img
 ;
 
+: random_offset
+    random 3 * round
+;
+
+: spread_fire_random
+    local index
+    random_offset
+    dup bitand 1 # mask offset
+    index fire_img get - # substract from color
+    swap # offset color
+    1 + # increase offset by 1
+    FIRE_WIDHT index -
+    -
+    fire_img_update
+;
+
 : spread_fire
-    local idx
-    fire_img idx get local color
-    color if
-        random 3 * round
-        dup 1 bitand color -
-        swap 1 + idx - FIRE_WIDTH -
-        fire_img_update
+    dup fire_img get if
+        spread_fire_random
     else
-        0 idx fire_img_update 
+        0 index FIRE_WIDTH - fire_img_update
     then
 ;
 
