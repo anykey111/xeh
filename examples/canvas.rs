@@ -61,8 +61,12 @@ fn minifb_put_pixel(xs: &mut State) -> Xresult {
     let color = xs.pop_data()?.into_int()?;
     let y = xs.pop_data()?.into_usize()?;
     let x = xs.pop_data()?.into_usize()?;
-    fb.buffer[y * fb.width + x] = color as u32;
-    OK
+    if let Some(p) = fb.buffer.get_mut(y * fb.width + x) {
+        *p = color as u32;
+        OK
+    } else {
+        Err(Xerr::OutOfBounds)
+    }
 }
 
 fn minifb_is_open(xs: &mut State) -> Xresult {

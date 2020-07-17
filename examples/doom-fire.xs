@@ -41,6 +41,9 @@
     0xFFFFFF
 ] const PALETTE)
 
+var fb
+FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb
+
 var fire_img
 [ 
     1 FIRE_HEIGHT - FIRE_WIDTH * 0 do 0 loop
@@ -48,22 +51,17 @@ var fire_img
 ] -> fire_img
 
 : fire_img_update
-    fire_img rot assoc -> fire_img
-;
-
-: random_offset
-    random 3 * round
+    fire_img assoc -> fire_img
 ;
 
 : spread_fire_random
     local index
-    random_offset
-    dup bitand 1 # mask offset
-    index fire_img get - # substract from color
-    swap # offset color
-    1 + # increase offset by 1
-    FIRE_WIDTH index -
-    -
+    random 3 * round local random_offset
+    random_offset 1 bitand # mask offset
+    index fire_img get - # substract 0-1 from color
+    random_offset 1 + # increase offset by 1
+    index -
+    FIRE_WIDTH -
     fire_img_update
 ;
 
@@ -77,18 +75,39 @@ var fire_img
     then
 ;
 
+: spread_fire_test
+    local index
+    index fire_img get if
+        1 index fire_img get -
+        FIRE_WIDTH index - fire_img_update
+    then
+;
+
 : update_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 1 do
-            FIRE_WIDTH i * j + spread_fire
+            FIRE_WIDTH i * j + spread_fire_test
         loop
     loop
 ;
 
-var fb
-FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb
+: draw_fire_pixel
+    i j rot fb minifb_put_pixel
+;    
+
+: draw_fire
+    FIRE_WIDTH 0 do
+        FIRE_HEIGHT 0 do
+            FIRE_WIDTH i * j + fire_img get
+            PALETTE get
+            0xff000000 bitor  # add alpha
+            draw_fire_pixel
+        loop
+    loop
+;
 
 begin fb minifb_is_open while
     update_fire
+    draw_fire
     fb minifb_update
 repeat

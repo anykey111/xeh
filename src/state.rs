@@ -101,6 +101,14 @@ pub enum StateChange {
     PushLoop(Loop),
 }
 
+fn journal_state_change(rec: &mut Vec<StateChange>, x: StateChange) {
+    if rec.len() > 10_000 {
+        let mut rest = rec.split_off(5_000);
+        std::mem::swap(rec, &mut rest);
+    }
+    rec.push(x);
+}
+
 #[derive(Default)]
 pub struct State {
     dict: Vec<(String, Entry)>,
@@ -404,6 +412,7 @@ impl State {
             Def("bitnot", core_word_bitnot),
             Def("random", core_word_random),
             Def("round", core_word_round),
+            Def("assert", core_word_assert),
         ]
         .iter()
         {
@@ -435,6 +444,7 @@ impl State {
         let lex = self.ctx.source.as_ref();
         self.debug_map.insert_with_source(at, dinfo, lex);
         self.code.push(op);
+        println!("{}", format_opcode(self, at));
         OK
     }
 
@@ -518,12 +528,7 @@ impl State {
             }
             Opcode::Ret => {
                 let frame = self.pop_return()?;
-                if self.return_stack.len() == self.ctx.rs_len {
-                    self.set_ip(frame.return_to)?;
-                    Err(Xerr::Next)
-                } else {
-                    self.set_ip(frame.return_to)
-                }
+                self.set_ip(frame.return_to)
             }
             Opcode::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
                 Entry::Deferred => Err(Xerr::UnknownWord),
@@ -575,18 +580,16 @@ impl State {
     }
 
     pub fn rnext(&mut self) -> Xresult {
-        while let Some(rec) = self.state_rec.as_mut() {
+        if let Some(rec) = self.state_rec.as_mut() {
             match rec.pop() {
                 None => (),
                 Some(StateChange::DecrementIp) => {
                     if self.ctx.ip > 0 {
                         self.ctx.ip -= 1;
                     }
-                    break;
                 }
                 Some(StateChange::SetIp(ip)) => {
                     self.ctx.ip = ip;
-                    break;
                 }
                 Some(StateChange::PopData) => {
                     if self.data_stack.len() > self.ctx.ds_len {
@@ -665,7 +668,7 @@ impl State {
 
     fn set_ip(&mut self, new_ip: usize) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::SetIp(self.ctx.ip));
+            journal_state_change(rec, StateChange::SetIp(self.ctx.ip));
         }
         self.ctx.ip = new_ip;
         OK
@@ -673,7 +676,7 @@ impl State {
 
     fn next_ip(&mut self) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::DecrementIp);
+            journal_state_change(rec, StateChange::DecrementIp);
         }
         self.ctx.ip += 1;
         OK
@@ -713,7 +716,7 @@ impl State {
     }
     pub fn push_data(&mut self, data: Cell) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::PopData);
+            journal_state_change(rec, StateChange::PopData);
         }
         self.data_stack.push(data);
         OK
@@ -723,7 +726,7 @@ impl State {
         if self.data_stack.len() > self.ctx.ds_len {
             let val = self.data_stack.pop().ok_or(Xerr::StackUnderflow)?;
             if let Some(rec) = self.state_rec.as_mut() {
-                rec.push(StateChange::PushData(val.clone()));
+                journal_state_change(rec, StateChange::PushData(val.clone()));
             }
             Ok(val)
         } else {
@@ -757,7 +760,7 @@ impl State {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
             if let Some(rec) = self.state_rec.as_mut() {
-                rec.push(StateChange::SwapData);
+                journal_state_change(rec, StateChange::SwapData);
             }
             self.data_stack.swap(len - 1, len - 2);
             OK
@@ -770,7 +773,7 @@ impl State {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 3 {
             if let Some(rec) = self.state_rec.as_mut() {
-                rec.push(StateChange::RotData);
+                journal_state_change(rec, StateChange::RotData);
             }
             self.data_stack.swap(len - 1, len - 3);
             OK
@@ -781,7 +784,7 @@ impl State {
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::PopReturn);
+            journal_state_change(rec, StateChange::PopReturn);
         }
         self.return_stack.push(Frame::from_addr(return_to));
         OK
@@ -791,7 +794,7 @@ impl State {
         if self.return_stack.len() > self.ctx.rs_len {
             let ret = self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)?;
             if let Some(rec) = self.state_rec.as_mut() {
-                rec.push(StateChange::PushReturn(ret.clone()));
+                journal_state_change(rec, StateChange::PushReturn(ret.clone()));
             }
             Ok(ret)
         } else {
@@ -809,7 +812,7 @@ impl State {
 
     fn push_loop(&mut self, l: Loop) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
-            rec.push(StateChange::PopLoop);
+            journal_state_change(rec, StateChange::PopLoop);
         }
         self.loops.push(l);
         OK
@@ -827,7 +830,7 @@ impl State {
         if self.loops.len() > self.ctx.ls_len {
             let l = self.loops.pop().ok_or(Xerr::LoopStackUnderflow)?;
             if let Some(rec) = self.state_rec.as_mut() {
-                rec.push(StateChange::PushLoop(l.clone()));
+                journal_state_change(rec, StateChange::PushLoop(l.clone()));
             }
             Ok(l)            
         } else {
@@ -1303,8 +1306,7 @@ fn core_word_length(xs: &mut State) -> Xresult {
 fn core_word_get(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(x) => {
-            let k = xs.pop_data()?;
-            let idx = k.into_usize()?;
+            let idx = xs.pop_data()?.into_usize()?;
             let val = x.get(idx).ok_or(Xerr::OutOfBounds)?;
             xs.push_data(val.clone())
         }
@@ -1328,11 +1330,10 @@ fn core_word_get(xs: &mut State) -> Xresult {
 }
 
 fn core_word_assoc(xs: &mut State) -> Xresult {
-    let v = xs.pop_data()?;
-    let k = xs.pop_data()?;
     match xs.pop_data()? {
         Cell::Vector(mut x) => {
-            let idx = k.into_usize()?;
+            let idx = xs.pop_data()?.into_usize()?;
+            let v = xs.pop_data()?;
             if x.set_mut(idx, v) {
                 xs.push_data(Cell::Vector(x))
             } else {
@@ -1340,6 +1341,8 @@ fn core_word_assoc(xs: &mut State) -> Xresult {
             }
         }
         Cell::Map(mut x) => {
+            let k = xs.pop_data()?;
+            let v = xs.pop_data()?;
             if let Some(idx) = x.iter().position(|kv| kv.0 == k) {
                 if !x.set_mut(idx, (k, v)) {
                     panic!("assoc failed");
@@ -1351,6 +1354,14 @@ fn core_word_assoc(xs: &mut State) -> Xresult {
             }
         }
         _ => Err(Xerr::TypeError),
+    }
+}
+
+pub fn core_word_assert(xs: &mut State) -> Xresult {
+    if xs.pop_data()?.is_true() {
+        OK
+    } else {
+        Err(Xerr::DebugAssertion)
     }
 }
 

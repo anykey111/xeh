@@ -34,8 +34,12 @@ fn eval_line(xs: &mut State, line: &str) {
             println!("\t{:1?}", val);
             i += 1;
         }
-    } else if let Err(e) = xs.interpret(line) {
-        println!("{}", xs.error_context(&e));
+    } else if cmd == ".top" {
+        if let Some(val) = xs.get_data(0) {
+            println!("\t{:?}", val);
+        }        
+    } else {
+        let _ = xs.interpret(line);
     }
 }
 
