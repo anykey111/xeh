@@ -45,40 +45,44 @@ var fb
 FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb
 
 var fire_img
-[ 
-    1 FIRE_HEIGHT - FIRE_WIDTH * 0 do 0 loop
-    FIRE_WIDTH 0 do 36 loop
-] -> fire_img
+FIRE_WIDTH FIRE_HEIGHT * bytearray_new -> fire_img
+FIRE_WIDTH 0 do
+    36
+    1 FIRE_HEIGHT - FIRE_WIDTH * i +
+    fire_img bytearray_set
+loop
 
 : fire_img_update
-    fire_img assoc -> fire_img
+    fire_img bytearray_set
+;
+
+: fire_img_get
+    fire_img bytearray_get
 ;
 
 : spread_fire_random
     local index
     random 3 * round local random_offset
     random_offset 1 bitand # mask offset
-    index fire_img get - # substract 0-1 from color
-    random_offset 1 + # increase offset by 1
-    index -
-    FIRE_WIDTH -
+    index fire_img_get - # substract 0-1 from color
+    FIRE_WIDTH index -
     fire_img_update
 ;
 
 : spread_fire
-    dup fire_img get if
+    dup fire_img_get if
         spread_fire_random
     else
-        FIRE_WIDTH -
+        FIRE_WIDTH swap -
         0 swap
         fire_img_update
     then
 ;
 
-: spread_fire_test
+: spread_fire_linear
     local index
-    index fire_img get if
-        1 index fire_img get -
+    index fire_img_get if
+        1 index fire_img_get -
         FIRE_WIDTH index - fire_img_update
     then
 ;
@@ -86,7 +90,7 @@ var fire_img
 : update_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 1 do
-            FIRE_WIDTH i * j + spread_fire_test
+            FIRE_WIDTH i * j + spread_fire
         loop
     loop
 ;
@@ -98,7 +102,7 @@ var fire_img
 : draw_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 0 do
-            FIRE_WIDTH i * j + fire_img get
+            FIRE_WIDTH i * j + fire_img_get
             PALETTE get
             0xff000000 bitor  # add alpha
             draw_fire_pixel

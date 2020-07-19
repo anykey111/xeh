@@ -12,6 +12,7 @@ struct MiniFb {
     height: usize,
     buffer: Vec<u32>,
     window: Window,
+    last_frame_time: std::time::Instant,
 }
 
 impl MiniFb {
@@ -26,12 +27,13 @@ impl MiniFb {
         .unwrap_or_else(|e| {
             panic!("{}", e);
         });
-        window.limit_update_rate(Some(std::time::Duration::from_secs(1)));
+        window.limit_update_rate(Some(std::time::Duration::from_millis(16)));
         MiniFb {
             width,
             height,
             window,
             buffer,
+            last_frame_time: std::time::Instant::now(),
         }
     }
 }
@@ -51,6 +53,9 @@ fn minifb_update(xs: &mut State) -> Xresult {
     let w = fb.width;
     let h = fb.height;
     fb.window.update_with_buffer(&buf, w, h).unwrap();
+    let t = std::time::Instant::now();
+    println!("{:?}", t - fb.last_frame_time);
+    fb.last_frame_time = t;
     OK
 }
 
@@ -78,9 +83,43 @@ fn minifb_is_open(xs: &mut State) -> Xresult {
     xs.push_data(c)
 }
 
+struct ByteArray(Vec<u8>);
+
+fn bytearray_new(xs: &mut State) -> Xresult {
+    let len = xs.pop_data()?.into_usize()?;
+    let mut v = Vec::with_capacity(len);
+    v.resize_with(len,|| 0);
+    xs.push_data(Cell::from_any(ByteArray(v)));
+    OK
+}
+
+fn bytearray_get(xs: &mut State) -> Xresult {
+    let p = xs.pop_data()?.into_any()?;
+    let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
+    let ba = p.downcast_mut::<ByteArray>().ok_or(Xerr::TypeError)?;
+    let idx = xs.pop_data()?.into_usize()?;
+    let val = ba.0.get(idx).ok_or(Xerr::OutOfBounds)?;
+    xs.push_data(Cell::from(*val as usize))
+}
+
+fn bytearray_set(xs: &mut State) -> Xresult {
+    let p = xs.pop_data()?.into_any()?;
+    let mut p = p.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
+    let ba = p.downcast_mut::<ByteArray>().ok_or(Xerr::TypeError)?;
+    let idx = xs.pop_data()?.into_usize()?;
+    let val = xs.pop_data()?.into_usize()? as u8;
+    let x = ba.0.get_mut(idx).ok_or(Xerr::OutOfBounds)?;
+    *x = val;
+    OK
+}
+
 fn main() {
     let mut xs = State::new().unwrap();
-    xs.set_state_recording(true);
+    //xs.set_state_recording(true);
+
+    xs.defword("bytearray_new", bytearray_new).unwrap();
+    xs.defword("bytearray_get", bytearray_get).unwrap();
+    xs.defword("bytearray_set", bytearray_set).unwrap();
 
     xs.defword("minifb_new", minifb_new).unwrap();
     xs.defword("minifb_is_open", minifb_is_open).unwrap();

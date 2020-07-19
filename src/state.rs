@@ -413,6 +413,7 @@ impl State {
             Def("random", core_word_random),
             Def("round", core_word_round),
             Def("assert", core_word_assert),
+            Def(".", core_word_display_top),
         ]
         .iter()
         {
@@ -1357,12 +1358,18 @@ fn core_word_assoc(xs: &mut State) -> Xresult {
     }
 }
 
-pub fn core_word_assert(xs: &mut State) -> Xresult {
+fn core_word_assert(xs: &mut State) -> Xresult {
     if xs.pop_data()?.is_true() {
         OK
     } else {
         Err(Xerr::DebugAssertion)
     }
+}
+
+fn core_word_display_top(xs: &mut State) -> Xresult {
+    let val = xs.pop_data()?;
+    println!("{:?}", val);
+    OK
 }
 
 #[test]
