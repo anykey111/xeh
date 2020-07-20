@@ -89,8 +89,7 @@ fn bytearray_new(xs: &mut State) -> Xresult {
     let len = xs.pop_data()?.into_usize()?;
     let mut v = Vec::with_capacity(len);
     v.resize_with(len,|| 0);
-    xs.push_data(Cell::from_any(ByteArray(v)));
-    OK
+    xs.push_data(Cell::from_any(ByteArray(v)))
 }
 
 fn bytearray_get(xs: &mut State) -> Xresult {
