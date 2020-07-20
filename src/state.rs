@@ -403,6 +403,8 @@ impl State {
             Def("-", core_word_sub),
             Def("*", core_word_mul),
             Def("/", core_word_div),
+            Def("1+", core_word_inc),
+            Def("1-", core_word_dec),
             Def("rem", core_word_rem),
             Def("bitand", core_word_bitand),
             Def("bitor", core_word_bitor),
@@ -445,7 +447,6 @@ impl State {
         let lex = self.ctx.source.as_ref();
         self.debug_map.insert_with_source(at, dinfo, lex);
         self.code.push(op);
-        println!("{}", format_opcode(self, at));
         OK
     }
 
@@ -1516,28 +1517,24 @@ fn test_do_loop() {
 #[test]
 fn test_get_assoc() {
     let mut xs = State::new().unwrap();
-    xs.interpret("[1 2] 0 2 assoc 1 4 assoc").unwrap();
+    xs.interpret("55 0 [11 22] assoc").unwrap();
     let v = xs.pop_data().unwrap().into_vector().unwrap();
-    assert_eq!(Some(&Cell::Int(2)), v.get(0));
-    assert_eq!(Some(&Cell::Int(4)), v.get(1));
-    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2] 2 5 assoc"));
-    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2] 2 get"));
-    xs.interpret("[1 2] 1 get").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("{\"a\" 1} \"a\" 3 assoc \"b\" 4 assoc")
+    assert_eq!(Some(&Cell::Int(55)), v.get(0));
+    assert_eq!(Some(&Cell::Int(22)), v.get(1));
+    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("55 2 [11 22] assoc"));
+    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("2 [11 22] get"));
+    xs.interpret("1 [33 44] get").unwrap();
+    assert_eq!(Ok(Cell::Int(44)), xs.pop_data());
+    xs.interpret("3 \"a\" {\"a\" 1} assoc ")
         .unwrap();
     let m = xs.pop_data().unwrap().into_map().unwrap();
     assert_eq!(
         &(Cell::Str("a".to_string()), Cell::Int(3)),
         m.first().unwrap()
     );
-    assert_eq!(
-        &(Cell::Str("b".to_string()), Cell::Int(4)),
-        m.last().unwrap()
-    );
-    xs.interpret("{1 2} 1 get").unwrap();
-    assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-    xs.interpret("{} 1 get").unwrap();
+    xs.interpret("\"a\" {\"a\" 22} get").unwrap();
+    assert_eq!(Cell::Int(22), xs.pop_data().unwrap());
+    xs.interpret("1 {} get").unwrap();
     assert_eq!(Cell::Nil, xs.pop_data().unwrap());
 }
 

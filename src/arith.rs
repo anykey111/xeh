@@ -42,6 +42,22 @@ pub fn core_word_div(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_div, std::ops::Div::<f64>::div)
 }
 
+pub fn core_word_inc(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Int(a) => xs.push_data(Cell::Int(a + 1)),
+        Cell::Real(a) => xs.push_data(Cell::Real(a + 1.0)),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
+pub fn core_word_dec(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Int(a) => xs.push_data(Cell::Int(a - 1)),
+        Cell::Real(a) => xs.push_data(Cell::Real(a - 1.0)),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
 pub fn core_word_rem(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_rem, std::ops::Rem::<f64>::rem)
 }
@@ -105,6 +121,10 @@ fn test_arith() {
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
     xs.interpret("7 3 rem").unwrap();
     assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    xs.interpret("1 1+").unwrap();
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    xs.interpret("1 1-").unwrap();
+    assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
     assert_eq!(Err(Xerr::TypeError), xs.interpret("\"s\" 1 +"));

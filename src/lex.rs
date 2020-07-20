@@ -186,8 +186,7 @@ impl Lex {
                 }
                 None => digits.push('0' as u8),
                 _ => {
-                    self.cursor.pos = start;
-                    return Err(Xerr::InputParseError);
+                    return Ok(Tok::Word(w.to_string()));
                 }
             }
         }
@@ -198,15 +197,13 @@ impl Lex {
             if c.is_digit(radix) {
                 digits.push(c as u8);
             } else {
-                self.cursor.pos = start;
-                return Err(Xerr::InputParseError);
+                return Ok(Tok::Word(w.to_string()));
             }
         }
         if let Some(i) = BigInt::parse_bytes(&digits, radix) {
             return Ok(Tok::Num(i));
         }
-        self.cursor.pos = start;
-        return Err(Xerr::InputParseError);
+        return Ok(Tok::Word(w.to_string()));
     }
 
     fn parse_string(&mut self) -> Xresult1<Tok> {
@@ -291,6 +288,10 @@ fn test_lex_num() {
     assert_eq!(Tok::Num((0).to_bigint().unwrap()), lex.next().unwrap());
     assert_eq!(Tok::Num((3).to_bigint().unwrap()), lex.next().unwrap());
     assert_eq!(Tok::Num((0xff00).to_bigint().unwrap()), lex.next().unwrap());
+    let mut lex = Lex::from_str("--1 1- 0x1x");
+    assert_eq!(Tok::Word("--1".to_string()), lex.next().unwrap());
+    assert_eq!(Tok::Word("1-".to_string()), lex.next().unwrap());
+    assert_eq!(Tok::Word("0x1x".to_string()), lex.next().unwrap());
 }
 
 #[test]
