@@ -58,6 +58,35 @@ pub fn core_word_dec(xs: &mut State) -> Xresult {
     }
 }
 
+use std::cmp::Ordering;
+
+fn compare_reals(a: Xreal, b: Xreal) -> Ordering {
+    if a < b {
+        Ordering::Less
+    } else if a > b {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
+
+fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
+    let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
+    match (a, b) {
+        (Cell::Int(a), Cell::Int(b)) => Ok(a.cmp(&b)),
+        (Cell::Int(a), Cell::Real(b)) => Ok(compare_reals(a as Xreal, b)),
+        (Cell::Real(a), Cell::Int(b)) => Ok(compare_reals(a, b as Xreal)),
+        (Cell::Real(a), Cell::Real(b)) => Ok(compare_reals(a, b)),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
+pub fn core_word_less_then(xs: &mut State) -> Xresult {
+    let c = compare_cells(xs)?;
+    xs.push_data(Cell::from(c == Ordering::Less))
+}
+
 pub fn core_word_rem(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_rem, std::ops::Rem::<f64>::rem)
 }

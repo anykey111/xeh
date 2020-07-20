@@ -95,6 +95,7 @@ pub enum StateChange {
     PopData,
     SwapData,
     RotData,
+    OverData,
     PopReturn,
     PushReturn(Frame),
     PopLoop,
@@ -399,12 +400,14 @@ impl State {
             Def("drop", |xs| xs.drop_data()),
             Def("swap", |xs| xs.swap_data()),
             Def("rot", |xs| xs.rot_data()),
+            Def("over", |xs| xs.over_data()),
             Def("+", core_word_add),
             Def("-", core_word_sub),
             Def("*", core_word_mul),
             Def("/", core_word_div),
             Def("1+", core_word_inc),
             Def("1-", core_word_dec),
+            Def("<", core_word_less_then),
             Def("rem", core_word_rem),
             Def("bitand", core_word_bitand),
             Def("bitor", core_word_bitor),
@@ -619,6 +622,9 @@ impl State {
                         return Err(Xerr::StackUnderflow);
                     }
                 }
+                Some(StateChange::OverData) => {
+                    self.drop_data()?;
+                }
                 Some(StateChange::PopReturn) => {
                     if self.return_stack.len() > self.ctx.rs_len {
                         self.return_stack.pop();
@@ -779,6 +785,19 @@ impl State {
             }
             self.data_stack.swap(len - 1, len - 3);
             OK
+        } else {
+            Err(Xerr::StackUnderflow)
+        }
+    }
+
+    fn over_data(&mut self) -> Xresult {
+        let len = self.data_stack.len();
+        if (len - self.ctx.ds_len) >= 2 {
+            if let Some(rec) = self.state_rec.as_mut() {
+                journal_state_change(rec, StateChange::OverData);
+            }
+            let val = self.data_stack[len - 2].clone();
+            self.push_data(val)
         } else {
             Err(Xerr::StackUnderflow)
         }
@@ -1405,6 +1424,12 @@ fn test_data_stack() {
     assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
     let mut xs = State::new().unwrap();
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
+    let mut xs = State::new().unwrap();
+    xs.interpret("1 2 over").unwrap();
+    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 over"));
 }
 
 #[test]
