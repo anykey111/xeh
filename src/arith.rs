@@ -2,9 +2,10 @@ use crate::cell::*;
 use crate::error::*;
 use crate::state::*;
 
+// (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {
-    let a = xs.pop_data()?.into_int()?;
     let b = xs.pop_data()?.into_int()?;
+    let a = xs.pop_data()?.into_int()?;
     let c = ops_int(a, b);
     xs.push_data(Cell::Int(c))
 }
@@ -14,8 +15,8 @@ fn arithmetic_ops_real(
     ops_int: fn(Xint, Xint) -> Xint,
     ops_real: fn(f64, f64) -> f64,
 ) -> Xresult {
-    let a = xs.pop_data()?;
     let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
     match (a, b) {
         (Cell::Int(a), Cell::Int(b)) => xs.push_data(Cell::Int(ops_int(a, b))),
         (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(a as f64, b))),
@@ -93,16 +94,16 @@ pub fn core_word_round(xs: &mut State) -> Xresult {
 fn test_arith() {
     let mut xs = State::new().unwrap();
     xs.interpret("5 4 -").unwrap();
-    assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-    xs.interpret("4 5 -").unwrap();
     assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    xs.interpret("4 5 -").unwrap();
+    assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
     xs.interpret("4 5 *").unwrap();
     assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-    xs.interpret("4 20 /").unwrap();
+    xs.interpret("20 4 /").unwrap();
     assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     xs.interpret("1 1 +").unwrap();
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("3 7 rem").unwrap();
+    xs.interpret("7 3 rem").unwrap();
     assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
@@ -115,9 +116,9 @@ fn test_arith() {
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
     xs.interpret("0 bitnot").unwrap();
     assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-    xs.interpret("3 1 bitshl").unwrap();
+    xs.interpret("1 3 bitshl").unwrap();
     assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-    xs.interpret("3 16 bitshr").unwrap();
+    xs.interpret("16 3 bitshr").unwrap();
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
 }
 
