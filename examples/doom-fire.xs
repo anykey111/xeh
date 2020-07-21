@@ -48,7 +48,7 @@ var fire_img
 FIRE_WIDTH FIRE_HEIGHT * bytearray_new -> fire_img
 FIRE_WIDTH 0 do
     36
-    1 FIRE_HEIGHT - FIRE_WIDTH * i +
+    FIRE_HEIGHT 1- FIRE_WIDTH * i +
     fire_img bytearray_set
 loop
 
@@ -60,12 +60,17 @@ loop
     fire_img bytearray_get
 ;
 
+: calc_offset
+    FIRE_WIDTH - random 3 * round -
+;
+
+: calc_color
+    fire_img_get random 3 * round 1 bitand -
+;
+
 : spread_fire_random
-    local index
-    random 3 * round local random_offset
-    random_offset 1 bitand # mask offset
-    index fire_img_get - # substract 0-1 from color
-    FIRE_WIDTH index -
+    dup calc_color
+    swap calc_offset
     fire_img_update
 ;
 
@@ -73,23 +78,15 @@ loop
     dup fire_img_get if
         spread_fire_random
     else
-        FIRE_WIDTH swap -
-        0 swap
+        FIRE_WIDTH -
+        0 swap 
         fire_img_update
-    then
-;
-
-: spread_fire_linear
-    local index
-    index fire_img_get if
-        1 index fire_img_get -
-        FIRE_WIDTH index - fire_img_update
     then
 ;
 
 : update_fire
     FIRE_WIDTH 0 do
-        FIRE_HEIGHT 1 do
+        FIRE_HEIGHT 2 do
             FIRE_WIDTH i * j + spread_fire
         loop
     loop
