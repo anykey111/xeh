@@ -20,5 +20,3 @@ minifb = "0.16"
 font-kit = "0.5"
 raqote = "0.7"
 
-[profile.release]
-opt-level = "s"
