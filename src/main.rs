@@ -19,9 +19,12 @@ fn main() {
         let src = Lex::from_file(&filename).unwrap();
         if let Err(e) = xs.load_source(src) {
             eprintln!("{}", xs.error_context(&e));
+            xs.run_repl().unwrap();
         } else if let Err(e) = xs.run() {
             eprintln!("{}", xs.error_context(&e));
+            xs.run_repl().unwrap();
         }
+    } else {
+        xs.run_repl().unwrap();
     }
-    xs.run_repl();
 }
