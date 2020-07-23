@@ -20,6 +20,7 @@ pub enum Xerr {
     IOError,
     OutOfBounds,
     DebugAssertion,
+    InternalError,
     // return to interpreter loop
     Next,
 }

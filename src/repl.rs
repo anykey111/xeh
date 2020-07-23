@@ -24,10 +24,6 @@ fn eval_line(xs: &mut State, line: &str) {
         } else {
             println!("{}", xs.current_line());
         }
-    } else if cmd == ".rdump" {
-        if let Err(e) = xs.rdump() {
-            println!("{}", xs.error_context(&e));
-        }
     } else if cmd == ".s" {
         let mut i = 0;
         while let Some(val) = xs.get_data(i) {

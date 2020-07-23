@@ -463,7 +463,7 @@ impl State {
     }
 
     fn patch_jump(&mut self, at: usize, offs: isize) -> Xresult {
-        let insn = match self.code.get(at).ok_or(Xerr::InvalidAddress)? {
+        let insn = match self.code.get(at).ok_or(Xerr::InternalError)? {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
             Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
@@ -497,18 +497,16 @@ impl State {
     }
 
     pub fn run(&mut self) -> Xresult {
-        let mut exec = || loop {
-            self.next()?;
-        };
-        match exec() {
-            Err(Xerr::Next) => OK,
-            result => result,
+        loop {
+            if let Err(e) = self.next() {
+                break if e == Xerr::Next { OK } else { Err(e) };
+            }
         }
     }
 
     pub fn next(&mut self) -> Xresult {
         let ip = self.ip();
-        match self.code[ip] {
+        match self.code.get(ip).cloned().ok_or(Xerr::InternalError)? {
             Opcode::Nop => self.next_ip(),
             Opcode::Next => {
                 self.next_ip()?;
@@ -646,13 +644,6 @@ impl State {
                     }
                 }
             }
-        }
-        OK
-    }
-
-    pub fn rdump(&self) -> Xresult {
-        for i in self.state_rec.iter().map(|v| v.iter()).flatten().rev().take(25) {
-            println!("{:?}", i);
         }
         OK
     }
@@ -853,7 +844,7 @@ impl State {
             if let Some(rec) = self.state_rec.as_mut() {
                 journal_state_change(rec, StateChange::PushLoop(l.clone()));
             }
-            Ok(l)            
+            Ok(l)
         } else {
             Err(Xerr::LoopStackUnderflow)
         }
@@ -1550,8 +1541,7 @@ fn test_get_assoc() {
     assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("2 [11 22] get"));
     xs.interpret("1 [33 44] get").unwrap();
     assert_eq!(Ok(Cell::Int(44)), xs.pop_data());
-    xs.interpret("3 \"a\" {\"a\" 1} assoc ")
-        .unwrap();
+    xs.interpret("3 \"a\" {\"a\" 1} assoc ").unwrap();
     let m = xs.pop_data().unwrap().into_map().unwrap();
     assert_eq!(
         &(Cell::Str("a".to_string()), Cell::Int(3)),
