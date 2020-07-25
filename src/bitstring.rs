@@ -355,12 +355,10 @@ impl PartialEq for Bitstring {
         if self.len() != other.len() {
             false
         } else if self.is_bytestring() && other.is_bytestring() {
-            let start = self.start_index();
-            let end = self.end_index();
-            let n = end - start;
-            let ita = self.data.iter().skip(start).take(n);
-            let itb = other.data.iter().skip(other.start_index()).take(n);
-            ita.zip(itb).all(|x| x.0 == x.1)
+            let n = self.len();
+            let ita = &self.data[self.bounds.range()];
+            let itb = &other.data[other.bounds.range()];
+            ita.iter().zip(itb).all(|x| x.0 == x.1)
         } else {
             self.bits().zip(other.bits()).all(|x| x.0 == x.1)
         }
