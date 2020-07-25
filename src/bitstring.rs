@@ -224,14 +224,13 @@ impl Bitstring {
     }
 
     pub fn to_i64(&self, order: Byteorder) -> i64 {
-        println!("{:?} {:?}", self.data, self.range);
-        let slice = &self.data[self.range.bytes_range()];
-        to_signed!(self.range, slice, order, u64, i64)
+        let src = self.slice();
+        to_signed!(self.range, src, order, u64, i64)
     }
 
     pub fn to_u64(&self, order: Byteorder) -> u64 {
-        let slice = &self.data[self.range.bytes_range()];
-        to_unsigned!(self.range, slice, order, u64)
+        let src = self.slice();
+        to_unsigned!(self.range, src, order, u64)
     }
 
     pub fn from_i64(value: i64, num_bits: usize, order: Byteorder) -> Bitstring {
@@ -249,12 +248,12 @@ impl Bitstring {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let buf = &self.data[self.range.bytes_range()];
-        let cap = buf.len();
+        let src = self.slice();
+        let cap = src.len();
         let mut bytes = Vec::<u8>::with_capacity(cap);
         let mut acc = 0u32;
         let mut n = 0;
-        fold_bits!(self.range, buf, |x, num_bits| {
+        fold_bits!(self.range, src, |x, num_bits| {
             acc = (acc << num_bits) | x as u32;
             n += num_bits;
             if n >= 8 {
@@ -269,6 +268,10 @@ impl Bitstring {
         bytes
     }
 
+    fn slice(&self) -> &[u8] {
+        &self.data[self.range.bytes_range()]
+    }
+
     pub fn bits<'a>(&'a self) -> Bits<'a> {
         Bits {
             pos: self.range.start(),
@@ -281,11 +284,11 @@ impl Bitstring {
             Bitstring::new()
         } else {
             let num_bits = self.len();
-            let mut tmp = Vec::from(&self.data[self.range.bytes_range()]);
+            let mut tmp = Vec::from(self.slice());
             let d = (num_bits % 8) as u32;
             if d > 0 {
                 // clear unused bits
-                let x = &mut tmp[num_bits / 8];
+                let x = tmp.last_mut().unwrap();
                 *x = x.wrapping_shr(8 - d).wrapping_shl(8 - d);
             }
             Bitstring {
@@ -306,8 +309,7 @@ impl Bitstring {
     fn append_bytestring(&self, other: &Bitstring) -> Bitstring {
         let mut tmp = self.detach();
         let dst = Rc::make_mut(&mut tmp.data);
-        let src = &other.data[other.range.bytes_range()];
-        dst.extend_from_slice(src);
+        dst.extend_from_slice(other.slice());
         let start = tmp.range.start();
         let end = tmp.range.end() + other.len();
         tmp.range = BitstringRange(start..end);
@@ -320,7 +322,7 @@ impl Bitstring {
         let dst = Rc::make_mut(&mut tmp.data);
         let new_len = BitstringRange::upper_bound_index(self.len() + other.len());
         dst.resize_with(new_len, || 0);
-        let src = &other.data[other.range.bytes_range()];
+        let src = other.slice();
         fold_bits!(other.range, src, |x, num_bits| {
             let i = ptr / 8;
             let used = ptr % 8;
@@ -343,8 +345,8 @@ impl PartialEq for Bitstring {
         if self.len() != other.len() {
             false
         } else if self.range.is_bytestring() && other.range.is_bytestring() {
-            let a = &self.data[self.range.bytes_range()];
-            let b = &other.data[other.range.bytes_range()];
+            let a = self.slice();
+            let b = other.slice();
             a.iter().zip(b).all(|x| x.0 == x.1)
         } else {
             self.bits().zip(other.bits()).all(|x| x.0 == x.1)
