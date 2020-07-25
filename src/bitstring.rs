@@ -12,66 +12,90 @@ pub const BE: Byteorder = Byteorder::BigEndian;
 pub const LE: Byteorder = Byteorder::LittleEndian;
 
 #[derive(Debug, Clone)]
-pub struct Bitrange(Range<usize>);
+struct BitstringRange(Range<usize>);
 
-impl Bitrange {
-    pub fn from_slice(data: &[u8]) -> Bitrange {
-        Bitrange(0..data.len() * 8)
+impl Default for BitstringRange {
+    fn default() -> Self {
+        BitstringRange(0..0)
+    }
+}
+
+impl BitstringRange {
+    fn from_len(num_bytes: usize) -> BitstringRange {
+        BitstringRange(0..(num_bytes * 8))
     }
 
-    pub fn num_bits(&self) -> usize {
+    fn num_bits(&self) -> usize {
         self.0.len()
     }
 
-    pub fn start(&self) -> usize {
+    fn start(&self) -> usize {
         self.0.start
     }
 
-    pub fn end(&self) -> usize {
+    fn end(&self) -> usize {
         self.0.end
     }
 
-    pub fn range(&self) -> Range<usize> {
+    fn bits_range(&self) -> Range<usize> {
         self.0.clone()
     }
 
-    pub fn split_at(&self, bit_index: usize) -> Option<(Bitrange, Bitrange)> {
-        let mid = self.0.start + bit_index;
-        if mid > self.0.end {
+    fn bytes_range(&self) -> Range<usize> {
+        let i = self.start() / 8;
+        let e = Self::upper_bound_index(self.end());
+        i..e
+    }
+
+    fn is_start_aligned(&self) -> bool {
+        (self.start() % 8) == 0
+    }
+
+    fn is_bytestring(&self) -> bool {
+        self.is_start_aligned() && (self.end() % 8 == 0)
+    }
+
+    fn upper_bound_index(bit_idx: usize) -> usize {
+        ((bit_idx + 7) & !7) / 8
+    }
+
+    fn split_at(&self, bit_index: usize) -> Option<(BitstringRange, BitstringRange)> {
+        let mid = self.start() + bit_index;
+        if mid > self.end() {
             return None;
         }
-        let left = Bitrange(self.0.start..mid);
-        let right = Bitrange(mid..self.0.end);
+        let left = BitstringRange(self.start()..mid);
+        let right = BitstringRange(mid..self.end());
         Some((left, right))
     }
 
-    pub fn peek(&self, num_bits: usize) -> Option<Bitrange> {
-        if num_bits > self.0.len() {
+    fn peek(&self, num_bits: usize) -> Option<BitstringRange> {
+        if num_bits > self.num_bits() {
             None
         } else {
-            let start = self.0.start;
+            let start = self.start();
             let end = start + num_bits;
-            Some(Bitrange(start..end))
+            Some(BitstringRange(start..end))
         }
     }
 
-    pub fn read(&mut self, num_bits: usize) -> Option<Bitrange> {
+    fn read(&mut self, num_bits: usize) -> Option<BitstringRange> {
         let bs = self.peek(num_bits)?;
         self.0.start += num_bits;
         Some(bs)
     }
 
-    pub fn peek_rear(&self, num_bits: usize) -> Option<Bitrange> {
-        if num_bits > self.0.len() {
+    fn peek_rear(&self, num_bits: usize) -> Option<BitstringRange> {
+        if num_bits > self.num_bits() {
             None
         } else {
-            let end = self.0.end;
+            let end = self.end();
             let start = end - num_bits;
-            Some(Bitrange(start..end))
+            Some(BitstringRange(start..end))
         }
     }
 
-    pub fn read_rear(&mut self, num_bits: usize) -> Option<Bitrange> {
+    fn read_rear(&mut self, num_bits: usize) -> Option<BitstringRange> {
         let bs = self.peek_rear(num_bits)?;
         self.0.end -= num_bits;
         Some(bs)
@@ -79,16 +103,16 @@ impl Bitrange {
 }
 
 macro_rules! to_unsigned {
-    ($bounds:expr, $data:expr, $order:expr) => {{
-        let mut acc = 0;
+    ($range:expr, $data:expr, $order:expr, $t:ty) => {{
+        let mut acc: $t = 0;
         match $order {
-            Byteorder::BigEndian => fold_bits!($bounds, $data, |x, num_bits| {
-                acc = (acc << num_bits) | (x as u64);
+            Byteorder::BigEndian => fold_bits!($range, $data, |x, num_bits| {
+                acc = (acc << num_bits) | x as $t;
             }),
             Byteorder::LittleEndian => {
                 let mut shift = 0;
-                fold_bits!($bounds, $data, |x, num_bits| {
-                    acc |= (x as u64) << shift;
+                fold_bits!($range, $data, |x, num_bits| {
+                    acc |= (x as $t) << shift;
                     shift += num_bits;
                 })
             }
@@ -98,33 +122,27 @@ macro_rules! to_unsigned {
 }
 
 macro_rules! to_signed {
-    ($bounds:expr, $data:expr, $order:expr) => {{
-        let val = to_unsigned!($bounds, $data, $order);
-        let i = $bounds.len() - 1;
-        let mask = 1 << i;
+    ($range:expr, $data:expr, $order:expr, $u_t:ty, $i_t:ty) => {{
+        let val = to_unsigned!($range, $data, $order, $u_t);
+        let mask = 1 << ($range.num_bits() - 1);
         if (val & mask) > 0 {
-            ((val ^ mask) + 1).wrapping_neg() as i64
+            (((val ^ mask) + 1) as $i_t).wrapping_neg()
         } else {
-            val as i64
+            val as $i_t
         }
     }};
 }
 
 macro_rules! fold_bits {
-    ($bounds:expr, $data:expr, $f:expr) => {{
-        let mut start = $bounds.start;
-        let end = $bounds.end;
-        let mut drift = start % 8;
-        let index = start / 8;
-        let mut it = $data.iter().skip(index);
-        while start < end {
+    ($range:expr, $data:expr, $f:expr) => {{
+        let mut start = $range.start();
+        let end = $range.end();
+        for x in $data {
+            let drift = start % 8;
             let n = (end - start).min(8 - drift);
-            let v = it.next().unwrap();
-            let v = v.wrapping_shl(drift as u32);
-            let v = v.wrapping_shr((8 - n) as u32);
+            let val = (*x).wrapping_shl(drift as _).wrapping_shr((8 - n) as _);
+            $f(val, n);
             start += n;
-            drift = 0;
-            $f(v, n as u32);
         }
     }};
 }
@@ -147,8 +165,7 @@ macro_rules! num_to_big {
             buf.push(x as u8);
             n -= d;
         }
-        bs.bounds = Bitrange(0..num_bits);
-        assert!(bs.data.len() * 8 >= num_bits);
+        bs.range = BitstringRange(0..num_bits);
         bs
     }};
 }
@@ -170,58 +187,51 @@ macro_rules! num_to_little {
             buf.push(x as u8);
             n += d;
         }
-        bs.bounds = Bitrange(0..num_bits);
-        assert!(bs.data.len() * 8 >= num_bits);
+        bs.range = BitstringRange(0..num_bits);
         bs
     }};
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Bitstring {
-    bounds: Bitrange,
+    range: BitstringRange,
     data: Rc<Vec<u8>>,
 }
 
 impl Bitstring {
     pub fn new() -> Self {
-        Self {
-            bounds: Bitrange(0..0),
-            data: Rc::default(),
-        }
+        Self::default()
     }
 
     pub fn len(&self) -> usize {
-        self.bounds.num_bits()
-    }
-
-    pub fn bit_range(&self) -> Range<usize> {
-        self.bounds.range()
+        self.range.num_bits()
     }
 
     pub fn read(&mut self, num_bits: usize) -> Option<Bitstring> {
-        let tmp = self.bounds.read(num_bits)?;
+        let tmp = self.range.read(num_bits)?;
         let mut bs = self.clone();
-        bs.bounds = tmp;
+        bs.range = tmp;
         Some(bs)
     }
 
     pub fn split_at(&self, bit_index: usize) -> Option<(Bitstring, Bitstring)> {
-        let (h, rest) = self.bounds.split_at(bit_index)?;
+        let (h, rest) = self.range.split_at(bit_index)?;
         let mut h_bs = self.clone();
-        h_bs.bounds = h;
+        h_bs.range = h;
         let mut rest_bs = self.clone();
-        rest_bs.bounds = rest;
+        rest_bs.range = rest;
         Some((h_bs, rest_bs))
     }
 
     pub fn to_i64(&self, order: Byteorder) -> i64 {
-        let buf = &self.data;
-        to_signed!(self.bit_range(), buf, order)
+        println!("{:?} {:?}", self.data, self.range);
+        let slice = &self.data[self.range.bytes_range()];
+        to_signed!(self.range, slice, order, u64, i64)
     }
 
     pub fn to_u64(&self, order: Byteorder) -> u64 {
-        let buf = &self.data;
-        to_unsigned!(self.bit_range(), buf, order)
+        let slice = &self.data[self.range.bytes_range()];
+        to_unsigned!(self.range, slice, order, u64)
     }
 
     pub fn from_i64(value: i64, num_bits: usize, order: Byteorder) -> Bitstring {
@@ -239,12 +249,12 @@ impl Bitstring {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let buf = &self.data;
-        let cap = upper_bound_byte_idx(self.bounds.num_bits());
+        let buf = &self.data[self.range.bytes_range()];
+        let cap = buf.len();
         let mut bytes = Vec::<u8>::with_capacity(cap);
         let mut acc = 0u32;
         let mut n = 0;
-        fold_bits!(self.bit_range(), buf, |x, num_bits| {
+        fold_bits!(self.range, buf, |x, num_bits| {
             acc = (acc << num_bits) | x as u32;
             n += num_bits;
             if n >= 8 {
@@ -261,31 +271,17 @@ impl Bitstring {
 
     pub fn bits<'a>(&'a self) -> Bits<'a> {
         Bits {
-            pos: self.bounds.start(),
+            pos: self.range.start(),
             bs: self,
         }
-    }
-
-    fn start_index(&self) -> usize {
-        self.bounds.start() / 8
-    }
-
-    fn end_index(&self) -> usize {
-        upper_bound_byte_idx(self.bounds.end())
-    }
-
-    pub fn is_bytestring(&self) -> bool {
-        (self.bounds.start() % 8 == 0) && (self.bounds.end() % 8 == 0)
     }
 
     pub fn detach(&self) -> Bitstring {
         if self.len() == 0 {
             Bitstring::new()
         } else {
-            let a = self.start_index();
-            let b = self.end_index();
             let num_bits = self.len();
-            let mut tmp = Vec::from(&self.data[a..b]);
+            let mut tmp = Vec::from(&self.data[self.range.bytes_range()]);
             let d = (num_bits % 8) as u32;
             if d > 0 {
                 // clear unused bits
@@ -293,14 +289,14 @@ impl Bitstring {
                 *x = x.wrapping_shr(8 - d).wrapping_shl(8 - d);
             }
             Bitstring {
-                bounds: Bitrange(0..num_bits),
+                range: BitstringRange(0..num_bits),
                 data: Rc::new(tmp),
             }
         }
     }
 
     pub fn append(&self, other: &Bitstring) -> Bitstring {
-        if self.is_bytestring() && other.is_bytestring() {
+        if self.range.is_bytestring() && other.range.is_bytestring() {
             self.append_bytestring(other)
         } else {
             self.append_bitstring(other)
@@ -309,78 +305,50 @@ impl Bitstring {
 
     fn append_bytestring(&self, other: &Bitstring) -> Bitstring {
         let mut tmp = self.detach();
-        let buf = Rc::make_mut(&mut tmp.data);
-        let from = other.bounds.start() / 8;
-        let to = other.bounds.end() / 8;
-        for x in &other.data[from..to] {
-            buf.push(*x);
-        }
-        let start = tmp.bounds.start();
-        let end = tmp.bounds.end() + other.len();
-        tmp.bounds = Bitrange(start..end);
+        let dst = Rc::make_mut(&mut tmp.data);
+        let src = &other.data[other.range.bytes_range()];
+        dst.extend_from_slice(src);
+        let start = tmp.range.start();
+        let end = tmp.range.end() + other.len();
+        tmp.range = BitstringRange(start..end);
         tmp
     }
 
     fn append_bitstring(&self, other: &Bitstring) -> Bitstring {
-        let mut ptr = self.bounds.end();
+        let mut ptr = self.range.end();
         let mut tmp = self.detach();
-        let buf = Rc::make_mut(&mut tmp.data);
-        let cap = upper_bound_byte_idx(self.len() + other.len());
-        while buf.len() < cap {
-            buf.push(0);
-        }
-        fold_bits!(other.bit_range(), &other.data, |x, num_bits| {
+        let dst = Rc::make_mut(&mut tmp.data);
+        let new_len = BitstringRange::upper_bound_index(self.len() + other.len());
+        dst.resize_with(new_len, || 0);
+        let src = &other.data[other.range.bytes_range()];
+        fold_bits!(other.range, src, |x, num_bits| {
             let i = ptr / 8;
-            let used = (ptr % 8) as u32;
-            let rest = (8 - used) as u32;
+            let used = ptr % 8;
+            let rest = 8 - used;
             if num_bits <= rest {
-                buf[i] |= (x << (rest - num_bits)) as u8;
+                dst[i] |= (x << (rest - num_bits)) as u8;
             } else {
-                buf[i] |= (x >> (num_bits - rest)) as u8;
-                buf[i + 1] = (x << (8 - (num_bits - rest))) as u8;
+                dst[i] |= (x >> (num_bits - rest)) as u8;
+                dst[i + 1] = (x << (8 - (num_bits - rest))) as u8;
             }
             ptr += num_bits as usize;
         });
-        tmp.bounds = Bitrange(0..ptr);
+        tmp.range = BitstringRange(0..ptr);
         tmp
     }
-}
-
-fn upper_bound_byte_idx(bit_idx: usize) -> usize {
-    ((bit_idx + 7) & !7) / 8
 }
 
 impl PartialEq for Bitstring {
     fn eq(&self, other: &Bitstring) -> bool {
         if self.len() != other.len() {
             false
-        } else if self.is_bytestring() && other.is_bytestring() {
-            let n = self.len();
-            let ita = &self.data[self.bounds.range()];
-            let itb = &other.data[other.bounds.range()];
-            ita.iter().zip(itb).all(|x| x.0 == x.1)
+        } else if self.range.is_bytestring() && other.range.is_bytestring() {
+            let a = &self.data[self.range.bytes_range()];
+            let b = &other.data[other.range.bytes_range()];
+            a.iter().zip(b).all(|x| x.0 == x.1)
         } else {
             self.bits().zip(other.bits()).all(|x| x.0 == x.1)
         }
-    }
-}
-
-impl fmt::Debug for Bitstring {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let start = self.start_index();
-        let end = self.end_index();
-        let limit = (end - start).min(256);
-        let mut buf = String::with_capacity(limit * 2 + 2);
-        for x in self.data.iter().skip(start).take(limit) {
-            let h: u8 = 0x30u8 + (x >> 4);
-            let l: u8 = 0x30u8 + (x & 0xf);
-            buf.push(h.into());
-            buf.push(l.into());
-        }
-        if (end - start) > limit {
-            buf.push_str("..");
-        }
-        write!(f, "Bitstring({:?}, [{}])", self.bounds.0, buf)
     }
 }
 
@@ -388,7 +356,7 @@ impl<'a> From<&'a [u8]> for Bitstring {
     fn from(s: &'a [u8]) -> Self {
         let n = s.len() * 8;
         Bitstring {
-            bounds: Bitrange(0..n),
+            range: BitstringRange(0..n),
             data: Rc::new(Vec::from(s)),
         }
     }
@@ -397,7 +365,7 @@ impl<'a> From<&'a [u8]> for Bitstring {
 impl From<Vec<u8>> for Bitstring {
     fn from(v: Vec<u8>) -> Self {
         Bitstring {
-            bounds: Bitrange::from_slice(&v),
+            range: BitstringRange::from_len(v.len()),
             data: Rc::new(v),
         }
     }
@@ -423,7 +391,7 @@ pub struct Bits<'a> {
 impl<'a> Iterator for Bits<'a> {
     type Item = u8;
     fn next(&mut self) -> Option<u8> {
-        if self.pos >= self.bs.bounds.end() {
+        if self.pos >= self.bs.range.end() {
             None
         } else {
             let idx = self.pos / 8;
@@ -441,21 +409,8 @@ mod tests {
     use crate::bitstring::*;
 
     #[test]
-    fn test_raw_read() {
-        let vals = vec![0x81, 0xff, 0x81];
-        let mut bs = Bitrange::from_slice(&vals);
-        assert_eq!(0..4, bs.read(4).unwrap().range());
-        assert_eq!(17..24, bs.read_rear(7).unwrap().range());
-        let mut res = Vec::new();
-        fold_bits!(bs.range(), vals, |x, num_bits| {
-            res.push((x, num_bits));
-        });
-        assert_eq!(res, &[(0x1, 4), (0xff, 8), (1, 1)]);
-    }
-
-    #[test]
     fn test_split_at() {
-        let bs = Bitstring::from(&vec![0x7f]);
+        let bs = Bitstring::from(vec![0x7f]);
         let (a, b) = bs.split_at(4).unwrap();
         assert_eq!(a.to_i64(LE), 0x7);
         assert_eq!(b.to_u64(LE), 0xf);
@@ -463,36 +418,36 @@ mod tests {
 
     #[test]
     fn test_index_upper_bound() {
-        assert_eq!(upper_bound_byte_idx(0), 0);
-        assert_eq!(upper_bound_byte_idx(1), 1);
-        assert_eq!(upper_bound_byte_idx(2), 1);
-        assert_eq!(upper_bound_byte_idx(3), 1);
-        assert_eq!(upper_bound_byte_idx(4), 1);
-        assert_eq!(upper_bound_byte_idx(5), 1);
-        assert_eq!(upper_bound_byte_idx(6), 1);
-        assert_eq!(upper_bound_byte_idx(7), 1);
-        assert_eq!(upper_bound_byte_idx(8), 1);
-        assert_eq!(upper_bound_byte_idx(9), 2);
-        assert_eq!(upper_bound_byte_idx(10), 2);
-        assert_eq!(upper_bound_byte_idx(11), 2);
-        assert_eq!(upper_bound_byte_idx(12), 2);
-        assert_eq!(upper_bound_byte_idx(13), 2);
-        assert_eq!(upper_bound_byte_idx(14), 2);
-        assert_eq!(upper_bound_byte_idx(15), 2);
-        assert_eq!(upper_bound_byte_idx(16), 2);
-        assert_eq!(upper_bound_byte_idx(17), 3);
+        assert_eq!(BitstringRange::upper_bound_index(0), 0);
+        assert_eq!(BitstringRange::upper_bound_index(1), 1);
+        assert_eq!(BitstringRange::upper_bound_index(2), 1);
+        assert_eq!(BitstringRange::upper_bound_index(3), 1);
+        assert_eq!(BitstringRange::upper_bound_index(4), 1);
+        assert_eq!(BitstringRange::upper_bound_index(5), 1);
+        assert_eq!(BitstringRange::upper_bound_index(6), 1);
+        assert_eq!(BitstringRange::upper_bound_index(7), 1);
+        assert_eq!(BitstringRange::upper_bound_index(8), 1);
+        assert_eq!(BitstringRange::upper_bound_index(9), 2);
+        assert_eq!(BitstringRange::upper_bound_index(10), 2);
+        assert_eq!(BitstringRange::upper_bound_index(11), 2);
+        assert_eq!(BitstringRange::upper_bound_index(12), 2);
+        assert_eq!(BitstringRange::upper_bound_index(13), 2);
+        assert_eq!(BitstringRange::upper_bound_index(14), 2);
+        assert_eq!(BitstringRange::upper_bound_index(15), 2);
+        assert_eq!(BitstringRange::upper_bound_index(16), 2);
+        assert_eq!(BitstringRange::upper_bound_index(17), 3);
     }
 
     #[test]
     fn test_detach() {
         let mut a = Bitstring::from(&vec![0xff, 0x2f]);
         let b = a.read(8).unwrap().detach();
-        assert_eq!(b.bit_range(), (0..8));
+        assert_eq!(b.range.bits_range(), (0..8));
         assert_eq!(b.to_bytes(), vec![0xff]);
         let c = a.read(4).unwrap().detach();
-        assert_eq!(c.bit_range(), (0..4));
+        assert_eq!(c.range.bits_range(), (0..4));
         assert_eq!(c.to_bytes(), vec![0x20]);
-        assert_eq!(a.bit_range(), (12..16));
+        assert_eq!(a.range.bits_range(), (12..16));
         let mut x = Bitstring::from(&vec![0x12, 0x34]);
         x.read(4).unwrap();
         assert_eq!(x.read(8).unwrap().to_bytes(), vec![0x23]);
