@@ -6,6 +6,7 @@ extern crate rand;
 pub mod lex;
 mod opcodes;
 mod arith;
+pub mod bitstring;
 pub mod hash;
 pub mod error;
 pub mod cell;

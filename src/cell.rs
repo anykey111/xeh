@@ -8,6 +8,7 @@ pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i128;
 pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
+pub type Xbitstr = crate::bitstring::Bitstring;
 
 #[derive(Clone)]
 pub enum Xfn {
@@ -24,6 +25,7 @@ pub enum Cell {
     Vector(Xvec<Cell>),
     Map(Xmap),
     Fun(Xfn),
+    Bitstr(Xbitstr),
     AnyRc(Xanyrc),
 }
 
@@ -40,6 +42,7 @@ impl fmt::Debug for Cell {
                 Cell::Vector(v) => write!(f, "vec(len={})", v.len()),
                 Cell::Map(v) => write!(f, "map(len={})", v.len()),
                 Cell::Fun(x) => write!(f, "{:?}", x),
+                Cell::Bitstr(s) => write!(f, "bitstr(len={})", s.len()),
                 Cell::AnyRc(x) => match x.try_borrow() {
                     Ok(p) => write!(f, "any:{:?}", p.type_id()),
                     Err(_) => write!(f, "any"),
@@ -54,6 +57,7 @@ impl fmt::Debug for Cell {
                 Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
                 Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
                 Cell::Fun(x) => write!(f, "{:?}", x),
+                Cell::Bitstr(s) => f.debug_list().entries(s.bits()).finish(),
                 Cell::AnyRc(x) => match x.try_borrow() {
                     Ok(p) => write!(f, "any:{:?}", p.type_id()),
                     Err(_) => write!(f, "any"),

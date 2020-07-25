@@ -453,10 +453,6 @@ impl State {
         OK
     }
 
-    fn code(&self) -> &[Opcode] {
-        &self.code
-    }
-
     fn patch_insn(&mut self, at: usize, insn: Opcode) -> Xresult {
         self.code[at] = insn;
         OK
