@@ -156,6 +156,16 @@ impl State {
         buf
     }
 
+    pub fn set_binary_input(&mut self, path: &str) -> Xresult {
+        let buf = std::fs::read(path).map_err(|e| {
+            eprintln!("{}: {}", path, e.to_string());
+            Xerr::IOError
+        })?;
+        let s = Xbitstr::from(buf);
+        let var = self.bin.clone();
+        self.set_var(&var, Cell::Bitstr(s))
+    }
+
     pub fn load(&mut self, source: &str) -> Xresult {
         self.load_source(Lex::from_str(source))
     }

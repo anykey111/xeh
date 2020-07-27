@@ -6,11 +6,16 @@ use getopts::Options;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut opts = Options::new();
-    opts.optopt("s", "", "set script file name", "NAME");
-    opts.optopt("d", "", "enable debugging", "NAME");
+    opts.optopt("s", "", "set script file name", "path");
+    opts.optopt("i", "", "set input binary", "path");
+    opts.optflag("d", "", "enable debugging");
     let matches = opts.parse(&args[1..]).unwrap();
 
     let mut xs = State::new().unwrap();
+    if matches.opt_present("i") {
+        let path = matches.opt_str("i").expect("binary file");
+        xs.set_binary_input(&path).unwrap();
+    }
     if matches.opt_present("d") {
         xs.set_state_recording(true);
     }
