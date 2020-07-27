@@ -135,7 +135,11 @@ impl State {
 
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);
-        if let Some(loc) = self.debug_map.format_location(self.ip()) {
+        if err == &Xerr::UnknownWord || err == &Xerr::InputParseError {
+            if let Some(lex) = self.ctx.source.as_ref() {
+                error_text.push_str(&lex.error_location());
+            }
+        } else if let Some(loc) = self.debug_map.format_location(self.ip()) {
             error_text.push_str(&loc);
         }
         error_text
