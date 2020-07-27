@@ -123,9 +123,12 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
+    // current input binary
+    pub bin: Xvar,
+    pub bigendian: Xvar,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Xvar(Option<usize>);
 
 impl State {
@@ -322,6 +325,7 @@ impl State {
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
         xs.load_core()?;
+        crate::bitstring_mod::bitstring_load(&mut xs)?;
         Ok(xs)
     }
 
@@ -340,11 +344,18 @@ impl State {
         }
     }
 
-    pub fn fetch_var(&self, var: &Xvar) -> Xresult1<Cell> {
+    pub fn get_var(&self, var: &Xvar) -> Xresult1<&Cell> {
         match var {
-            Xvar(Some(a)) => self.heap.get(*a).cloned().ok_or(Xerr::InvalidAddress),
-            _ => Err(Xerr::UnknownWord),
+            Xvar(Some(a)) => self.heap.get(*a).ok_or(Xerr::InvalidAddress),
+            _ => Err(Xerr::InvalidAddress),
         }
+    }
+
+    pub fn set_var(&mut self, var: &Xvar, val: Cell) -> Xresult {
+        let a = var.0.ok_or(Xerr::InvalidAddress)?;
+        let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
+        *x = val;
+        OK
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
@@ -1383,183 +1394,188 @@ fn core_word_display_top(xs: &mut State) -> Xresult {
     OK
 }
 
-#[test]
-fn test_jump_offset() {
-    assert_eq!(2, jump_offset(2, 4));
-    assert_eq!(-2, jump_offset(4, 2));
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_data_stack() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("1 \"s\" 2").unwrap();
-    xs.interpret("dup").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("drop").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    let res = xs.interpret("drop");
-    assert_eq!(Err(Xerr::StackUnderflow), res);
-    let res = xs.interpret("dup");
-    assert_eq!(Err(Xerr::StackUnderflow), res);
-    xs.interpret("5 6 swap").unwrap();
-    assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 swap)"));
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
-    let mut xs = State::new().unwrap();
-    xs.interpret("1 2 3 rot").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
-    let mut xs = State::new().unwrap();
-    xs.interpret("1 2 over").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 over"));
-}
-
-#[test]
-fn test_if_flow() {
-    let mut xs = State::new().unwrap();
-    xs.load("1 if 222 then").unwrap();
-    let mut it = xs.code.iter();
-    it.next().unwrap();
-    assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
-    let mut xs = State::new().unwrap();
-    xs.load("1 if 222 else 333 then").unwrap();
-    let mut it = xs.code.iter();
-    it.next().unwrap();
-    assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
-    it.next().unwrap();
-    assert_eq!(&Opcode::Jump(2), it.next().unwrap());
-    // test errors
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else 333"));
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else"));
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222"));
-    let mut xs = State::new().unwrap();
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 else 222 then"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("else 222 if"));
-}
-
-#[test]
-fn test_begin_repeat() {
-    let mut xs = State::new().unwrap();
-    xs.load("begin 5 while 1 2 repeat").unwrap();
-    let mut it = xs.code.iter();
-    it.next().unwrap();
-    assert_eq!(&Opcode::JumpIfNot(4), it.next().unwrap());
-    it.next().unwrap();
-    it.next().unwrap();
-    assert_eq!(&Opcode::Jump(-4), it.next().unwrap());
-    let mut xs = State::new().unwrap();
-    xs.load("begin leave again").unwrap();
-    let mut it = xs.code.iter();
-    it.next().unwrap();
-    assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
-    let mut xs = State::new().unwrap();
-    xs.load("0 begin 1 2 until").unwrap();
-    let mut it = xs.code.iter();
-    it.next().unwrap();
-    it.next().unwrap();
-    it.next().unwrap();
-    assert_eq!(&Opcode::JumpIf(-2), it.next().unwrap());
-    xs.interpret("var x 1 -> x begin x while 0 -> x repeat")
-        .unwrap();
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("repeat begin"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("until begin"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin repeat until"));
-    assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin until repeat"));
-}
-
-#[test]
-fn test_length() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("[1 2 3] length").unwrap();
-    assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-    xs.interpret("{\"a\" 1 \"b\" 1 } length").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("\"12345\" length").unwrap();
-    assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-    let mut xs = State::new().unwrap();
-    let res = xs.interpret("length");
-    assert_eq!(Err(Xerr::StackUnderflow), res);
-    let res = xs.interpret("1 length");
-    assert_eq!(Err(Xerr::TypeError), res);
-}
-
-#[test]
-fn test_loop_leave() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("begin 1 leave again").unwrap();
-    let x = xs.pop_data().unwrap();
-    assert_eq!(x.into_int(), Ok(1));
-    assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-    let mut xs = State::new().unwrap();
-    let res = xs.load("begin 1 again leave");
-    assert_eq!(Err(Xerr::ControlFlowError), res);
-}
-
-#[test]
-fn test_do_loop() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("10 0 do i loop").unwrap();
-    for i in (0..10).rev() {
-        assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
+    #[test]
+    fn test_jump_offset() {
+        assert_eq!(2, jump_offset(2, 4));
+        assert_eq!(-2, jump_offset(4, 2));
     }
-    let mut xs = State::new().unwrap();
-    xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop")
-        .unwrap();
-    for i in (100..102).rev() {
-        for j in (10..12).rev() {
-            for k in (0..2).rev() {
-                assert_eq!(Cell::Int(i), xs.pop_data().unwrap());
-                assert_eq!(Cell::Int(j), xs.pop_data().unwrap());
-                assert_eq!(Cell::Int(k), xs.pop_data().unwrap());
+
+    #[test]
+    fn test_data_stack() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("1 \"s\" 2").unwrap();
+        xs.interpret("dup").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("drop").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        let res = xs.interpret("drop");
+        assert_eq!(Err(Xerr::StackUnderflow), res);
+        let res = xs.interpret("dup");
+        assert_eq!(Err(Xerr::StackUnderflow), res);
+        xs.interpret("5 6 swap").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 swap)"));
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
+        let mut xs = State::new().unwrap();
+        xs.interpret("1 2 3 rot").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
+        let mut xs = State::new().unwrap();
+        xs.interpret("1 2 over").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 over"));
+    }
+
+    #[test]
+    fn test_if_flow() {
+        let mut xs = State::new().unwrap();
+        xs.load("1 if 222 then").unwrap();
+        let mut it = xs.code.iter();
+        it.next().unwrap();
+        assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
+        let mut xs = State::new().unwrap();
+        xs.load("1 if 222 else 333 then").unwrap();
+        let mut it = xs.code.iter();
+        it.next().unwrap();
+        assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
+        it.next().unwrap();
+        assert_eq!(&Opcode::Jump(2), it.next().unwrap());
+        // test errors
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else 333"));
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else"));
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222"));
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 else 222 then"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("else 222 if"));
+    }
+
+    #[test]
+    fn test_begin_repeat() {
+        let mut xs = State::new().unwrap();
+        xs.load("begin 5 while 1 2 repeat").unwrap();
+        let mut it = xs.code.iter();
+        it.next().unwrap();
+        assert_eq!(&Opcode::JumpIfNot(4), it.next().unwrap());
+        it.next().unwrap();
+        it.next().unwrap();
+        assert_eq!(&Opcode::Jump(-4), it.next().unwrap());
+        let mut xs = State::new().unwrap();
+        xs.load("begin leave again").unwrap();
+        let mut it = xs.code.iter();
+        it.next().unwrap();
+        assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
+        let mut xs = State::new().unwrap();
+        xs.load("0 begin 1 2 until").unwrap();
+        let mut it = xs.code.iter();
+        it.next().unwrap();
+        it.next().unwrap();
+        it.next().unwrap();
+        assert_eq!(&Opcode::JumpIf(-2), it.next().unwrap());
+        xs.interpret("var x 1 -> x begin x while 0 -> x repeat")
+            .unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("repeat begin"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("until begin"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin repeat until"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin until repeat"));
+    }
+
+    #[test]
+    fn test_length() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("[1 2 3] length").unwrap();
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        xs.interpret("{\"a\" 1 \"b\" 1 } length").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("\"12345\" length").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+        let mut xs = State::new().unwrap();
+        let res = xs.interpret("length");
+        assert_eq!(Err(Xerr::StackUnderflow), res);
+        let res = xs.interpret("1 length");
+        assert_eq!(Err(Xerr::TypeError), res);
+    }
+
+    #[test]
+    fn test_loop_leave() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("begin 1 leave again").unwrap();
+        let x = xs.pop_data().unwrap();
+        assert_eq!(x.into_int(), Ok(1));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
+        let mut xs = State::new().unwrap();
+        let res = xs.load("begin 1 again leave");
+        assert_eq!(Err(Xerr::ControlFlowError), res);
+    }
+
+    #[test]
+    fn test_do_loop() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("10 0 do i loop").unwrap();
+        for i in (0..10).rev() {
+            assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
+        }
+        let mut xs = State::new().unwrap();
+        xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop")
+            .unwrap();
+        for i in (100..102).rev() {
+            for j in (10..12).rev() {
+                for k in (0..2).rev() {
+                    assert_eq!(Cell::Int(i), xs.pop_data().unwrap());
+                    assert_eq!(Cell::Int(j), xs.pop_data().unwrap());
+                    assert_eq!(Cell::Int(k), xs.pop_data().unwrap());
+                }
             }
         }
     }
-}
 
-#[test]
-fn test_get_assoc() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("55 0 [11 22] assoc").unwrap();
-    let v = xs.pop_data().unwrap().into_vector().unwrap();
-    assert_eq!(Some(&Cell::Int(55)), v.get(0));
-    assert_eq!(Some(&Cell::Int(22)), v.get(1));
-    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("55 2 [11 22] assoc"));
-    assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("2 [11 22] get"));
-    xs.interpret("1 [33 44] get").unwrap();
-    assert_eq!(Ok(Cell::Int(44)), xs.pop_data());
-    xs.interpret("3 \"a\" {\"a\" 1} assoc ").unwrap();
-    let m = xs.pop_data().unwrap().into_map().unwrap();
-    assert_eq!(
-        &(Cell::Str("a".to_string()), Cell::Int(3)),
-        m.first().unwrap()
-    );
-    xs.interpret("\"a\" {\"a\" 22} get").unwrap();
-    assert_eq!(Cell::Int(22), xs.pop_data().unwrap());
-    xs.interpret("1 {} get").unwrap();
-    assert_eq!(Cell::Nil, xs.pop_data().unwrap());
-}
+    #[test]
+    fn test_get_assoc() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("55 0 [11 22] assoc").unwrap();
+        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(Some(&Cell::Int(55)), v.get(0));
+        assert_eq!(Some(&Cell::Int(22)), v.get(1));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("55 2 [11 22] assoc"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("2 [11 22] get"));
+        xs.interpret("1 [33 44] get").unwrap();
+        assert_eq!(Ok(Cell::Int(44)), xs.pop_data());
+        xs.interpret("3 \"a\" {\"a\" 1} assoc ").unwrap();
+        let m = xs.pop_data().unwrap().into_map().unwrap();
+        assert_eq!(
+            &(Cell::Str("a".to_string()), Cell::Int(3)),
+            m.first().unwrap()
+        );
+        xs.interpret("\"a\" {\"a\" 22} get").unwrap();
+        assert_eq!(Cell::Int(22), xs.pop_data().unwrap());
+        xs.interpret("1 {} get").unwrap();
+        assert_eq!(Cell::Nil, xs.pop_data().unwrap());
+    }
 
-#[test]
-fn test_locals() {
-    let mut xs = State::new().unwrap();
-    xs.interpret(": f local x local y x y y x ; 1 2 f").unwrap();
-    assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-    assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-    assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-    assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-    assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
+    #[test]
+    fn test_locals() {
+        let mut xs = State::new().unwrap();
+        xs.interpret(": f local x local y x y y x ; 1 2 f").unwrap();
+        assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
+        assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
+    }
 }

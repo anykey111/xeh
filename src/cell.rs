@@ -168,6 +168,13 @@ impl Cell {
         self.into_int().map(|i| i as usize)
     }
 
+    pub fn into_bitstring(self) -> Xresult1<Xbitstr> {
+        match self {
+            Cell::Bitstr(s) => Ok(s),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
@@ -208,7 +215,11 @@ impl From<f64> for Cell {
 
 impl From<bool> for Cell {
     fn from(x: bool) -> Self {
-        if x { ONE } else { ZERO }
+        if x {
+            ONE
+        } else {
+            ZERO
+        }
     }
 }
 

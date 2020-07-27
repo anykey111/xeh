@@ -1,15 +1,11 @@
 use std::convert::From;
-use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
 
 pub enum Byteorder {
-    BigEndian,
-    LittleEndian,
+    BE,
+    LE,
 }
-
-pub const BE: Byteorder = Byteorder::BigEndian;
-pub const LE: Byteorder = Byteorder::LittleEndian;
 
 #[derive(Debug, Clone)]
 struct BitstringRange(Range<usize>);
@@ -106,10 +102,10 @@ macro_rules! to_unsigned {
     ($range:expr, $data:expr, $order:expr, $t:ty) => {{
         let mut acc: $t = 0;
         match $order {
-            Byteorder::BigEndian => fold_bits!($range, $data, |x, num_bits| {
+            Byteorder::BE => fold_bits!($range, $data, |x, num_bits| {
                 acc = (acc << num_bits) | x as $t;
             }),
-            Byteorder::LittleEndian => {
+            Byteorder::LE => {
                 let mut shift = 0;
                 fold_bits!($range, $data, |x, num_bits| {
                     acc |= (x as $t) << shift;
@@ -233,17 +229,27 @@ impl Bitstring {
         to_unsigned!(self.range, src, order, u64)
     }
 
+    pub fn to_i128(&self, order: Byteorder) -> i128 {
+        let src = self.slice();
+        to_signed!(self.range, src, order, u128, i128)
+    }
+
+    pub fn to_u128(&self, order: Byteorder) -> u128 {
+        let src = self.slice();
+        to_unsigned!(self.range, src, order, u128)
+    }
+
     pub fn from_i64(value: i64, num_bits: usize, order: Byteorder) -> Bitstring {
         match order {
-            Byteorder::BigEndian => num_to_big!(value, num_bits),
-            Byteorder::LittleEndian => num_to_little!(value, num_bits),
+            Byteorder::BE => num_to_big!(value, num_bits),
+            Byteorder::LE => num_to_little!(value, num_bits),
         }
     }
 
     pub fn from_u64(value: u64, num_bits: usize, order: Byteorder) -> Bitstring {
         match order {
-            Byteorder::BigEndian => num_to_big!(value, num_bits),
-            Byteorder::LittleEndian => num_to_little!(value, num_bits),
+            Byteorder::BE => num_to_big!(value, num_bits),
+            Byteorder::LE => num_to_little!(value, num_bits),
         }
     }
 
@@ -409,6 +415,8 @@ impl<'a> Iterator for Bits<'a> {
 mod tests {
 
     use crate::bitstring::*;
+    const BE: Byteorder = Byteorder::BE;
+    const LE: Byteorder = Byteorder::LE;
 
     #[test]
     fn test_split_at() {

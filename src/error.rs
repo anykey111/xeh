@@ -21,6 +21,8 @@ pub enum Xerr {
     OutOfBounds,
     DebugAssertion,
     InternalError,
+    // bitstring errors
+    OutOfRange,
     // return to interpreter loop
     Next,
 }
