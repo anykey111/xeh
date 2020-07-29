@@ -93,6 +93,7 @@ impl PartialEq for Cell {
             (Cell::Int(a), Cell::Int(b)) => a == b,
             (Cell::Real(a), Cell::Real(b)) => a == b,
             (Cell::Str(a), Cell::Str(b)) => a == b,
+            (Cell::Bitstr(a), Cell::Bitstr(b)) => a == b,
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
             (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
