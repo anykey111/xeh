@@ -2,9 +2,24 @@ use std::convert::From;
 use std::ops::Range;
 use std::rc::Rc;
 
+#[derive(Clone, Copy)]
 pub enum Byteorder {
     BE,
     LE,
+}
+
+#[derive(Clone)]
+pub enum BitstringFormat {
+    Raw,
+    Signed(Byteorder),
+    Unsigned(Byteorder),
+    Real(Byteorder),
+}
+
+impl Default for BitstringFormat {
+    fn default() -> Self {
+        BitstringFormat::Raw
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -190,6 +205,7 @@ macro_rules! num_to_little {
 
 #[derive(Clone, Default)]
 pub struct Bitstring {
+    format: BitstringFormat,
     range: BitstringRange,
     data: Rc<Vec<u8>>,
 }
@@ -201,6 +217,10 @@ impl Bitstring {
 
     pub fn len(&self) -> usize {
         self.range.num_bits()
+    }
+
+    pub fn set_format(&mut self, format: BitstringFormat) {
+        self.format = format;
     }
 
     pub fn read(&mut self, num_bits: usize) -> Option<Bitstring> {
@@ -298,6 +318,7 @@ impl Bitstring {
                 *x = x.wrapping_shr(8 - d).wrapping_shl(8 - d);
             }
             Bitstring {
+                format: BitstringFormat::Raw,
                 range: BitstringRange(0..num_bits),
                 data: Rc::new(tmp),
             }
@@ -362,17 +383,14 @@ impl PartialEq for Bitstring {
 
 impl<'a> From<&'a [u8]> for Bitstring {
     fn from(s: &'a [u8]) -> Self {
-        let n = s.len() * 8;
-        Bitstring {
-            range: BitstringRange(0..n),
-            data: Rc::new(Vec::from(s)),
-        }
+        Bitstring::from(Vec::from(s))
     }
 }
 
 impl From<Vec<u8>> for Bitstring {
     fn from(v: Vec<u8>) -> Self {
         Bitstring {
+            format: BitstringFormat::Raw,
             range: BitstringRange::from_len(v.len()),
             data: Rc::new(v),
         }
