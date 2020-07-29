@@ -23,6 +23,7 @@ pub enum Xerr {
     InternalError,
     // bitstring errors
     OutOfRange,
+    BinaryMatchError,
     // return to interpreter loop
     Next,
 }

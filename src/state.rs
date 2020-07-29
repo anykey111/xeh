@@ -124,8 +124,9 @@ pub struct State {
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
     // current input binary
-    pub bin: Xvar,
-    pub bigendian: Xvar,
+    pub bs_input: Xvar,
+    pub bs_isbig: Xvar,
+    pub bs_chunk: Xvar,
 }
 
 #[derive(Default, Clone)]
@@ -162,7 +163,13 @@ impl State {
             Xerr::IOError
         })?;
         let s = Xbitstr::from(buf);
-        let var = self.bin.clone();
+        let var = self.bs_input.clone();
+        self.set_var(&var, Cell::Bitstr(s))
+    }
+
+    pub fn set_binary_input_data(&mut self, data: &[u8]) -> Xresult {
+        let s = Xbitstr::from(data);
+        let var = self.bs_input.clone();
         self.set_var(&var, Cell::Bitstr(s))
     }
 
