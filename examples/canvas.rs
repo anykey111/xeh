@@ -114,7 +114,6 @@ fn bytearray_set(xs: &mut State) -> Xresult {
 
 fn main() {
     let mut xs = State::new().unwrap();
-    //xs.set_state_recording(true);
 
     xs.defword("bytearray_new", bytearray_new).unwrap();
     xs.defword("bytearray_get", bytearray_get).unwrap();
@@ -125,11 +124,6 @@ fn main() {
     xs.defword("minifb_update", minifb_update).unwrap();
     xs.defword("minifb_put_pixel", minifb_put_pixel).unwrap();
 
-    let filename = std::env::args().nth(1).expect("filename");
-    let src = Lex::from_file(&filename).unwrap();
-    xs.load_source(src).unwrap();
-    if let Err(e) = xs.run() {
-        println!("{}", xs.error_context(&e));
-        xs.run_repl().unwrap();
-    }
+    let args: Vec<String> = std::env::args().collect();
+    xeh::repl::run_with_args(&mut xs, args).unwrap();
 }
