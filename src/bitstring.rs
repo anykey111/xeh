@@ -2,13 +2,13 @@ use std::convert::From;
 use std::ops::Range;
 use std::rc::Rc;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Byteorder {
     BE,
     LE,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum BitstringFormat {
     Raw,
     Signed(Byteorder),
@@ -219,6 +219,10 @@ impl Bitstring {
         self.range.num_bits()
     }
 
+    pub fn format(&self) -> BitstringFormat {
+        self.format
+    }
+    
     pub fn set_format(&mut self, format: BitstringFormat) {
         self.format = format;
     }

@@ -5,9 +5,12 @@ use crate::prelude::*;
 
 pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("bits", bin_read_bitstring)?;
+    xs.defword("bytes", bin_read_bytes)?;
     xs.defword("signed", bin_read_signed)?;
     xs.defword("unsigned", bin_read_unsigned)?;
     xs.defword(">bitstring", to_bitstring)?;
+    xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
+    xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
     xs.defword("?", bin_match)?;
     xs.defword("u8", |xs| read_unsigned_n(xs, 8))?;
     xs.defword("u16", |xs| read_unsigned_n(xs, 16))?;
@@ -86,6 +89,13 @@ fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
     xs.set_var(&xs.bs_chunk.clone(), Cell::Bitstr(s))
 }
 
+fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
+    xs.set_var(
+        &xs.bs_isbig.clone(),
+        if bo == Byteorder::LE { ZERO } else { ONE },
+    )
+}
+
 fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
     if xs.get_var(&xs.bs_isbig)? == &ZERO {
         Ok(Byteorder::LE)
@@ -102,6 +112,14 @@ fn bin_match(xs: &mut Xstate) -> Xresult {
         return Err(Xerr::BinaryMatchError);
     }
     set_last_chunk(xs, s)?;
+    set_rest(xs, rest)
+}
+
+fn bin_read_bytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    let (s, rest) = read_bitstring(xs, n * 8)?;
+    set_last_chunk(xs, s.clone())?;
+    xs.push_data(Cell::Bitstr(s))?;
     set_rest(xs, rest)
 }
 
@@ -210,5 +228,33 @@ mod tests {
         xs.interpret("\"123\" ?").unwrap();
         assert_eq!(Err(Xerr::TypeError), xs.interpret("{} ?"));
         assert_eq!(Err(Xerr::OutOfRange), xs.interpret("[0] ?"));
+    }
+
+    #[test]
+    fn test_bitstring_chunk() {
+        let mut xs = Xstate::new().unwrap();
+        xs.set_binary_input_data(&vec![0x11, 0x13, 0x33, 0x3f])
+            .unwrap();
+        xs.interpret("12 unsigned").unwrap();
+        assert_eq!(Cell::Int(0x111), xs.pop_data().unwrap());
+        xs.interpret("binary-chunk").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(12, s.len());
+        assert_eq!(BitstringFormat::Unsigned(Byteorder::LE), s.format());
+        xs.interpret("2 bytes").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(BitstringFormat::Raw, s.format());
+        assert_eq!(16, s.len());
+        assert_eq!(vec![0x33, 0x33], s.to_bytes());
+        xs.interpret("2 bits").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(BitstringFormat::Raw, s.format());
+        assert_eq!(2, s.len());
+        xs.interpret("big-endian 2 signed").unwrap();
+        assert_eq!(Cell::Int(-2), xs.pop_data().unwrap());
+        xs.interpret("binary-chunk").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(2, s.len());
+        assert_eq!(BitstringFormat::Signed(Byteorder::BE), s.format());
     }
 }
