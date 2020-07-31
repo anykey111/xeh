@@ -406,6 +406,7 @@ impl State {
             Def("}", core_word_map_end),
             Def(":", core_word_def_begin),
             Def(";", core_word_def_end),
+            Def("immediate", core_word_immediate),
             Def("local", core_word_def_local),
             Def("var", core_word_var),
             Def("->", core_word_setvar),
@@ -1113,6 +1114,22 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_immediate(xs: &mut State) -> Xresult {
+    let dict_idx = xs
+        .top_function_flow()
+        .map(|f| f.dict_idx)
+        .ok_or(Xerr::ControlFlowError)?;
+    match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)?.1 {
+        Entry::Function {
+            ref mut immediate, ..
+        } => {
+            *immediate = true;
+            OK
+        }
+        _ => panic!("entry type"),
+    }
+}
+
 fn core_word_def_local(xs: &mut State) -> Xresult {
     let name = match xs.next_token()? {
         Tok::Word(name) => name,
@@ -1594,5 +1611,12 @@ mod tests {
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
+    }
+
+    #[test]
+    fn test_immediate() {
+        let mut xs = State::new().unwrap();
+        let res = xs.load(": f 0 [] get immediate ; f");
+        assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 }
