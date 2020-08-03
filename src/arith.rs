@@ -157,17 +157,17 @@ fn test_arith() {
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
     assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
     assert_eq!(Err(Xerr::TypeError), xs.interpret("\"s\" 1 +"));
-    xs.interpret("1 1 bitand").unwrap();
+    xs.interpret("1 1 bit-and").unwrap();
     assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    xs.interpret("1 2 bitor").unwrap();
+    xs.interpret("1 2 bit-or").unwrap();
     assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-    xs.interpret("1 3 bitxor").unwrap();
+    xs.interpret("1 3 bit-xor").unwrap();
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("0 bitnot").unwrap();
+    xs.interpret("0 bit-not").unwrap();
     assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-    xs.interpret("1 3 bitshl").unwrap();
+    xs.interpret("1 3 bit-shift-left").unwrap();
     assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-    xs.interpret("16 3 bitshr").unwrap();
+    xs.interpret("16 3 bit-shift-right").unwrap();
     assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
 }
 

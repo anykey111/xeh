@@ -2,7 +2,7 @@ big-endian
 
 var pal [
     256 0 do
-        24 unsigned 0xff00_0000 bitor
+        24 unsigned 0xff00_0000 bit-or
     loop
 ] -> pal
 

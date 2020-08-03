@@ -65,7 +65,7 @@ loop
 ;
 
 : calc_color
-    fire_img_get random 3 * round 1 bitand -
+    fire_img_get random 3 * round 1 bit-and -
 ;
 
 : spread_fire_random
@@ -101,7 +101,7 @@ loop
         FIRE_HEIGHT 0 do
             FIRE_WIDTH i * j + fire_img_get
             PALETTE get
-            0xff000000 bitor  # add alpha
+            0xff000000 bit-or  # add alpha
             draw_fire_pixel
         loop
     loop
