@@ -8,6 +8,8 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("bytes", bin_read_bytes)?;
     xs.defword("signed", bin_read_signed)?;
     xs.defword("unsigned", bin_read_unsigned)?;
+    xs.defword("bitstring", |xs| xs.push_data(Cell::Bitstr(Xbitstr::new())))?;
+    xs.defword("append", bitstring_append)?;
     xs.defword(">bitstring", to_bitstring)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
@@ -40,6 +42,15 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.bs_isbig = xs.defonce("binary-bigendian", ZERO)?;
     xs.bs_chunk = xs.defonce("binary-chunk", Cell::Bitstr(Bitstring::new()))?;
     OK
+}
+
+fn bitstring_append(xs: &mut Xstate) -> Xresult {
+    let tail = xs.pop_data()?;
+    let tail = into_bitstring(tail)?;
+    let head = xs.pop_data()?.into_bitstring()?;
+    let result = head.append(&tail);
+    xs.push_data(Cell::Bitstr(result))
+
 }
 
 fn to_bitstring(xs: &mut Xstate) -> Xresult {

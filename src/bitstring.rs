@@ -223,7 +223,7 @@ impl Bitstring {
     pub fn format(&self) -> BitstringFormat {
         self.format
     }
-    
+
     pub fn set_format(&mut self, format: BitstringFormat) {
         self.format = format;
     }
@@ -330,45 +330,47 @@ impl Bitstring {
         }
     }
 
-    pub fn append(&self, other: &Bitstring) -> Bitstring {
-        if self.range.is_bytestring() && other.range.is_bytestring() {
-            self.append_bytestring(other)
-        } else {
-            self.append_bitstring(other)
+    fn append_bytes(mut self, tail: &Bitstring) -> Bitstring {
+        let data = Rc::make_mut(&mut self.data);
+        data.extend_from_slice(tail.slice());
+        let start = self.range.start();
+        let end = self.range.end() + tail.len();
+        self.range = BitstringRange(start..end);
+        self
+    }
+
+    fn append_norefs(mut self, tail: &Bitstring) -> Bitstring {
+        if self.range.is_bytestring() && tail.range.is_bytestring() {
+            return self.append_bytes(tail);
         }
-    }
-
-    fn append_bytestring(&self, other: &Bitstring) -> Bitstring {
-        let mut tmp = self.detach();
-        let dst = Rc::make_mut(&mut tmp.data);
-        dst.extend_from_slice(other.slice());
-        let start = tmp.range.start();
-        let end = tmp.range.end() + other.len();
-        tmp.range = BitstringRange(start..end);
-        tmp
-    }
-
-    fn append_bitstring(&self, other: &Bitstring) -> Bitstring {
         let mut ptr = self.range.end();
-        let mut tmp = self.detach();
-        let dst = Rc::make_mut(&mut tmp.data);
-        let new_len = BitstringRange::upper_bound_index(self.len() + other.len());
-        dst.resize_with(new_len, || 0);
-        let src = other.slice();
-        fold_bits!(other.range, src, |x, num_bits| {
+        let new_len = BitstringRange::upper_bound_index(self.len() + tail.len());
+        let data = Rc::make_mut(&mut self.data);
+        data.resize_with(new_len, || 0);
+        fold_bits!(tail.range, tail.slice(), |x, num_bits| {
             let i = ptr / 8;
             let used = ptr % 8;
             let rest = 8 - used;
             if num_bits <= rest {
-                dst[i] |= (x << (rest - num_bits)) as u8;
+                data[i] |= (x << (rest - num_bits)) as u8;
             } else {
-                dst[i] |= (x >> (num_bits - rest)) as u8;
-                dst[i + 1] = (x << (8 - (num_bits - rest))) as u8;
+                data[i] |= (x >> (num_bits - rest)) as u8;
+                data[i + 1] = (x << (8 - (num_bits - rest))) as u8;
             }
             ptr += num_bits as usize;
         });
-        tmp.range = BitstringRange(0..ptr);
-        tmp
+        let start = self.range.start();
+        self.range = BitstringRange(start..ptr);
+        self
+    }
+
+    pub fn append(self, tail: &Bitstring) -> Bitstring {
+        if Rc::strong_count(&self.data) == 1 {
+            self.append_norefs(tail)
+        } else {
+            let tmp = self.detach();
+            tmp.append_norefs(tail)
+        }
     }
 }
 
