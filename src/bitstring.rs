@@ -66,8 +66,9 @@ impl BitstringRange {
         self.is_start_aligned() && (self.end() % 8 == 0)
     }
 
-    fn upper_bound_index(bit_idx: usize) -> usize {
-        ((bit_idx + 7) & !7) / 8
+    fn upper_bound_index(num_bits: usize) -> usize {
+        let n = if (num_bits % 8) > 0 { 1 } else { 0 };
+        (num_bits / 8) + n
     }
 
     fn split_at(&self, bit_index: usize) -> Option<(BitstringRange, BitstringRange)> {
