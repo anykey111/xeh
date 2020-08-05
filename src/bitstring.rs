@@ -314,23 +314,18 @@ impl Bitstring {
         if self.len() == 0 {
             Bitstring::new()
         } else {
-            let num_bits = self.len();
-            let mut tmp = Vec::from(self.slice());
-            let d = (num_bits % 8) as u32;
-            if d > 0 {
-                // clear unused bits
-                let x = tmp.last_mut().unwrap();
-                *x = x.wrapping_shr(8 - d).wrapping_shl(8 - d);
-            }
+            let start = self.range.start() % 8;
+            let end = start + self.len();
+            let tmp = Vec::from(self.slice());
             Bitstring {
                 format: BitstringFormat::Raw,
-                range: BitstringRange(0..num_bits),
+                range: BitstringRange(start..end),
                 data: Rc::new(tmp),
             }
         }
     }
 
-    fn append_bytes(mut self, tail: &Bitstring) -> Bitstring {
+    fn append_bytes_mut(mut self, tail: &Bitstring) -> Bitstring {
         let data = Rc::make_mut(&mut self.data);
         data.extend_from_slice(tail.slice());
         let start = self.range.start();
@@ -339,37 +334,37 @@ impl Bitstring {
         self
     }
 
-    fn append_norefs(mut self, tail: &Bitstring) -> Bitstring {
+    fn append_bits_mut(mut self, tail: &Bitstring) -> Bitstring {
         if self.range.is_bytestring() && tail.range.is_bytestring() {
-            return self.append_bytes(tail);
+            return self.append_bytes_mut(tail);
         }
-        let mut ptr = self.range.end();
-        let new_len = BitstringRange::upper_bound_index(self.len() + tail.len());
+        let mut pos = self.range.end();
+        let new_len = BitstringRange::upper_bound_index(pos + tail.len());
         let data = Rc::make_mut(&mut self.data);
         data.resize_with(new_len, || 0);
         fold_bits!(tail.range, tail.slice(), |x, num_bits| {
-            let i = ptr / 8;
-            let used = ptr % 8;
-            let rest = 8 - used;
-            if num_bits <= rest {
-                data[i] |= (x << (rest - num_bits)) as u8;
+            let i = pos / 8;
+            let used = pos % 8;
+            let vacant = 8 - used;
+            if num_bits <= vacant {
+                data[i] |= (x << (8 - used - num_bits)) as u8;
             } else {
-                data[i] |= (x >> (num_bits - rest)) as u8;
-                data[i + 1] = (x << (8 - (num_bits - rest))) as u8;
+                data[i] |= (x >> used) as u8;
+                data[i + 1] = (x << vacant) as u8;
             }
-            ptr += num_bits as usize;
+            pos += num_bits as usize;
         });
         let start = self.range.start();
-        self.range = BitstringRange(start..ptr);
+        self.range = BitstringRange(start..pos);
         self
     }
 
     pub fn append(self, tail: &Bitstring) -> Bitstring {
         if Rc::strong_count(&self.data) == 1 {
-            self.append_norefs(tail)
+            self.append_bits_mut(tail)
         } else {
             let tmp = self.detach();
-            tmp.append_norefs(tail)
+            tmp.append_bits_mut(tail)
         }
     }
 }
@@ -508,6 +503,10 @@ mod tests {
             x.append(&y).append(&z).append(&r).to_bytes(),
             vec![0xab, 0xcd, 0xef]
         );
+        let mut s = Bitstring::from(&vec![0x13]);
+        let a = s.read(4).unwrap();
+        let b = s.read(4).unwrap();
+        assert_eq!(b.append(&a).to_bytes(), vec![0x31]);
     }
 
     #[test]
