@@ -892,6 +892,22 @@ fn core_insert_word(xs: &mut State, name: &str, x: XfnType, immediate: bool) -> 
     OK
 }
 
+fn take_if_flow(xs: &mut State) -> Xresult1<usize> {
+    for (i, f) in xs.flow_stack[xs.ctx.fs_len..].iter().rev().enumerate() {
+        match f {
+            Flow::If(if_org) => {
+                let org = *if_org;
+                let pos = xs.flow_stack.len() - (i + 1);
+                xs.flow_stack.remove(pos);
+                return Ok(org);
+            }
+            Flow::Leave(_) => continue,
+            _ => break,
+        }
+    }
+    return Err(Xerr::ControlFlowError);
+}
+
 fn core_word_if(xs: &mut State) -> Xresult {
     let fwd = Flow::If(xs.code_origin());
     xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Comment("if"))?;
@@ -899,26 +915,18 @@ fn core_word_if(xs: &mut State) -> Xresult {
 }
 
 fn core_word_else(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::If(if_org) => {
-            let fwd = Flow::If(xs.code_origin());
-            xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("else"))?;
-            xs.push_flow(fwd)?;
-            let offs = jump_offset(if_org, xs.code_origin());
-            xs.patch_jump(if_org, offs)
-        }
-        _ => Err(Xerr::ControlFlowError),
-    }
+    let if_org = take_if_flow(xs)?;
+    let fwd = Flow::If(xs.code_origin());
+    xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("else"))?;
+    xs.push_flow(fwd)?;
+    let offs = jump_offset(if_org, xs.code_origin());
+    xs.patch_jump(if_org, offs)
 }
 
 fn core_word_then(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::If(if_org) => {
-            let offs = jump_offset(if_org, xs.code_origin());
-            xs.patch_jump(if_org, offs)
-        }
-        _ => Err(Xerr::ControlFlowError),
-    }
+    let if_org = take_if_flow(xs)?;
+    let offs = jump_offset(if_org, xs.code_origin());
+    xs.patch_jump(if_org, offs)
 }
 
 fn core_word_begin(xs: &mut State) -> Xresult {
@@ -1556,6 +1564,8 @@ mod tests {
         let mut xs = State::new().unwrap();
         let res = xs.load("begin 1 again leave");
         assert_eq!(Err(Xerr::ControlFlowError), res);
+        let mut xs = State::new().unwrap();
+        xs.load("begin 1 if leave else leave then again").unwrap();
     }
 
     #[test]
