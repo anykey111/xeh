@@ -438,6 +438,8 @@ impl State {
             Def("-", core_word_sub),
             Def("*", core_word_mul),
             Def("/", core_word_div),
+            Def("negate", core_word_negate),
+            Def("abs", core_word_abs),
             Def("1+", core_word_inc),
             Def("1-", core_word_dec),
             Def("<", core_word_less_then),

@@ -58,6 +58,22 @@ pub fn core_word_dec(xs: &mut State) -> Xresult {
     }
 }
 
+pub fn core_word_negate(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Int(a) => xs.push_data(Cell::Int(a.checked_neg().ok_or(Xerr::IntegerOverflow)?)),
+        Cell::Real(a) => xs.push_data(Cell::Real(-a)),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
+pub fn core_word_abs(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Int(a) => xs.push_data(Cell::Int(a.abs())),
+        Cell::Real(a) => xs.push_data(Cell::Real(a.abs())),
+        _ => Err(Xerr::TypeError),
+    }
+}
+
 use std::cmp::Ordering;
 
 fn compare_reals(a: Xreal, b: Xreal) -> Ordering {
