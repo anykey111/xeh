@@ -11,6 +11,8 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstring", |xs| xs.push_data(Cell::Bitstr(Xbitstr::new())))?;
     xs.defword("append", bitstring_append)?;
     xs.defword(">bitstring", to_bitstring)?;
+    xs.defword("bitstring>signed", bitstring_to_signed)?;
+    xs.defword("bitstring>unsigned", bitstring_to_unsigned)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
     xs.defword("?", bin_match)?;
@@ -45,12 +47,31 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
+    let head = xs.pop_data()?.into_bitstring()?;
     let tail = xs.pop_data()?;
     let tail = into_bitstring(tail)?;
-    let head = xs.pop_data()?.into_bitstring()?;
     let result = head.append(&tail);
     xs.push_data(Cell::Bitstr(result))
+}
 
+fn bitstring_to_signed(xs: &mut Xstate) -> Xresult {
+    let s = xs.pop_data()?.into_bitstring()?;
+    let bo = default_byteorder(xs)?;
+    if s.len() > 128 {
+        return Err(Xerr::IntegerOverflow);
+    }
+    let x = s.to_i128(bo);
+    xs.push_data(Cell::Int(x))
+}
+
+fn bitstring_to_unsigned(xs: &mut Xstate) -> Xresult {
+    let s = xs.pop_data()?.into_bitstring()?;
+    let bo = default_byteorder(xs)?;
+    if s.len() > 128 {
+        return Err(Xerr::IntegerOverflow);
+    }
+    let x = s.to_u128(bo) as Xint;
+    xs.push_data(Cell::Int(x))
 }
 
 fn to_bitstring(xs: &mut Xstate) -> Xresult {
