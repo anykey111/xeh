@@ -428,7 +428,7 @@ impl<'a> Iterator for Bits<'a> {
             None
         } else {
             let idx = self.pos / 8;
-            let shift = self.pos % 8;
+            let shift = 7 - (self.pos % 8);
             let bit = (self.bs.data[idx] >> shift) & 1 as u8;
             self.pos += 1;
             Some(bit)
@@ -584,5 +584,12 @@ mod tests {
             Bitstring::from_i64(i64::max_value(), 64, BE).to_i64(BE),
             i64::max_value()
         );
+    }
+
+    #[test]
+    fn test_bits() {
+        let s = Bitstring::from(vec![0xc0]);
+        let res: Vec<_> = s.bits().collect();
+        assert_eq!(vec![1, 1, 0, 0, 0, 0, 0, 0], res);
     }
 }
