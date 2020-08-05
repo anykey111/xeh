@@ -441,6 +441,7 @@ impl State {
             Def("1+", core_word_inc),
             Def("1-", core_word_dec),
             Def("<", core_word_less_then),
+            Def("=", core_word_eq),
             Def("rem", core_word_rem),
             Def("bit-and", core_word_bitand),
             Def("bit-or", core_word_bitor),

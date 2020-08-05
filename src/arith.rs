@@ -87,6 +87,11 @@ pub fn core_word_less_then(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(c == Ordering::Less))
 }
 
+pub fn core_word_eq(xs: &mut State) -> Xresult {
+    let c = compare_cells(xs)?;
+    xs.push_data(Cell::from(c == Ordering::Equal))
+}
+
 pub fn core_word_rem(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_rem, std::ops::Rem::<f64>::rem)
 }
@@ -135,52 +140,70 @@ pub fn core_word_round(xs: &mut State) -> Xresult {
     }
 }
 
-#[test]
-fn test_arith() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("5 4 -").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    xs.interpret("4 5 -").unwrap();
-    assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-    xs.interpret("4 5 *").unwrap();
-    assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-    xs.interpret("20 4 /").unwrap();
-    assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-    xs.interpret("1 1 +").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("7 3 rem").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    xs.interpret("1 1+").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("1 1-").unwrap();
-    assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
-    assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
-    assert_eq!(Err(Xerr::TypeError), xs.interpret("\"s\" 1 +"));
-    xs.interpret("1 1 bit-and").unwrap();
-    assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-    xs.interpret("1 2 bit-or").unwrap();
-    assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-    xs.interpret("1 3 bit-xor").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-    xs.interpret("0 bit-not").unwrap();
-    assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-    xs.interpret("1 3 bit-shift-left").unwrap();
-    assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-    xs.interpret("16 3 bit-shift-right").unwrap();
-    assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_random_round() {
-    let mut xs = State::new().unwrap();
-    xs.interpret("random").unwrap();
-    let r = xs.pop_data().unwrap().into_real().unwrap();
-    assert!(0.0 <= r && r <= 1.0);
-    xs.interpret("random round").unwrap();
-    let i = xs.pop_data().unwrap().into_int().unwrap();
-    assert!(0 <= i && i <= 1);
-    xs.interpret("1 round").unwrap();
-    assert_eq!(Ok(1), xs.pop_data().unwrap().into_int());
-    assert_eq!(Err(Xerr::TypeError), xs.interpret("[] round"));
+    #[test]
+    fn test_arith() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("5 4 -").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("4 5 -").unwrap();
+        assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
+        xs.interpret("4 5 *").unwrap();
+        assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
+        xs.interpret("20 4 /").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+        xs.interpret("1 1 +").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("7 3 rem").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("1 1+").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("1 1-").unwrap();
+        assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"s\" 1 +"));
+        xs.interpret("1 1 bit-and").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("1 2 bit-or").unwrap();
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        xs.interpret("1 3 bit-xor").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("0 bit-not").unwrap();
+        assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
+        xs.interpret("1 3 bit-shift-left").unwrap();
+        assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
+        xs.interpret("16 3 bit-shift-right").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_random_round() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("random").unwrap();
+        let r = xs.pop_data().unwrap().into_real().unwrap();
+        assert!(0.0 <= r && r <= 1.0);
+        xs.interpret("random round").unwrap();
+        let i = xs.pop_data().unwrap().into_int().unwrap();
+        assert!(0 <= i && i <= 1);
+        xs.interpret("1 round").unwrap();
+        assert_eq!(Ok(1), xs.pop_data().unwrap().into_int());
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] round"));
+    }
+
+    #[test]
+    fn test_cmp() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("-1 0 <").unwrap();
+        assert_eq!(Ok(ONE), xs.pop_data());
+        xs.interpret("10 5 <").unwrap();
+        assert_eq!(Ok(ZERO), xs.pop_data());
+        xs.interpret("2 3 =").unwrap();
+        assert_eq!(Ok(ZERO), xs.pop_data());
+        xs.interpret("4 4 =").unwrap();
+        assert_eq!(Ok(ONE), xs.pop_data());
+    }
 }
