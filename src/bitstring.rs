@@ -342,18 +342,16 @@ impl Bitstring {
         let new_len = BitstringRange::upper_bound_index(pos + tail.len());
         let data = Rc::make_mut(&mut self.data);
         data.resize_with(new_len, || 0);
-        fold_bits!(tail.range, tail.slice(), |x, num_bits| {
-            let i = pos / 8;
-            let used = pos % 8;
-            let vacant = 8 - used;
-            if num_bits <= vacant {
-                data[i] |= (x << (8 - used - num_bits)) as u8;
+        for x in tail.bits() {
+            let index = pos / 8;
+            let n = pos % 8;
+            if n < 8 {
+                data[index] |= x << (7 - n);
             } else {
-                data[i] |= (x >> used) as u8;
-                data[i + 1] = (x << vacant) as u8;
+                data[index + 1] |= x << 7;
             }
-            pos += num_bits as usize;
-        });
+            pos += 1;
+        }
         let start = self.range.start();
         self.range = BitstringRange(start..pos);
         self
@@ -507,6 +505,38 @@ mod tests {
         let a = s.read(4).unwrap();
         let b = s.read(4).unwrap();
         assert_eq!(b.append(&a).to_bytes(), vec![0x31]);
+
+        let mut s = Bitstring::from(&vec![0xC0, 0xBB, 0x78]);
+        s.read(1).unwrap();
+        let a = s.read(7).unwrap();
+        let a_bits: Vec<_> = a.bits().collect();
+        assert_eq!(a_bits, vec![1, 0, 0, 0, 0, 0, 0]);
+        s.read(1).unwrap();
+        let b = s.read(7).unwrap();
+        let b_bits: Vec<_> = b.bits().collect();
+        assert_eq!(b_bits, vec![0, 1, 1, 1, 0, 1, 1]);
+        s.read(1).unwrap();
+        let c = s.read(7).unwrap();
+        let c_bits: Vec<_> = c.bits().collect();
+        assert_eq!(c_bits, vec![1, 1, 1, 1, 0, 0, 0]);
+        let sab = a.clone().append(&b);
+        let sab_bits: Vec<_> = sab.bits().collect(); 
+        assert_eq!(
+            sab_bits,
+            vec![1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1]
+        );
+        let sabc = a.clone().append(&b).append(&c);
+        let sabc_bits: Vec<_> = sabc.bits().collect();
+        assert_eq!(
+            sabc_bits,
+            vec![1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0]
+        );
+        let scba = c.append(&b).append(&a);
+        let scba_bits: Vec<_> = scba.bits().collect();
+        assert_eq!(
+            scba_bits,
+            vec![1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+        );
     }
 
     #[test]
