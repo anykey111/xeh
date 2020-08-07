@@ -114,6 +114,26 @@ impl BitstringRange {
     }
 }
 
+fn u8_mask(len: usize) -> u8 {
+    match len {
+        0 => 0b00000000,
+        1 => 0b00000001,
+        2 => 0b00000011,
+        3 => 0b00000111,
+        4 => 0b00001111,
+        5 => 0b00011111,
+        6 => 0b00111111,
+        7 => 0b01111111,
+        _ => 0b11111111,
+    }
+}
+
+fn u8_cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
+    let start_pad = start % 8;
+    let n = (end - start).min(8 - start_pad);
+    (x.wrapping_shr((8 - n + start_pad) as u32) & u8_mask(n), n)
+}
+
 macro_rules! to_unsigned {
     ($range:expr, $data:expr, $order:expr, $t:ty) => {{
         let mut acc: $t = 0;
@@ -150,9 +170,7 @@ macro_rules! fold_bits {
         let mut start = $range.start();
         let end = $range.end();
         for x in $data {
-            let drift = start % 8;
-            let n = (end - start).min(8 - drift);
-            let val = (*x).wrapping_shl(drift as _).wrapping_shr((8 - n) as _);
+            let (val, n) = u8_cut_bits(*x, start, end);
             $f(val, n);
             start += n;
         }
@@ -165,17 +183,16 @@ macro_rules! num_to_big {
         let num_bits: usize = $num_bits;
         let mut bs = Bitstring::new();
         let buf = Rc::make_mut(&mut bs.data);
-        let mut n = num_bits;
-        while n > 0 {
-            let d = n.min(8);
-            let x = if d < 8 {
-                val.wrapping_shr((n - d) as u32)
-                    .wrapping_shl((8 - d) as u32)
+        let mut i = num_bits;
+        while i > 0 {
+            let n = i.min(8);
+            let x = val.wrapping_shr((i - n) as u32) as u8;
+            if n < 8 {
+                buf.push((x & u8_mask(n)).wrapping_shl(8 - n as u32));
             } else {
-                val.wrapping_shr((n - d) as u32)
-            };
-            buf.push(x as u8);
-            n -= d;
+                buf.push(x)
+            }
+            i -= n;
         }
         bs.range = BitstringRange(0..num_bits);
         bs
@@ -188,16 +205,16 @@ macro_rules! num_to_little {
         let num_bits: usize = $num_bits;
         let mut bs = Bitstring::new();
         let buf = Rc::make_mut(&mut bs.data);
-        let mut n = 0;
-        while n < num_bits {
-            let d = (num_bits - n).min(8);
-            let x = if d < 8 {
-                val.wrapping_shr(n as u32).wrapping_shl((8 - d) as u32)
+        let mut i = 0;
+        while i < num_bits {
+            let n = (num_bits - i).min(8);
+            let x = val.wrapping_shr(i as u32) as u8;
+            if n < 8 {
+                buf.push((x & u8_mask(n)).wrapping_shl(8 - n as u32));
             } else {
-                val.wrapping_shr(n as u32)
+                buf.push(x);
             };
-            buf.push(x as u8);
-            n += d;
+            i += n;
         }
         bs.range = BitstringRange(0..num_bits);
         bs
@@ -520,11 +537,8 @@ mod tests {
         let c_bits: Vec<_> = c.bits().collect();
         assert_eq!(c_bits, vec![1, 1, 1, 1, 0, 0, 0]);
         let sab = a.clone().append(&b);
-        let sab_bits: Vec<_> = sab.bits().collect(); 
-        assert_eq!(
-            sab_bits,
-            vec![1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1]
-        );
+        let sab_bits: Vec<_> = sab.bits().collect();
+        assert_eq!(sab_bits, vec![1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1]);
         let sabc = a.clone().append(&b).append(&c);
         let sabc_bits: Vec<_> = sabc.bits().collect();
         assert_eq!(
