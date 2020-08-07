@@ -327,6 +327,17 @@ impl Bitstring {
         }
     }
 
+    fn clear_padding_bits(&mut self) {
+        let r = self.range.clone();
+        let start_pad = r.start() % 8;
+        let data = Rc::make_mut(&mut self.data);
+        data[r.start() / 8] &= u8_mask(8 - start_pad);
+        let end_pad = r.end() % 8;
+        if end_pad > 0 {
+            data[r.end() / 8] &= !u8_mask(8 - end_pad);
+        }
+    }
+
     pub fn detach(&self) -> Bitstring {
         if self.len() == 0 {
             Bitstring::new()
@@ -334,11 +345,13 @@ impl Bitstring {
             let start = self.range.start() % 8;
             let end = start + self.len();
             let tmp = Vec::from(self.slice());
-            Bitstring {
+            let mut s = Bitstring {
                 format: BitstringFormat::Raw,
                 range: BitstringRange(start..end),
                 data: Rc::new(tmp),
-            }
+            };
+            s.clear_padding_bits();
+            s
         }
     }
 
@@ -381,6 +394,21 @@ impl Bitstring {
             let tmp = self.detach();
             tmp.append_bits_mut(tail)
         }
+    }
+
+    pub fn invert(self) -> Bitstring {
+        let mut s = if Rc::strong_count(&self.data) == 1 {
+            self
+        } else {
+            self.detach()
+        };
+        let r = s.range.clone();
+        let data = Rc::make_mut(&mut s.data);
+        for x in data[r.bytes_range()].iter_mut() {
+            *x = !*x;
+        }
+        s.clear_padding_bits();
+        s
     }
 }
 
@@ -551,6 +579,22 @@ mod tests {
             scba_bits,
             vec![1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn test_invert() {
+        let mut a = Bitstring::from(vec![0x0f, 0xf0]);
+        let b = a.clone().invert();
+        assert_eq!(b.to_bytes(), vec![0xf0, 0x0f]);
+        assert_eq!(b.invert().to_bytes(), vec![0x0f, 0xf0]);
+        let c = a.read(5).unwrap();
+        assert_eq!(c.bits().collect::<Vec<_>>(), vec![0, 0, 0, 0, 1]);
+        let c_inv = c.invert();
+        assert_eq!(c_inv.bits().collect::<Vec<_>>(), vec![1, 1, 1, 1, 0]);
+        assert_eq!(c_inv.data[0], 0xf0);
+        let e_inv = c_inv.invert();
+        assert_eq!(e_inv.bits().collect::<Vec<_>>(), vec![0, 0, 0, 0, 1]);
+        assert_eq!(e_inv.data[0], 0x08);
     }
 
     #[test]
