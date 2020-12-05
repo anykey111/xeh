@@ -1,7 +1,7 @@
-(320 const FIRE_WIDTH)
-(168 const FIRE_HEIGHT)
+320 const FIRE_WIDTH
+168 const FIRE_HEIGHT
 
-([
+[
     0x070707
     0x1F0707
     0x2F0F07
@@ -39,7 +39,7 @@
     0xDFDF9F
     0xEFEFC7
     0xFFFFFF
-] const PALETTE)
+] const PALETTE
 
 var fb
 FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb

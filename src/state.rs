@@ -1188,10 +1188,15 @@ fn core_word_const(xs: &mut State) -> Xresult {
         _other => return Err(Xerr::ExpectingName),
     };
     let a = xs.alloc_cell()?;
-    let val = xs.pop_data()?;
-    xs.heap[a] = val;
-    xs.dict_insert(name, Entry::Variable(a))?;
-    OK
+    if xs.ctx.mode == ContextMode::Load {
+        xs.dict_insert(name, Entry::Variable(a))?;
+        xs.code_emit(Opcode::Store(a), DebugInfo::Word(a))
+    } else {
+        let val = xs.pop_data()?;
+        xs.heap[a] = val;
+        xs.dict_insert(name, Entry::Variable(a))?;
+        OK
+    }
 }
 
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
