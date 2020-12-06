@@ -127,6 +127,8 @@ pub struct State {
     pub bs_input: Xvar,
     pub bs_isbig: Xvar,
     pub bs_chunk: Xvar,
+    // default base
+    pub base: Xvar,
 }
 
 #[derive(Default, Clone)]
@@ -341,6 +343,7 @@ impl State {
 
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
+        xs.base = xs.defonce("BASE", Cell::Int(10))?;
         xs.load_core()?;
         crate::bitstring_mod::bitstring_load(&mut xs)?;
         Ok(xs)
@@ -455,6 +458,10 @@ impl State {
             Def("round", core_word_round),
             Def("assert", core_word_assert),
             Def(".", core_word_display_top),
+            Def("HEX", core_word_hex),
+            Def("DECIMAL", core_word_decimal),
+            Def("OCTAL", core_word_octal),
+            Def("BINARY", core_word_binary),
         ]
         .iter()
         {
@@ -1440,8 +1447,28 @@ fn core_word_assert(xs: &mut State) -> Xresult {
 
 fn core_word_display_top(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    println!("{:?}", val);
+    match xs.get_var(&xs.base)?.clone().into_int()? {
+        2 => println!("{:2?}", val),
+        16 => println!("{:16?}", val),
+        _ => println!("{:10?}", val),
+    };
     OK
+}
+
+fn core_word_hex(xs: &mut State) -> Xresult {
+    xs.set_var(&xs.base.clone(), Cell::Int(16))
+}
+
+fn core_word_decimal(xs: &mut State) -> Xresult {
+    xs.set_var(&xs.base.clone(), Cell::Int(10))
+}
+
+fn core_word_octal(xs: &mut State) -> Xresult {
+    xs.set_var(&xs.base.clone(), Cell::Int(8))
+}
+
+fn core_word_binary(xs: &mut State) -> Xresult {
+    xs.set_var(&xs.base.clone(), Cell::Int(2))
 }
 
 #[cfg(test)]

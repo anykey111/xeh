@@ -33,36 +33,24 @@ use std::fmt;
 
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(1) = f.width() {
-            match self {
-                Cell::Nil => write!(f, "nil"),
-                Cell::Int(n) => write!(f, "{}", n),
-                Cell::Real(r) => write!(f, "{}", r),
-                Cell::Str(s) => write!(f, "str(len={})", s.len()),
-                Cell::Vector(v) => write!(f, "vec(len={})", v.len()),
-                Cell::Map(v) => write!(f, "map(len={})", v.len()),
-                Cell::Fun(x) => write!(f, "{:?}", x),
-                Cell::Bitstr(s) => write!(f, "bitstr(len={})", s.len()),
-                Cell::AnyRc(x) => match x.try_borrow() {
-                    Ok(p) => write!(f, "any:{:?}", p.type_id()),
-                    Err(_) => write!(f, "any"),
-                },
-            }
-        } else {
-            match self {
-                Cell::Nil => write!(f, "nil"),
-                Cell::Int(n) => write!(f, "{}", n),
-                Cell::Real(r) => write!(f, "{}", r),
-                Cell::Str(s) => write!(f, "{}", s),
-                Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
-                Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
-                Cell::Fun(x) => write!(f, "{:?}", x),
-                Cell::Bitstr(s) => f.debug_list().entries(s.bits()).finish(),
-                Cell::AnyRc(x) => match x.try_borrow() {
-                    Ok(p) => write!(f, "any:{:?}", p.type_id()),
-                    Err(_) => write!(f, "any"),
-                },
-            }
+        match self {
+            Cell::Nil => write!(f, "nil"),
+            Cell::Int(n) => match f.width().unwrap_or(10) {
+                2 => write!(f, "{:#b}", n),
+                8 => write!(f, "{:#o}", n),
+                16 => write!(f, "{:#X}", n),
+                _ => write!(f, "{:#}", n),
+            },
+            Cell::Real(r) => write!(f, "{}", r),
+            Cell::Str(s) => write!(f, "{}", s),
+            Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
+            Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
+            Cell::Fun(x) => write!(f, "{:?}", x),
+            Cell::Bitstr(s) => f.debug_list().entries(s.bits()).finish(),
+            Cell::AnyRc(x) => match x.try_borrow() {
+                Ok(p) => write!(f, "any:{:?}", p.type_id()),
+                Err(_) => write!(f, "any"),
+            },
         }
     }
 }
