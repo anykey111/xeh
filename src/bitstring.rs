@@ -129,9 +129,9 @@ fn u8_mask(len: usize) -> u8 {
 }
 
 fn u8_cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
-    let start_pad = start % 8;
-    let n = (end - start).min(8 - start_pad);
-    (x.wrapping_shr((8 - n + start_pad) as u32) & u8_mask(n), n)
+    let left_shift = start % 8;
+    let len = (end - start).min(8 - left_shift);
+    (x.wrapping_shl((start % 8) as u32).wrapping_shr((8 - len) as u32), len)
 }
 
 macro_rules! to_unsigned {
@@ -671,6 +671,15 @@ mod tests {
             Bitstring::from_i64(i64::max_value(), 64, BE).to_i64(BE),
             i64::max_value()
         );
+    }
+
+    #[test]
+    fn test_cut() {
+        assert_eq!((0b1100101, 7), u8_cut_bits(0b11100101, 1, 8));
+        assert_eq!((0b1100101, 7), u8_cut_bits(0b11100101, 1, 9));
+        assert_eq!((0b110010, 6), u8_cut_bits(0b11100101, 1, 7));
+        assert_eq!((0b1110010, 7), u8_cut_bits(0b11100101, 0, 7));
+        assert_eq!((0b0101, 4), u8_cut_bits(0b11100101, 4, 12));
     }
 
     #[test]
