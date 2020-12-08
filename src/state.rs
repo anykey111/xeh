@@ -1443,6 +1443,20 @@ fn core_word_assert(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_assert_eq(xs: &mut State) -> Xresult {
+    let a = xs.get_data(0).ok_or(Xerr::StackUnderflow)?;
+    let b = xs.get_data(1).ok_or(Xerr::StackUnderflow)?;
+    if a == b {
+        xs.pop_data()?;
+        xs.pop_data()?;
+        OK
+    } else {
+        eprintln!("[0]: {:?}", a);
+        eprintln!("[1]: {:?}", b);
+        Err(Xerr::DebugAssertion)
+    }
+}
+
 fn core_word_display_top(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
     match xs.get_var(&xs.base)?.clone().into_int()? {
