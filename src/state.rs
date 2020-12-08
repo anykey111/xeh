@@ -1,5 +1,3 @@
-use num_traits::ToPrimitive;
-
 use crate::arith::*;
 use crate::cell::*;
 use crate::debug::*;
@@ -230,7 +228,6 @@ impl State {
                     break self.context_close();
                 }
                 Tok::Num(n) => {
-                    let n = n.to_i128().ok_or(Xerr::IntegerOverflow)?;
                     self.code_emit(Opcode::LoadInt(n), DebugInfo::Comment("load int"))?;
                 }
                 Tok::Str(s) => {
@@ -457,6 +454,7 @@ impl State {
             Def("random", core_word_random),
             Def("round", core_word_round),
             Def("assert", core_word_assert),
+            Def("assert-eq", core_word_assert_eq),
             Def(".", core_word_display_top),
             Def("HEX", core_word_hex),
             Def("DECIMAL", core_word_decimal),

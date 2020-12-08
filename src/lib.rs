@@ -1,6 +1,3 @@
-extern crate num_bigint;
-extern crate num_traits;
-extern crate sha1;
 extern crate rand;
 
 pub mod lex;
@@ -8,7 +5,6 @@ mod opcodes;
 mod arith;
 pub mod bitstring;
 mod bitstring_mod;
-pub mod hash;
 pub mod error;
 pub mod cell;
 pub mod state;

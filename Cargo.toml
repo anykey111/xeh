@@ -8,9 +8,6 @@ edition = "2018"
 
 [dependencies]
 rpds = "0.7"
-num-bigint = "0.2.6"
-num-traits = "0.2"
-sha-1 = "0.8.2"
 rustyline = "6.1.2"
 getopts = "0.2"
 rand = "*"

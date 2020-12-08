@@ -174,19 +174,19 @@ impl Cell {
 
 impl From<usize> for Cell {
     fn from(x: usize) -> Self {
-        Cell::Int(x as i128)
+        Cell::Int(x as Xint)
     }
 }
 
 impl From<isize> for Cell {
     fn from(x: isize) -> Self {
-        Cell::Int(x as i128)
+        Cell::Int(x as Xint)
     }
 }
 
 impl From<u32> for Cell {
     fn from(x: u32) -> Self {
-        Cell::Int(x as i128)
+        Cell::Int(x as Xint)
     }
 }
 

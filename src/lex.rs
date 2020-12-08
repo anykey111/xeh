@@ -1,12 +1,11 @@
-use num_bigint::BigInt;
-
 use crate::error::*;
+use crate::cell::Xint;
 
 #[derive(Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
     Word(String),
-    Num(BigInt),
+    Num(Xint),
     Str(String),
 }
 
@@ -200,7 +199,8 @@ impl Lex {
                 return Ok(Tok::Word(w.to_string()));
             }
         }
-        if let Some(i) = BigInt::parse_bytes(&digits, radix) {
+        let s = String::from_utf8_lossy(&digits);
+        if let Some(i) = Xint::from_str_radix(&s, radix).ok() {
             return Ok(Tok::Num(i));
         }
         return Ok(Tok::Word(w.to_string()));
@@ -277,17 +277,16 @@ fn test_lex_ws() {
 
 #[test]
 fn test_lex_num() {
-    use num_bigint::ToBigInt;
     let mut lex = Lex::from_str("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
     assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
     assert_eq!(Tok::Word("+".to_string()), lex.next().unwrap());
     assert_eq!(Tok::Word("-".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Num((-1).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Num(-1), lex.next().unwrap());
     assert_eq!(Tok::Word("-x1".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Num((-1).to_bigint().unwrap()), lex.next().unwrap());
-    assert_eq!(Tok::Num((0).to_bigint().unwrap()), lex.next().unwrap());
-    assert_eq!(Tok::Num((3).to_bigint().unwrap()), lex.next().unwrap());
-    assert_eq!(Tok::Num((0xff00).to_bigint().unwrap()), lex.next().unwrap());
+    assert_eq!(Tok::Num(-1), lex.next().unwrap());
+    assert_eq!(Tok::Num(0), lex.next().unwrap());
+    assert_eq!(Tok::Num(3), lex.next().unwrap());
+    assert_eq!(Tok::Num(0xff00), lex.next().unwrap());
     let mut lex = Lex::from_str("--1 1- 0x1x");
     assert_eq!(Tok::Word("--1".to_string()), lex.next().unwrap());
     assert_eq!(Tok::Word("1-".to_string()), lex.next().unwrap());
