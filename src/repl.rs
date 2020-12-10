@@ -77,11 +77,10 @@ fn run_tty_repl(xs: &mut State, load_history: bool) {
 pub fn run_with_args(xs: &mut State, args: Vec<String>) -> Xresult {
     let mut opts = Options::new();
     opts.optopt("s", "", "set script file name", "path");
-    opts.optopt("i", "", "set input binary", "path");
+    opts.optopt("i", "", "input binary file ", "path");
     opts.optflag("d", "", "enable debugging");
     let matches = opts.parse(&args[1..]).unwrap();
-    if matches.opt_present("i") {
-        let path = matches.opt_str("i").expect("binary file");
+    if let Some(path) = matches.opt_str("i") {
         xs.set_binary_input(&path).unwrap();
     }
     if matches.opt_present("d") {
