@@ -45,19 +45,17 @@ var fb
 FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb
 
 var fire_img
-FIRE_WIDTH FIRE_HEIGHT * bytearray_new -> fire_img
-FIRE_WIDTH 0 do
-    36
-    FIRE_HEIGHT 1- FIRE_WIDTH * i +
-    fire_img bytearray_set
-loop
+[
+FIRE_HEIGHT 1- FIRE_WIDTH * 0 do 0 loop
+FIRE_WIDTH 0 do 36 loop
+] -> fire_img
 
 : fire_img_update
-    fire_img bytearray_set
+    fire_img assoc -> fire_img
 ;
 
 : fire_img_get
-    fire_img bytearray_get
+    fire_img get
 ;
 
 : calc_offset
