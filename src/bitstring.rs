@@ -22,97 +22,11 @@ impl Default for BitstringFormat {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct BitstringRange {
-    start: usize,
-    end: usize,
-}
+pub type BitstringRange = Range<usize>;
 
-impl Default for BitstringRange {
-    fn default() -> Self {
-        BitstringRange::from(0..0)
-    }
-}
-
-impl From<Range<usize>> for BitstringRange {
-    fn from(range: Range<usize>) -> Self {
-        BitstringRange {
-            start: range.start,
-            end: range.end,
-        }
-    }
-}
-
-impl BitstringRange {
-
-    fn num_bits(&self) -> usize {
-        self.end - self.start
-    }
-
-    fn bits_range(&self) -> Range<usize> {
-        self.start..self.end
-    }
-
-    fn bytes_range(&self) -> Range<usize> {
-        let i = self.start / 8;
-        let e = Self::upper_bound_index(self.end);
-        i..e
-    }
-
-    fn is_start_aligned(&self) -> bool {
-        (self.start % 8) == 0
-    }
-
-    fn is_bytestring(&self) -> bool {
-        self.is_start_aligned() && (self.end % 8 == 0)
-    }
-
-    fn upper_bound_index(num_bits: usize) -> usize {
-        let n = if (num_bits % 8) > 0 { 1 } else { 0 };
-        (num_bits / 8) + n
-    }
-
-    fn split_at(&self, bit_index: usize) -> Option<(BitstringRange, BitstringRange)> {
-        let mid = self.start + bit_index;
-        if mid > self.end {
-            return None;
-        }
-        let left = BitstringRange::from(self.start..mid);
-        let right = BitstringRange::from(mid..self.end);
-        Some((left, right))
-    }
-
-    fn peek(&self, num_bits: usize) -> Option<BitstringRange> {
-        if num_bits > self.num_bits() {
-            None
-        } else {
-            let start = self.start;
-            let end = start + num_bits;
-            Some(BitstringRange::from(start..end))
-        }
-    }
-
-    fn read(&mut self, num_bits: usize) -> Option<BitstringRange> {
-        let bs = self.peek(num_bits)?;
-        self.start += num_bits;
-        Some(bs)
-    }
-
-    fn peek_rear(&self, num_bits: usize) -> Option<BitstringRange> {
-        if num_bits > self.num_bits() {
-            None
-        } else {
-            let end = self.end;
-            let start = end - num_bits;
-            Some(BitstringRange::from(start..end))
-        }
-    }
-
-    fn read_rear(&mut self, num_bits: usize) -> Option<BitstringRange> {
-        let bs = self.peek_rear(num_bits)?;
-        self.end -= num_bits;
-        Some(bs)
-    }
+fn upper_bound_index(num_bits: usize) -> usize {
+    let n = if (num_bits % 8) > 0 { 1 } else { 0 };
+    (num_bits / 8) + n
 }
 
 fn u8_mask(len: usize) -> u8 {
@@ -157,7 +71,7 @@ macro_rules! to_unsigned {
 macro_rules! to_signed {
     ($range:expr, $data:expr, $order:expr, $u_t:ty, $i_t:ty) => {{
         let val = to_unsigned!($range, $data, $order, $u_t);
-        let mask = 1 << ($range.num_bits() - 1);
+        let mask = 1 << (($range.end - $range.start) - 1);
         if (val & mask) > 0 {
             (((val ^ mask) + 1) as $i_t).wrapping_neg()
         } else {
@@ -235,7 +149,11 @@ impl Bitstring {
     }
 
     pub fn len(&self) -> usize {
-        self.range.num_bits()
+        self.range.end - self.range.start
+    }
+
+    fn is_bytestring(&self) -> bool {
+        (self.range.start % 8 == 0) && (self.range.end % 8 == 0)
     }
 
     pub fn format(&self) -> BitstringFormat {
@@ -247,19 +165,26 @@ impl Bitstring {
     }
 
     pub fn read(&mut self, num_bits: usize) -> Option<Bitstring> {
-        let tmp = self.range.read(num_bits)?;
-        let mut bs = self.clone();
-        bs.range = tmp;
-        Some(bs)
+        let pos = self.range.start + num_bits;
+        if pos > self.range.end {
+            return None;
+        }
+        let mut result = self.clone();
+        result.range.end = pos;
+        self.range.start = pos;
+        Some(result)
     }
 
     pub fn split_at(&self, bit_index: usize) -> Option<(Bitstring, Bitstring)> {
-        let (h, rest) = self.range.split_at(bit_index)?;
-        let mut h_bs = self.clone();
-        h_bs.range = h;
-        let mut rest_bs = self.clone();
-        rest_bs.range = rest;
-        Some((h_bs, rest_bs))
+        let mid = self.range.start + bit_index;
+        if mid > self.range.end {
+            return None;
+        }
+        let mut left = self.clone();
+        left.range.end = mid;
+        let mut right = self.clone();
+        right.range.start = mid;
+        Some((left, right))
     }
 
     pub fn to_i64(&self, order: Byteorder) -> i64 {
@@ -318,7 +243,13 @@ impl Bitstring {
     }
 
     fn slice(&self) -> &[u8] {
-        &self.data[self.range.bytes_range()]
+        &self.data[self.bytes_range()]
+    }
+
+    fn bytes_range(&self) -> BitstringRange {
+        let i = self.range.start / 8;
+        let e = upper_bound_index(self.range.end);
+        i..e
     }
 
     pub fn bits<'a>(&'a self) -> Bits<'a> {
@@ -366,11 +297,11 @@ impl Bitstring {
     }
 
     fn append_bits_mut(mut self, tail: &Bitstring) -> Bitstring {
-        if self.range.is_bytestring() && tail.range.is_bytestring() {
+        if self.is_bytestring() && tail.is_bytestring() {
             return self.append_bytes_mut(tail);
         }
         let mut pos = self.range.end;
-        let new_len = BitstringRange::upper_bound_index(pos + tail.len());
+        let new_len = upper_bound_index(pos + tail.len());
         let data = Rc::make_mut(&mut self.data);
         data.resize_with(new_len, || 0);
         for x in tail.bits() {
@@ -403,9 +334,9 @@ impl Bitstring {
         } else {
             self.detach()
         };
-        let r = s.range.clone();
+        let r = s.bytes_range();
         let data = Rc::make_mut(&mut s.data);
-        for x in data[r.bytes_range()].iter_mut() {
+        for x in data[r].iter_mut() {
             *x = !*x;
         }
         s.clear_padding_bits();
@@ -417,7 +348,7 @@ impl PartialEq for Bitstring {
     fn eq(&self, other: &Bitstring) -> bool {
         if self.len() != other.len() {
             false
-        } else if self.range.is_bytestring() && other.range.is_bytestring() {
+        } else if self.is_bytestring() && other.is_bytestring() {
             let a = self.slice();
             let b = other.slice();
             a.iter().zip(b).all(|x| x.0 == x.1)
@@ -492,36 +423,36 @@ mod tests {
 
     #[test]
     fn test_index_upper_bound() {
-        assert_eq!(BitstringRange::upper_bound_index(0), 0);
-        assert_eq!(BitstringRange::upper_bound_index(1), 1);
-        assert_eq!(BitstringRange::upper_bound_index(2), 1);
-        assert_eq!(BitstringRange::upper_bound_index(3), 1);
-        assert_eq!(BitstringRange::upper_bound_index(4), 1);
-        assert_eq!(BitstringRange::upper_bound_index(5), 1);
-        assert_eq!(BitstringRange::upper_bound_index(6), 1);
-        assert_eq!(BitstringRange::upper_bound_index(7), 1);
-        assert_eq!(BitstringRange::upper_bound_index(8), 1);
-        assert_eq!(BitstringRange::upper_bound_index(9), 2);
-        assert_eq!(BitstringRange::upper_bound_index(10), 2);
-        assert_eq!(BitstringRange::upper_bound_index(11), 2);
-        assert_eq!(BitstringRange::upper_bound_index(12), 2);
-        assert_eq!(BitstringRange::upper_bound_index(13), 2);
-        assert_eq!(BitstringRange::upper_bound_index(14), 2);
-        assert_eq!(BitstringRange::upper_bound_index(15), 2);
-        assert_eq!(BitstringRange::upper_bound_index(16), 2);
-        assert_eq!(BitstringRange::upper_bound_index(17), 3);
+        assert_eq!(upper_bound_index(0), 0);
+        assert_eq!(upper_bound_index(1), 1);
+        assert_eq!(upper_bound_index(2), 1);
+        assert_eq!(upper_bound_index(3), 1);
+        assert_eq!(upper_bound_index(4), 1);
+        assert_eq!(upper_bound_index(5), 1);
+        assert_eq!(upper_bound_index(6), 1);
+        assert_eq!(upper_bound_index(7), 1);
+        assert_eq!(upper_bound_index(8), 1);
+        assert_eq!(upper_bound_index(9), 2);
+        assert_eq!(upper_bound_index(10), 2);
+        assert_eq!(upper_bound_index(11), 2);
+        assert_eq!(upper_bound_index(12), 2);
+        assert_eq!(upper_bound_index(13), 2);
+        assert_eq!(upper_bound_index(14), 2);
+        assert_eq!(upper_bound_index(15), 2);
+        assert_eq!(upper_bound_index(16), 2);
+        assert_eq!(upper_bound_index(17), 3);
     }
 
     #[test]
     fn test_detach() {
         let mut a = Bitstring::from(&vec![0xff, 0x2f]);
         let b = a.read(8).unwrap().detach();
-        assert_eq!(b.range.bits_range(), (0..8));
+        assert_eq!(b.range, (0..8));
         assert_eq!(b.to_bytes(), vec![0xff]);
         let c = a.read(4).unwrap().detach();
-        assert_eq!(c.range.bits_range(), (0..4));
+        assert_eq!(c.range, (0..4));
         assert_eq!(c.to_bytes(), vec![0x20]);
-        assert_eq!(a.range.bits_range(), (12..16));
+        assert_eq!(a.range, (12..16));
         let mut x = Bitstring::from(&vec![0x12, 0x34]);
         x.read(4).unwrap();
         assert_eq!(x.read(8).unwrap().to_bytes(), vec![0x23]);
