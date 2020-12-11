@@ -23,47 +23,48 @@ impl Default for BitstringFormat {
 }
 
 #[derive(Debug, Clone)]
-struct BitstringRange(Range<usize>);
+pub struct BitstringRange {
+    start: usize,
+    end: usize,
+}
 
 impl Default for BitstringRange {
     fn default() -> Self {
-        BitstringRange(0..0)
+        BitstringRange::from(0..0)
+    }
+}
+
+impl From<Range<usize>> for BitstringRange {
+    fn from(range: Range<usize>) -> Self {
+        BitstringRange {
+            start: range.start,
+            end: range.end,
+        }
     }
 }
 
 impl BitstringRange {
-    fn from_len(num_bytes: usize) -> BitstringRange {
-        BitstringRange(0..(num_bytes * 8))
-    }
 
     fn num_bits(&self) -> usize {
-        self.0.len()
-    }
-
-    fn start(&self) -> usize {
-        self.0.start
-    }
-
-    fn end(&self) -> usize {
-        self.0.end
+        self.end - self.start
     }
 
     fn bits_range(&self) -> Range<usize> {
-        self.0.clone()
+        self.start..self.end
     }
 
     fn bytes_range(&self) -> Range<usize> {
-        let i = self.start() / 8;
-        let e = Self::upper_bound_index(self.end());
+        let i = self.start / 8;
+        let e = Self::upper_bound_index(self.end);
         i..e
     }
 
     fn is_start_aligned(&self) -> bool {
-        (self.start() % 8) == 0
+        (self.start % 8) == 0
     }
 
     fn is_bytestring(&self) -> bool {
-        self.is_start_aligned() && (self.end() % 8 == 0)
+        self.is_start_aligned() && (self.end % 8 == 0)
     }
 
     fn upper_bound_index(num_bits: usize) -> usize {
@@ -72,12 +73,12 @@ impl BitstringRange {
     }
 
     fn split_at(&self, bit_index: usize) -> Option<(BitstringRange, BitstringRange)> {
-        let mid = self.start() + bit_index;
-        if mid > self.end() {
+        let mid = self.start + bit_index;
+        if mid > self.end {
             return None;
         }
-        let left = BitstringRange(self.start()..mid);
-        let right = BitstringRange(mid..self.end());
+        let left = BitstringRange::from(self.start..mid);
+        let right = BitstringRange::from(mid..self.end);
         Some((left, right))
     }
 
@@ -85,15 +86,15 @@ impl BitstringRange {
         if num_bits > self.num_bits() {
             None
         } else {
-            let start = self.start();
+            let start = self.start;
             let end = start + num_bits;
-            Some(BitstringRange(start..end))
+            Some(BitstringRange::from(start..end))
         }
     }
 
     fn read(&mut self, num_bits: usize) -> Option<BitstringRange> {
         let bs = self.peek(num_bits)?;
-        self.0.start += num_bits;
+        self.start += num_bits;
         Some(bs)
     }
 
@@ -101,15 +102,15 @@ impl BitstringRange {
         if num_bits > self.num_bits() {
             None
         } else {
-            let end = self.end();
+            let end = self.end;
             let start = end - num_bits;
-            Some(BitstringRange(start..end))
+            Some(BitstringRange::from(start..end))
         }
     }
 
     fn read_rear(&mut self, num_bits: usize) -> Option<BitstringRange> {
         let bs = self.peek_rear(num_bits)?;
-        self.0.end -= num_bits;
+        self.end -= num_bits;
         Some(bs)
     }
 }
@@ -167,8 +168,8 @@ macro_rules! to_signed {
 
 macro_rules! fold_bits {
     ($range:expr, $data:expr, $f:expr) => {{
-        let mut start = $range.start();
-        let end = $range.end();
+        let mut start = $range.start;
+        let end = $range.end;
         for x in $data {
             let (val, n) = u8_cut_bits(*x, start, end);
             $f(val, n);
@@ -194,7 +195,7 @@ macro_rules! num_to_big {
             }
             i -= n;
         }
-        bs.range = BitstringRange(0..num_bits);
+        bs.range = BitstringRange::from(0..num_bits);
         bs
     }};
 }
@@ -216,7 +217,7 @@ macro_rules! num_to_little {
             };
             i += n;
         }
-        bs.range = BitstringRange(0..num_bits);
+        bs.range = BitstringRange::from(0..num_bits);
         bs
     }};
 }
@@ -322,19 +323,19 @@ impl Bitstring {
 
     pub fn bits<'a>(&'a self) -> Bits<'a> {
         Bits {
-            pos: self.range.start(),
+            pos: self.range.start,
             bs: self,
         }
     }
 
     fn clear_padding_bits(&mut self) {
         let r = self.range.clone();
-        let start_pad = r.start() % 8;
+        let start_pad = r.start % 8;
         let data = Rc::make_mut(&mut self.data);
-        data[r.start() / 8] &= u8_mask(8 - start_pad);
-        let end_pad = r.end() % 8;
+        data[r.start / 8] &= u8_mask(8 - start_pad);
+        let end_pad = r.end % 8;
         if end_pad > 0 {
-            data[r.end() / 8] &= !u8_mask(8 - end_pad);
+            data[r.end / 8] &= !u8_mask(8 - end_pad);
         }
     }
 
@@ -342,12 +343,12 @@ impl Bitstring {
         if self.len() == 0 {
             Bitstring::new()
         } else {
-            let start = self.range.start() % 8;
+            let start = self.range.start % 8;
             let end = start + self.len();
             let tmp = Vec::from(self.slice());
             let mut s = Bitstring {
                 format: BitstringFormat::Raw,
-                range: BitstringRange(start..end),
+                range: BitstringRange::from(start..end),
                 data: Rc::new(tmp),
             };
             s.clear_padding_bits();
@@ -358,9 +359,9 @@ impl Bitstring {
     fn append_bytes_mut(mut self, tail: &Bitstring) -> Bitstring {
         let data = Rc::make_mut(&mut self.data);
         data.extend_from_slice(tail.slice());
-        let start = self.range.start();
-        let end = self.range.end() + tail.len();
-        self.range = BitstringRange(start..end);
+        let start = self.range.start;
+        let end = self.range.end + tail.len();
+        self.range = BitstringRange::from(start..end);
         self
     }
 
@@ -368,7 +369,7 @@ impl Bitstring {
         if self.range.is_bytestring() && tail.range.is_bytestring() {
             return self.append_bytes_mut(tail);
         }
-        let mut pos = self.range.end();
+        let mut pos = self.range.end;
         let new_len = BitstringRange::upper_bound_index(pos + tail.len());
         let data = Rc::make_mut(&mut self.data);
         data.resize_with(new_len, || 0);
@@ -382,8 +383,8 @@ impl Bitstring {
             }
             pos += 1;
         }
-        let start = self.range.start();
-        self.range = BitstringRange(start..pos);
+        let start = self.range.start;
+        self.range = BitstringRange::from(start..pos);
         self
     }
 
@@ -436,7 +437,7 @@ impl From<Vec<u8>> for Bitstring {
     fn from(v: Vec<u8>) -> Self {
         Bitstring {
             format: BitstringFormat::Raw,
-            range: BitstringRange::from_len(v.len()),
+            range: BitstringRange::from(0..(v.len() * 8)),
             data: Rc::new(v),
         }
     }
@@ -462,7 +463,7 @@ pub struct Bits<'a> {
 impl<'a> Iterator for Bits<'a> {
     type Item = u8;
     fn next(&mut self) -> Option<u8> {
-        if self.pos >= self.bs.range.end() {
+        if self.pos >= self.bs.range.end {
             None
         } else {
             let idx = self.pos / 8;
