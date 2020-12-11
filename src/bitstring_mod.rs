@@ -41,10 +41,18 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("i16le", |xs| read_signed_nb(xs, 16, Byteorder::LE))?;
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
+    xs.defword("binary-input-seek", binary_input_seek)?;
     xs.bs_input = xs.defonce("binary-input", Cell::Bitstr(Bitstring::new()))?;
     xs.bs_isbig = xs.defonce("binary-bigendian", ZERO)?;
     xs.bs_chunk = xs.defonce("binary-chunk", Cell::Bitstr(Bitstring::new()))?;
     OK
+}
+
+fn binary_input_seek(xs: &mut Xstate) -> Xresult {
+    let pos = xs.pop_data()?.into_usize()?;
+    let mut bs = xs.get_var(&xs.bs_input)?.clone().into_bitstring()?;
+    bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
+    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(bs))
 }
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
@@ -293,5 +301,17 @@ mod tests {
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
         assert_eq!(BitstringFormat::Signed(Byteorder::BE), s.format());
+    }
+
+    #[test]
+    fn test_bitstring_input_seek() {
+        let mut xs = Xstate::new().unwrap();
+        xs.set_binary_input_data(&vec![100, 200]).unwrap();
+        assert_eq!(Err(Xerr::OutOfRange), xs.interpret("100 binary-input-seek"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] binary-input-seek"));
+        xs.interpret("8 binary-input-seek 8 unsigned").unwrap();
+        assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
+        xs.interpret("0 binary-input-seek 8 unsigned").unwrap();
+        assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
     }
 }

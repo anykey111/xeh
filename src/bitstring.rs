@@ -158,6 +158,14 @@ impl Bitstring {
         return s;        
     }
 
+    pub fn start(&self) -> usize {
+        self.range.start
+    }
+
+    pub fn end(&self) -> usize {
+        self.range.end
+    }
+
     pub fn len(&self) -> usize {
         self.range.end - self.range.start
     }
@@ -172,6 +180,15 @@ impl Bitstring {
 
     pub fn set_format(&mut self, format: BitstringFormat) {
         self.format = format;
+    }
+
+    pub fn seek(&mut self, pos: usize) -> Option<usize> {
+        if pos < self.end() {
+            self.range.start = pos;
+            Some(pos)
+        } else {
+            None
+        }
     }
 
     pub fn read(&mut self, num_bits: usize) -> Option<Bitstring> {
