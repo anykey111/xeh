@@ -271,25 +271,24 @@ mod tests {
     #[test]
     fn test_bitstring_chunk() {
         let mut xs = Xstate::new().unwrap();
-        xs.set_binary_input_data(&vec![0x11, 0x13, 0x33, 0x3f])
-            .unwrap();
-        xs.interpret("12 unsigned").unwrap();
-        assert_eq!(Cell::Int(0x111), xs.pop_data().unwrap());
+        xs.set_binary_input_data(&vec![1, 2, 3, 0]).unwrap();
+        xs.interpret("8 unsigned").unwrap();
+        assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         xs.interpret("binary-chunk").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
-        assert_eq!(12, s.len());
+        assert_eq!(8, s.len());
         assert_eq!(BitstringFormat::Unsigned(Byteorder::LE), s.format());
         xs.interpret("2 bytes").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(BitstringFormat::Raw, s.format());
         assert_eq!(16, s.len());
-        assert_eq!(vec![0x33, 0x33], s.to_bytes());
+        assert_eq!(vec![2, 3], s.to_bytes());
         xs.interpret("2 bits").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(BitstringFormat::Raw, s.format());
         assert_eq!(2, s.len());
         xs.interpret("big-endian 2 signed").unwrap();
-        assert_eq!(Cell::Int(-2), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         xs.interpret("binary-chunk").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
