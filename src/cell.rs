@@ -94,7 +94,7 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
-    pub fn into_address(self) -> Xresult1<usize> {
+    pub fn into_ref(self) -> Xresult1<usize> {
         match self {
             Cell::Ref(a) => Ok(a),
             _ => Err(Xerr::TypeError),
