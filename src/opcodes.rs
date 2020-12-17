@@ -12,6 +12,7 @@ pub enum Opcode {
     JumpIfNot(isize),
     Jump(isize),
     Load(usize),
+    LoadNil,
     LoadInt(Xint),
     LoadRef(usize),
     Store(usize),
@@ -36,6 +37,7 @@ impl fmt::Debug for Opcode {
             Self::Load(a) => write!(f, "Load({})", a),
             Self::LoadRef(a) => write!(f, "LoadRef({})", a),
             Self::LoadInt(i) => write!(f, "LoadInt({})", i),
+            Self::LoadNil => write!(f, "LoadNil"),
             Self::Store(a) => write!(f, "Store({})", a),
             Self::InitLocal(i) => write!(f, "InitLocal({})", i),
             Self::LoadLocal(i) => write!(f, "LoadLocal({})", i),
@@ -57,6 +59,7 @@ impl PartialEq for Opcode {
             (Self::Load(a), Self::Load(b)) => a == b,
             (Self::LoadRef(a), Self::LoadRef(b)) => a == b,
             (Self::LoadInt(a), Self::LoadInt(b)) => a == b,
+            (Self::LoadNil, Self::LoadNil) => true,
             (Self::Store(a), Self::Store(b)) => a == b,
             _ => false,
         }

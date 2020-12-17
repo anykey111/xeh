@@ -411,6 +411,7 @@ impl State {
             Def("var", core_word_var),
             Def("->", core_word_setvar),
             Def("const", core_word_const),
+            Def("nil", core_word_nil),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
             Def("execute", core_word_execute),
@@ -595,6 +596,10 @@ impl State {
             }
             Opcode::LoadRef(a) => {
                 self.push_data(Cell::Ref(a))?;
+                self.next_ip()
+            }
+            Opcode::LoadNil => {
+                self.push_data(Cell::Nil)?;
                 self.next_ip()
             }
             Opcode::Load(a) => {
@@ -1209,6 +1214,14 @@ fn core_word_const(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_nil(xs: &mut State) -> Xresult {
+    if xs.ctx.mode == ContextMode::Load {
+        xs.code_emit(Opcode::LoadNil, DebugInfo::Empty)
+    } else {
+        xs.push_data(Cell::Nil)
+    }
+}
+
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
     xs.context_open(ContextMode::Nested, None)
 }
@@ -1256,6 +1269,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
             Opcode::LoadRef(a) => format!("loadref    {}", a),
+            Opcode::LoadNil => format!("loadnil"),
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
