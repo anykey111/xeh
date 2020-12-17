@@ -25,6 +25,7 @@ pub enum Cell {
     Vector(Xvec<Cell>),
     Map(Xmap),
     Fun(Xfn),
+    Ref(usize),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
 }
@@ -47,6 +48,7 @@ impl fmt::Debug for Cell {
             Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => f.debug_list().entries(s.bits()).finish(),
+            Cell::Ref(x) =>  write!(f, "ref {:?}", x),
             Cell::AnyRc(x) => match x.try_borrow() {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
@@ -85,18 +87,17 @@ impl PartialEq for Cell {
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
             (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
+            (Cell::Ref(a), Cell::Ref(b)) => a == b,
             _ => false,
         }
     }
 }
 
 impl Cell {
-    pub fn to_address(self) -> Xresult1<usize> {
-        let i: Xint = self.try_into()?;
-        if i.is_positive() {
-            Ok(i as usize)
-        } else {
-            Err(Xerr::IntegerOverflow)
+    pub fn into_address(self) -> Xresult1<usize> {
+        match self {
+            Cell::Ref(a) => Ok(a),
+            _ => Err(Xerr::TypeError),
         }
     }
 

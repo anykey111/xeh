@@ -593,6 +593,10 @@ impl State {
                 self.push_data(Cell::Int(n))?;
                 self.next_ip()
             }
+            Opcode::LoadRef(a) => {
+                self.push_data(Cell::Ref(a))?;
+                self.next_ip()
+            }
             Opcode::Load(a) => {
                 let val = self.heap[a].clone();
                 self.push_data(val)?;
@@ -1251,6 +1255,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
+            Opcode::LoadRef(a) => format!("loadref    {}", a),
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
