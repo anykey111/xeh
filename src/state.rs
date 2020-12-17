@@ -226,7 +226,7 @@ impl State {
                     self.code_emit(Opcode::LoadInt(n), DebugInfo::Comment("load int"))?;
                 }
                 Tok::Str(s) => {
-                    let a = self.readonly_cell(Cell::Str(s));
+                    let a = self.alloc_cell(Cell::Str(s))?;
                     self.code_emit(Opcode::Load(a), DebugInfo::Comment("load str"))?;
                 }
                 Tok::Word(name) => {
@@ -335,7 +335,7 @@ impl State {
 
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
-        xs.base = xs.defonce("BASE", Cell::Int(10))?;
+        xs.base = xs.defvar("BASE", Cell::Int(10))?;
         xs.load_core()?;
         crate::bitstring_mod::bitstring_load(&mut xs)?;
         Ok(xs)
@@ -345,18 +345,11 @@ impl State {
         self.state_rec = if t { Some(Vec::default()) } else { None };
     }
 
-    pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xref> {
-        if let Some(idx) = self.dict_find(name) {
-            match self.dict_at(idx) {
-                Some(Entry::Variable(a)) => Ok(Xref::Heap(*a)),
-                _ => Err(Xerr::InvalidAddress),
-            }
-        } else {
-            let a = self.alloc_cell()?;
-            self.heap[a] = value;
-            self.dict_insert(name.to_string(), Entry::Variable(a))?;
-            Ok(Xref::Heap(a))
-        }
+    pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<Xref> {
+        // shadow previous definition
+        let a = self.alloc_cell(val)?;
+        self.dict_insert(name.to_string(), Entry::Variable(a))?;
+        Ok(Xref::Heap(a))
     }
 
     pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
@@ -410,9 +403,8 @@ impl State {
             Def(";", core_word_def_end),
             Def("immediate", core_word_immediate),
             Def("local", core_word_def_local),
-            Def("var", core_word_var),
+            Def("var", core_word_variable),
             Def("->", core_word_setvar),
-            Def("const", core_word_const),
             Def("nil", core_word_nil),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
@@ -512,16 +504,10 @@ impl State {
         self.patch_insn(at, insn)
     }
 
-    fn alloc_cell(&mut self) -> Xresult1<usize> {
+    fn alloc_cell(&mut self, val: Cell) -> Xresult1<usize> {
         let a = self.heap.len();
-        self.heap.push(Cell::Nil);
+        self.heap.push(val);
         Ok(a)
-    }
-
-    fn readonly_cell(&mut self, c: Cell) -> usize {
-        let a = self.heap.len();
-        self.heap.push(c);
-        a
     }
 
     fn call_fn(&mut self, x: Xfn) -> Xresult {
@@ -1170,12 +1156,19 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::InitLocal(idx), dinfo)
 }
 
-fn core_word_var(xs: &mut State) -> Xresult {
+fn core_word_variable(xs: &mut State) -> Xresult {
     let name = match xs.next_token()? {
         Tok::Word(name) => name,
         _other => return Err(Xerr::ExpectingName),
     };
-    let a = xs.alloc_cell()?;
+    let a = if xs.ctx.mode == ContextMode::Load {
+        let a = xs.alloc_cell(Cell::Nil)?;
+        xs.code_emit(Opcode::Store(a), DebugInfo::Empty)?;
+        a
+    } else {
+        let val = xs.pop_data()?;
+        xs.alloc_cell(val)?
+    };
     xs.dict_insert(name, Entry::Variable(a))?;
     OK
 }
@@ -1196,23 +1189,6 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Store(a), DebugInfo::Word(a))
         }
         _ => Err(Xerr::ReadonlyAddress),
-    }
-}
-
-fn core_word_const(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _other => return Err(Xerr::ExpectingName),
-    };
-    let a = xs.alloc_cell()?;
-    if xs.ctx.mode == ContextMode::Load {
-        xs.dict_insert(name, Entry::Variable(a))?;
-        xs.code_emit(Opcode::Store(a), DebugInfo::Word(a))
-    } else {
-        let val = xs.pop_data()?;
-        xs.heap[a] = val;
-        xs.dict_insert(name, Entry::Variable(a))?;
-        OK
     }
 }
 
@@ -1597,8 +1573,7 @@ mod tests {
         it.next().unwrap();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIf(-2), it.next().unwrap());
-        xs.interpret("var x 1 -> x begin x while 0 -> x repeat")
-            .unwrap();
+        xs.interpret("1 var x begin x while 0 -> x repeat").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("repeat begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
@@ -1700,14 +1675,15 @@ mod tests {
     }
 
     #[test]
-    fn test_defonce() {
+    fn test_defvar() {
         let mut xs = State::new().unwrap();
-        let _ = xs.defonce("X", Cell::Int(1)).unwrap();
-        let x2 = xs.defonce("X", Cell::Int(2)).unwrap();
-        assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x2));
+        let x = xs.defvar("X", Cell::Int(1)).unwrap();
+        assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x));
+        let x2 = xs.defvar("X", Cell::Int(2)).unwrap();
+        assert_eq!(Ok(&Cell::Int(2)), xs.get_var(x2));
         xs.interpret(": Y 3 ;").unwrap();
-        assert_eq!(Err(Xerr::InvalidAddress), xs.defonce("Y", Cell::Nil));
-        xs.interpret("4 const Z").unwrap();
-        assert_eq!(Err(Xerr::InvalidAddress), xs.defonce("Z", Cell::Nil));
+        xs.defvar("Y", Cell::Nil).unwrap();
+        xs.interpret("4 var Z").unwrap();
+        xs.defvar("Z", Cell::Nil).unwrap();
     }
 }

@@ -42,9 +42,9 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
     xs.defword("binary-input-seek", binary_input_seek)?;
-    xs.bs_input = xs.defonce("binary-input", Cell::Bitstr(Bitstring::new()))?;
-    xs.bs_isbig = xs.defonce("binary-bigendian", ZERO)?;
-    xs.bs_chunk = xs.defonce("binary-chunk", Cell::Bitstr(Bitstring::new()))?;
+    xs.bs_input = xs.defvar("binary-input", Cell::Bitstr(Bitstring::new()))?;
+    xs.bs_isbig = xs.defvar("binary-bigendian", ZERO)?;
+    xs.bs_chunk = xs.defvar("binary-chunk", Cell::Bitstr(Bitstring::new()))?;
     OK
 }
 

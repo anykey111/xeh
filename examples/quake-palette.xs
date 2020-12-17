@@ -4,12 +4,11 @@ big-endian
     256 0 do
         24 unsigned 0xff00_0000 bit-or
     loop
-] const pal
+] var pal
 
 : zoom 32 * ;
 
-var fb
-16 zoom 16 zoom minifb_new -> fb
+16 zoom 16 zoom minifb_new var fb
 
 : draw_color
     local color

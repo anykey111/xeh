@@ -1,5 +1,5 @@
-320 const FIRE_WIDTH
-168 const FIRE_HEIGHT
+320 var FIRE_WIDTH
+168 var FIRE_HEIGHT
 
 [
     0x070707
@@ -39,19 +39,20 @@
     0xDFDF9F
     0xEFEFC7
     0xFFFFFF
-] const PALETTE
+] var PALETTE
 
-var fb
-FIRE_WIDTH FIRE_HEIGHT minifb_new -> fb
+FIRE_WIDTH FIRE_HEIGHT minifb_new var fb
 
-var fire_img
 [
 FIRE_HEIGHT 1- FIRE_WIDTH * 0 do 0 loop
 FIRE_WIDTH 0 do 36 loop
-] -> fire_img
+] var fire_img
 
 : fire_img_update
-    fire_img assoc -> fire_img
+    # this trick eliminate fire_img copy
+    fire_img
+    nil -> fire_img
+    assoc -> fire_img
 ;
 
 : fire_img_get
