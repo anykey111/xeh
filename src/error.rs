@@ -14,7 +14,6 @@ pub enum Xerr {
     TypeError,
     RecusriveDefinition,
     ExpectingName,
-    NotAnExecutable,
     InvalidAddress,
     ReadonlyAddress,
     IOError,
