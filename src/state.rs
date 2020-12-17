@@ -741,15 +741,16 @@ impl State {
             })
     }
 
-    fn dropn(&mut self, len: usize) -> Xresult {
-        let ds_len = self.data_stack.len();
-        if ds_len < len {
+    fn dropn(&mut self, n: usize) -> Xresult {
+        let ds_len = self.data_stack.len() - self.ctx.ds_len;
+        if ds_len < n {
             Err(Xerr::StackUnderflow)
         } else {
-            self.data_stack.truncate(ds_len - len);
+            self.data_stack.truncate(ds_len - n);
             OK
         }
     }
+
     pub fn push_data(&mut self, data: Cell) -> Xresult {
         if let Some(rec) = self.state_rec.as_mut() {
             journal_state_change(rec, StateChange::PopData);
