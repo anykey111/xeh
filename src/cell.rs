@@ -16,6 +16,19 @@ pub enum Xfn {
     Native(XfnType),
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Xref {
+    None,
+    Heap(usize),
+    Word(usize),
+}
+
+impl Default for Xref {
+    fn default() -> Self {
+        Xref::None
+    }
+}
+
 #[derive(Clone)]
 pub enum Cell {
     Nil,
@@ -25,7 +38,7 @@ pub enum Cell {
     Vector(Xvec<Cell>),
     Map(Xmap),
     Fun(Xfn),
-    Ref(usize),
+    Ref(Xref),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
 }
@@ -94,9 +107,9 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
-    pub fn into_ref(self) -> Xresult1<usize> {
+    pub fn into_ref(self) -> Xresult1<Xref> {
         match self {
-            Cell::Ref(a) => Ok(a),
+            Cell::Ref(xref) => Ok(xref),
             _ => Err(Xerr::TypeError),
         }
     }

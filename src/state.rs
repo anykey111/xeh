@@ -122,15 +122,12 @@ pub struct State {
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
     // current input binary
-    pub bs_input: Xvar,
-    pub bs_isbig: Xvar,
-    pub bs_chunk: Xvar,
+    pub(crate) bs_input: Xref,
+    pub(crate) bs_isbig: Xref,
+    pub(crate) bs_chunk: Xref,
     // default base
-    pub base: Xvar,
+    pub(crate) base: Xref,
 }
-
-#[derive(Default, Clone)]
-pub struct Xvar(Option<usize>);
 
 impl State {
     pub fn run_repl(&mut self) -> Xresult {
@@ -163,14 +160,12 @@ impl State {
             Xerr::IOError
         })?;
         let s = Xbitstr::from(buf);
-        let var = self.bs_input.clone();
-        self.set_var(&var, Cell::Bitstr(s)).map(|_| ())
+        self.set_var(self.bs_input, Cell::Bitstr(s)).map(|_| ())
     }
 
     pub fn set_binary_input_data(&mut self, data: &[u8]) -> Xresult {
         let s = Xbitstr::from(data);
-        let var = self.bs_input.clone();
-        self.set_var(&var, Cell::Bitstr(s)).map(|_| ())
+        self.set_var(self.bs_input, Cell::Bitstr(s)).map(|_| ())
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
@@ -350,29 +345,36 @@ impl State {
         self.state_rec = if t { Some(Vec::default()) } else { None };
     }
 
-    pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xvar> {
-        if let Some(a) = self.dict_find(name) {
-            Ok(Xvar(Some(a)))
+    pub fn defonce(&mut self, name: &str, value: Cell) -> Xresult1<Xref> {
+        if let Some(idx) = self.dict_find(name) {
+            match self.dict_at(idx) {
+                Some(Entry::Variable(a)) => Ok(Xref::Heap(*a)),
+                _ => Err(Xerr::InvalidAddress),
+            }
         } else {
             let a = self.alloc_cell()?;
             self.heap[a] = value;
             self.dict_insert(name.to_string(), Entry::Variable(a))?;
-            Ok(Xvar(Some(a)))
+            Ok(Xref::Heap(a))
         }
     }
 
-    pub fn get_var(&self, var: &Xvar) -> Xresult1<&Cell> {
-        match var {
-            Xvar(Some(a)) => self.heap.get(*a).ok_or(Xerr::InvalidAddress),
+    pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
+        match xref {
+            Xref::Heap(a) => self.heap.get(a).ok_or(Xerr::InvalidAddress),
             _ => Err(Xerr::InvalidAddress),
         }
     }
 
-    pub fn set_var(&mut self, var: &Xvar, mut val: Cell) -> Xresult1<Cell> {
-        let a = var.0.ok_or(Xerr::InvalidAddress)?;
-        let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
-        std::mem::swap(&mut val, x);
-        Ok(val)
+    pub fn set_var(&mut self, xref: Xref, mut val: Cell) -> Xresult1<Cell> {
+        match xref {
+            Xref::Heap(a) => {
+                let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
+                std::mem::swap(&mut val, x);
+                Ok(val)
+            },
+            _ => Err(Xerr::InvalidAddress),
+        }
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
@@ -594,8 +596,8 @@ impl State {
                 self.push_data(Cell::Int(n))?;
                 self.next_ip()
             }
-            Opcode::LoadRef(a) => {
-                self.push_data(Cell::Ref(a))?;
+            Opcode::LoadRef(xr) => {
+                self.push_data(Cell::Ref(xr))?;
                 self.next_ip()
             }
             Opcode::LoadNil => {
@@ -1268,7 +1270,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
-            Opcode::LoadRef(a) => format!("loadref    {}", a),
+            Opcode::LoadRef(a) => format!("loadref    {:?}", a),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
@@ -1479,28 +1481,28 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
 
 fn core_word_display_top(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    match xs.get_var(&xs.base)?.clone().into_int()? {
-        2 => println!("{:2?}", val),
-        16 => println!("{:16?}", val),
+    match xs.get_var(xs.base)? {
+        Cell::Int(2) => println!("{:2?}", val),
+        Cell::Int(16) => println!("{:16?}", val),
         _ => println!("{:10?}", val),
     };
     OK
 }
 
 fn core_word_hex(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(16)).map(|_| ())
+    xs.set_var(xs.base, Cell::Int(16)).map(|_| ())
 }
 
 fn core_word_decimal(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(10)).map(|_| ())
+    xs.set_var(xs.base, Cell::Int(10)).map(|_| ())
 }
 
 fn core_word_octal(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(8)).map(|_| ())
+    xs.set_var(xs.base, Cell::Int(8)).map(|_| ())
 }
 
 fn core_word_binary(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(2)).map(|_| ())
+    xs.set_var(xs.base, Cell::Int(2)).map(|_| ())
 }
 
 #[cfg(test)]
@@ -1695,5 +1697,17 @@ mod tests {
         let mut xs = State::new().unwrap();
         let res = xs.load(": f 0 [] get immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
+    }
+
+    #[test]
+    fn test_defonce() {
+        let mut xs = State::new().unwrap();
+        let _ = xs.defonce("X", Cell::Int(1)).unwrap();
+        let x2 = xs.defonce("X", Cell::Int(2)).unwrap();
+        assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x2));
+        xs.interpret(": Y 3 ;").unwrap();
+        assert_eq!(Err(Xerr::InvalidAddress), xs.defonce("Y", Cell::Nil));
+        xs.interpret("4 const Z").unwrap();
+        assert_eq!(Err(Xerr::InvalidAddress), xs.defonce("Z", Cell::Nil));
     }
 }

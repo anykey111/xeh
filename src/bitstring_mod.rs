@@ -50,9 +50,9 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
 
 fn binary_input_seek(xs: &mut Xstate) -> Xresult {
     let pos = xs.pop_data()?.into_usize()?;
-    let mut bs = xs.get_var(&xs.bs_input)?.clone().into_bitstring()?;
+    let mut bs = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
     bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
-    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(bs)).map(|_| ())
+    xs.set_var(xs.bs_input, Cell::Bitstr(bs)).map(|_| ())
 }
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
@@ -128,22 +128,22 @@ fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
 }
 
 fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
-    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(rest)).map(|_| ())
+    xs.set_var(xs.bs_input, Cell::Bitstr(rest)).map(|_| ())
 }
 
 fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
-    xs.set_var(&xs.bs_chunk.clone(), Cell::Bitstr(s)).map(|_| ())
+    xs.set_var(xs.bs_chunk, Cell::Bitstr(s)).map(|_| ())
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
     xs.set_var(
-        &xs.bs_isbig.clone(),
+        xs.bs_isbig,
         if bo == Byteorder::LE { ZERO } else { ONE },
     ).map(|_| ())
 }
 
 fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
-    if xs.get_var(&xs.bs_isbig)? == &ZERO {
+    if xs.get_var(xs.bs_isbig)? == &ZERO {
         Ok(Byteorder::LE)
     } else {
         Ok(Byteorder::BE)
@@ -194,7 +194,7 @@ fn bin_read_unsigned(xs: &mut Xstate) -> Xresult {
 }
 
 fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
-    let mut rest = xs.get_var(&xs.bs_input)?.clone().into_bitstring()?;
+    let mut rest = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
     let s = rest.read(n as usize).ok_or(Xerr::OutOfRange)?;
     Ok((s, rest))
 }
