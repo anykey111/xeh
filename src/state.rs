@@ -164,13 +164,13 @@ impl State {
         })?;
         let s = Xbitstr::from(buf);
         let var = self.bs_input.clone();
-        self.set_var(&var, Cell::Bitstr(s))
+        self.set_var(&var, Cell::Bitstr(s)).map(|_| ())
     }
 
     pub fn set_binary_input_data(&mut self, data: &[u8]) -> Xresult {
         let s = Xbitstr::from(data);
         let var = self.bs_input.clone();
-        self.set_var(&var, Cell::Bitstr(s))
+        self.set_var(&var, Cell::Bitstr(s)).map(|_| ())
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
@@ -368,11 +368,11 @@ impl State {
         }
     }
 
-    pub fn set_var(&mut self, var: &Xvar, val: Cell) -> Xresult {
+    pub fn set_var(&mut self, var: &Xvar, mut val: Cell) -> Xresult1<Cell> {
         let a = var.0.ok_or(Xerr::InvalidAddress)?;
         let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
-        *x = val;
-        OK
+        std::mem::swap(&mut val, x);
+        Ok(val)
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
@@ -1488,19 +1488,19 @@ fn core_word_display_top(xs: &mut State) -> Xresult {
 }
 
 fn core_word_hex(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(16))
+    xs.set_var(&xs.base.clone(), Cell::Int(16)).map(|_| ())
 }
 
 fn core_word_decimal(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(10))
+    xs.set_var(&xs.base.clone(), Cell::Int(10)).map(|_| ())
 }
 
 fn core_word_octal(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(8))
+    xs.set_var(&xs.base.clone(), Cell::Int(8)).map(|_| ())
 }
 
 fn core_word_binary(xs: &mut State) -> Xresult {
-    xs.set_var(&xs.base.clone(), Cell::Int(2))
+    xs.set_var(&xs.base.clone(), Cell::Int(2)).map(|_| ())
 }
 
 #[cfg(test)]

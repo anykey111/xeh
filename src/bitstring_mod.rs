@@ -52,7 +52,7 @@ fn binary_input_seek(xs: &mut Xstate) -> Xresult {
     let pos = xs.pop_data()?.into_usize()?;
     let mut bs = xs.get_var(&xs.bs_input)?.clone().into_bitstring()?;
     bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
-    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(bs))
+    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(bs)).map(|_| ())
 }
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
@@ -128,18 +128,18 @@ fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
 }
 
 fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
-    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(rest))
+    xs.set_var(&xs.bs_input.clone(), Cell::Bitstr(rest)).map(|_| ())
 }
 
 fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
-    xs.set_var(&xs.bs_chunk.clone(), Cell::Bitstr(s))
+    xs.set_var(&xs.bs_chunk.clone(), Cell::Bitstr(s)).map(|_| ())
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
     xs.set_var(
         &xs.bs_isbig.clone(),
         if bo == Byteorder::LE { ZERO } else { ONE },
-    )
+    ).map(|_| ())
 }
 
 fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
