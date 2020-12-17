@@ -5,7 +5,6 @@ use minifb::{Key, Window, WindowOptions};
 use xeh::cell::Cell;
 use xeh::error::*;
 use xeh::state::*;
-use xeh::lex::*;
 
 struct MiniFb {
     width: usize,
