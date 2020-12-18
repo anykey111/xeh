@@ -49,6 +49,7 @@ impl PartialEq for Opcode {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Nop, Self::Nop) => true,
+            (Self::Next, Self::Next) => true,
             (Self::Call(a), Self::Call(b)) => a == b,
             (Self::Deferred(a), Self::Deferred(b)) => a == b,
             (Self::NativeCall(a), Self::NativeCall(b)) => *a as usize == *b as usize,

@@ -223,11 +223,10 @@ impl State {
                     break self.context_close();
                 }
                 Tok::Num(n) => {
-                    self.code_emit(Opcode::LoadInt(n), DebugInfo::Comment("load int"))?;
+                    self.code_emit_value(Cell::Int(n))?;
                 }
                 Tok::Str(s) => {
-                    let a = self.alloc_cell(Cell::Str(s))?;
-                    self.code_emit(Opcode::Load(a), DebugInfo::Comment("load str"))?;
+                    self.code_emit_value(Cell::Str(s))?;
                 }
                 Tok::Word(name) => {
                     let idx = match self.dict_find(&name) {
@@ -316,16 +315,23 @@ impl State {
     }
 
     fn context_close(&mut self) -> Xresult {
-        let mut tmp = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
-        if tmp.source.is_none() {
+        let mut prev_ctx = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
+        if prev_ctx.source.is_none() {
             // take source from current context
-            tmp.source = self.ctx.source.take();
+            prev_ctx.source = self.ctx.source.take();
         }
         if self.ctx.mode == ContextMode::Nested {
             // clear context code after evaluation
-            self.code.truncate(tmp.cs_len);
+            self.code.truncate(prev_ctx.cs_len);
+            if prev_ctx.mode == ContextMode::Load {
+                // compile evaluation result
+                while self.data_stack.len() > self.ctx.ds_len {
+                    let val = self.pop_data()?;
+                    self.code_emit_value(val)?;
+                }
+            }
         }
-        self.ctx = tmp;
+        self.ctx = prev_ctx;
         OK
     }
 
@@ -479,6 +485,18 @@ impl State {
 
     fn code_origin(&self) -> usize {
         self.code.len()
+    }
+
+    fn code_emit_value(&mut self, val: Cell) -> Xresult {
+        match val {
+            Cell::Int(i) => self.code_emit(Opcode::LoadInt(i), DebugInfo::Empty),
+            Cell::Ref(p) => self.code_emit(Opcode::LoadRef(p), DebugInfo::Empty),
+            Cell::Nil => self.code_emit(Opcode::LoadNil, DebugInfo::Empty),
+            val => {
+                let a = self.alloc_cell(val)?;
+                self.code_emit(Opcode::Load(a), DebugInfo::Empty)
+            }
+        }
     }
 
     fn code_emit(&mut self, op: Opcode, dinfo: DebugInfo) -> Xresult {
@@ -1672,6 +1690,23 @@ mod tests {
         let mut xs = State::new().unwrap();
         let res = xs.load(": f 0 [] get immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
+    }
+
+    #[test]
+    fn test_nested_interpreter() {
+        let mut xs = State::new().unwrap();
+        xs.load("(3 5 *)").unwrap();
+        assert_eq!(vec![Opcode::LoadInt(15), Opcode::Next], xs.code);
+        xs.run().unwrap();
+        assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
+        xs.interpret("(2 2 +)").unwrap();
+        assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
+        xs.interpret("(10 var X 2 var Y (X Y *))").unwrap();
+        assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
+        xs.interpret("(3 var N [N 0 do i loop])").unwrap();
+        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(3, v.len());
+        assert_eq!(vec![Opcode::LoadInt(15), Opcode::Next], xs.code);
     }
 
     #[test]
