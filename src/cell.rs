@@ -10,10 +10,19 @@ pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
+pub struct XfnPtr(pub XfnType);
+
+impl PartialEq for XfnPtr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 as usize == other.0 as usize
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub enum Xfn {
     Interp(usize),
-    Native(XfnType),
+    Native(XfnPtr),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -45,6 +54,12 @@ pub enum Cell {
 
 use std::fmt;
 
+impl fmt::Debug for XfnPtr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#x}", self.0 as usize)
+    }
+}
+
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -73,18 +88,8 @@ impl fmt::Debug for Cell {
 impl fmt::Debug for Xfn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Xfn::Interp(x) => write!(f, "f:{:x}", x),
-            Xfn::Native(x) => write!(f, "xf:{:#x}", *x as usize),
-        }
-    }
-}
-
-impl PartialEq for Xfn {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Xfn::Interp(a), Xfn::Interp(b)) => a == b,
-            (Xfn::Native(a), Xfn::Native(b)) => *a as usize == *b as usize,
-            _ => false,
+            Xfn::Interp(x) => write!(f, "f:{:#x}", x),
+            Xfn::Native(x) => write!(f, "xf:{:#x}", x.0 as usize),
         }
     }
 }

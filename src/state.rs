@@ -377,7 +377,7 @@ impl State {
     }
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
-        let xf = Xfn::Native(x);
+        let xf = Xfn::Native(XfnPtr(x));
         self.dict_insert(
             name.to_string(),
             Entry::Function {
@@ -530,7 +530,7 @@ impl State {
 
     fn call_fn(&mut self, x: Xfn) -> Xresult {
         match x {
-            Xfn::Native(x) => x(self),
+            Xfn::Native(x) => x.0(self),
             Xfn::Interp(x) => {
                 let old_ip = self.ip();
                 self.push_return(old_ip)?;
@@ -570,7 +570,7 @@ impl State {
                 self.set_ip(a)
             }
             Opcode::NativeCall(x) => {
-                x(self)?;
+                x.0(self)?;
                 self.next_ip()
             }
             Opcode::Ret => {
@@ -909,7 +909,7 @@ fn core_insert_word(xs: &mut State, name: &str, x: XfnType, immediate: bool) -> 
         name.to_string(),
         Entry::Function {
             immediate,
-            xf: Xfn::Native(x),
+            xf: Xfn::Native(XfnPtr(x)),
             len: None,
         },
     )?;
@@ -1028,14 +1028,15 @@ fn jump_offset(origin: usize, dest: usize) -> isize {
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Vec)?;
     xs.code_emit(
-        Opcode::NativeCall(vec_builder_begin),
+        Opcode::NativeCall(XfnPtr(vec_builder_begin)),
         DebugInfo::Comment("["),
     )
 }
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Vec => xs.code_emit(Opcode::NativeCall(vec_builder_end), DebugInfo::Comment("]")),
+        Flow::Vec => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end)),
+                                  DebugInfo::Comment("]")),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -1067,14 +1068,15 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 fn core_word_map_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Map)?;
     xs.code_emit(
-        Opcode::NativeCall(map_builder_begin),
+        Opcode::NativeCall(XfnPtr(map_builder_begin)),
         DebugInfo::Comment("{"),
     )
 }
 
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Map => xs.code_emit(Opcode::NativeCall(map_builder_end), DebugInfo::Comment("}")),
+        Flow::Map => xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_end)),
+                                  DebugInfo::Comment("}")),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -1257,7 +1259,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Next => format!("next"),
             Opcode::Call(a) => format!("call       {:#x}", a),
             Opcode::Deferred(a) => format!("defer      {:#x}", a),
-            Opcode::NativeCall(x) => format!("callx      {:#x}", *x as usize),
+            Opcode::NativeCall(x) => format!("callx      {:#x}", x.0 as usize),
             Opcode::Ret => format!("ret"),
             Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(at, offs)),
             Opcode::JumpIfNot(offs) => format!("jumpifnot  ${:05x}", jumpaddr(at, offs)),
@@ -1307,12 +1309,12 @@ fn core_word_do_test(xs: &mut State) -> Xresult {
 
 fn core_word_do(xs: &mut State) -> Xresult {
     xs.code_emit(
-        Opcode::NativeCall(core_word_do_init),
+        Opcode::NativeCall(XfnPtr(core_word_do_init)),
         DebugInfo::Comment("do init"),
     )?;
     let test_org = xs.code_origin();
     xs.code_emit(
-        Opcode::NativeCall(core_word_do_test),
+        Opcode::NativeCall(XfnPtr(core_word_do_test)),
         DebugInfo::Comment("do test"),
     )?;
     let jump_org = xs.code_origin();
@@ -1339,14 +1341,14 @@ fn core_word_loop_leave(xs: &mut State) -> Xresult {
 
 fn core_word_loop(xs: &mut State) -> Xresult {
     xs.code_emit(
-        Opcode::NativeCall(core_word_loop_inc),
+        Opcode::NativeCall(XfnPtr(core_word_loop_inc)),
         DebugInfo::Comment("loop increment counter"),
     )?;
     let next_org = xs.code_origin();
     xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("loop"))?;
     let break_org = xs.code_origin();
     xs.code_emit(
-        Opcode::NativeCall(core_word_loop_leave),
+        Opcode::NativeCall(XfnPtr(core_word_loop_leave)),
         DebugInfo::Comment("loop leave"),
     )?;
     loop {
