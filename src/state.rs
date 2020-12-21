@@ -358,6 +358,17 @@ impl State {
         Ok(Xref::Heap(a))
     }
 
+    pub fn variable_value(&self, name: &str) -> Xresult1<&Cell> {
+        let e = self.dict_find(name)
+                    .and_then(|idx| self.dict_at(idx))
+                    .ok_or(Xerr::UnknownWord)?;
+        match e {
+            Entry::Variable(a) => self.get_var(Xref::Heap(*a)),
+            Entry::Function{..} => Err(Xerr::ReadonlyAddress),
+            Entry::Deferred => Err(Xerr::UnknownWord),
+        }        
+    }
+
     pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
         match xref {
             Xref::Heap(a) => self.heap.get(a).ok_or(Xerr::InvalidAddress),

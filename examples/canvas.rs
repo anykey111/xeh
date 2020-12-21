@@ -1,6 +1,6 @@
 extern crate minifb;
 extern crate xeh;
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions, Scale};
 
 use xeh::cell::Cell;
 use xeh::error::*;
@@ -15,13 +15,15 @@ struct MiniFb {
 }
 
 impl MiniFb {
-    fn new(width: usize, height: usize) -> Self {
+    fn new(width: usize, height: usize, scale: Scale) -> Self {
         let buffer = vec![0; width * height];
+        let mut opts = WindowOptions::default();
+        opts.scale = scale;
         let mut window = Window::new(
             "Test - ESC to exit",
             width,
             height,
-            WindowOptions::default(),
+            opts,
         )
         .unwrap_or_else(|e| {
             panic!("{}", e);
@@ -40,7 +42,15 @@ impl MiniFb {
 fn minifb_new(xs: &mut State) -> Xresult {
     let height = xs.pop_data()?.into_usize()?;
     let width = xs.pop_data()?.into_usize()?;
-    let fb = MiniFb::new(width, height);
+    let scale = match xs.variable_value("minifb-default-scale") {
+        Ok(Cell::Int(2)) => Scale::X2,
+        Ok(Cell::Int(4)) => Scale::X4,
+        Ok(Cell::Int(8)) => Scale::X8,
+        Ok(Cell::Int(16)) => Scale::X16,
+        Ok(Cell::Int(32)) => Scale::X32,
+        _ => Scale::X1,
+    };
+    let fb = MiniFb::new(width, height, scale);
     xs.push_data(Cell::from_any(fb))
 }
 
@@ -122,6 +132,7 @@ fn main() {
     xs.defword("minifb_is_open", minifb_is_open).unwrap();
     xs.defword("minifb_update", minifb_update).unwrap();
     xs.defword("minifb_put_pixel", minifb_put_pixel).unwrap();
+    xs.defvar("minifb-default-scale", Cell::Int(1)).unwrap();
 
     let args: Vec<String> = std::env::args().collect();
     xeh::repl::run_with_args(&mut xs, args).unwrap();
