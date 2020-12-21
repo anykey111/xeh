@@ -121,9 +121,27 @@ fn bytearray_set(xs: &mut State) -> Xresult {
     OK
 }
 
+fn bytearray_from(xs: &mut State) -> Xresult {
+    match xs.pop_data()? {
+        Cell::Vector(v) => {
+            let mut tmp = Vec::with_capacity(v.len());
+            for x in v.iter() {
+                match x {
+                    &Cell::Int(val) if 0 <= val && val <= 255 =>
+                        tmp.push(val as u8),
+                    _ => return Err(Xerr::OutOfRange),
+                }
+            }
+            xs.push_data(Cell::from_any(ByteArray(tmp)))
+        }
+        _ => Err(Xerr::TypeError),
+    }
+}
+
 fn main() {
     let mut xs = State::new().unwrap();
 
+    xs.defword(">bytearray", bytearray_from).unwrap();
     xs.defword("bytearray_new", bytearray_new).unwrap();
     xs.defword("bytearray_get", bytearray_get).unwrap();
     xs.defword("bytearray_set", bytearray_set).unwrap();
