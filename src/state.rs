@@ -469,9 +469,9 @@ impl State {
             Def("assert-eq", core_word_assert_eq),
             Def(".", core_word_display_top),
             Def("HEX", core_word_hex),
-            Def("DECIMAL", core_word_decimal),
-            Def("OCTAL", core_word_octal),
-            Def("BINARY", core_word_binary),
+            Def("DEC", core_word_decimal),
+            Def("OCT", core_word_octal),
+            Def("BIN", core_word_binary),
         ]
         .iter()
         {
@@ -1696,6 +1696,15 @@ mod tests {
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
+    }
+
+    #[test]
+    fn test_base() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("HEX 16 BASE assert-eq").unwrap();
+        xs.interpret("DEC 10 BASE assert-eq").unwrap();
+        xs.interpret("OCT 8 BASE assert-eq").unwrap();
+        xs.interpret("BIN 2 BASE assert-eq").unwrap();
     }
 
     #[test]
