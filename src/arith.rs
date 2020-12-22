@@ -175,9 +175,9 @@ mod tests {
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         xs.interpret("7 3 rem").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("1 1+").unwrap();
+        xs.interpret("1 inc").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("1 1-").unwrap();
+        xs.interpret("1 dec").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
