@@ -194,6 +194,10 @@ mod tests {
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
         xs.interpret("16 3 bit-shift-right").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("1 neg").unwrap();
+        assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
+        xs.interpret("-1 neg").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
     }
 
     #[test]
