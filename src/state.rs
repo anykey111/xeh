@@ -435,9 +435,9 @@ impl State {
             core_insert_word(self, i.0, i.1, true)?;
         }
         for i in [
-            Def("i", core_word_counter_i),
-            Def("j", core_word_counter_j),
-            Def("k", core_word_counter_k),
+            Def("I", core_word_counter_i),
+            Def("J", core_word_counter_j),
+            Def("K", core_word_counter_k),
             Def("length", core_word_length),
             Def("get", core_word_get),
             Def("assoc", core_word_assoc),
@@ -1646,12 +1646,12 @@ mod tests {
     #[test]
     fn test_do_loop() {
         let mut xs = State::new().unwrap();
-        xs.interpret("10 0 do i loop").unwrap();
+        xs.interpret("10 0 do I loop").unwrap();
         for i in (0..10).rev() {
             assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
         }
         let mut xs = State::new().unwrap();
-        xs.interpret("102 100 do 12 10 do 2 0 do i j k loop loop loop")
+        xs.interpret("102 100 do 12 10 do 2 0 do I J K loop loop loop")
             .unwrap();
         for i in (100..102).rev() {
             for j in (10..12).rev() {
@@ -1723,9 +1723,9 @@ mod tests {
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
         xs.interpret("(2 2 +)").unwrap();
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        xs.interpret("(10 var X 2 var Y (X Y *))").unwrap();
+        xs.interpret("(10 var x 2 var y (x y *))").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.interpret("(3 var N [N 0 do i loop])").unwrap();
+        xs.interpret("(3 var n [n 0 do I loop])").unwrap();
         let v = xs.pop_data().unwrap().into_vector().unwrap();
         assert_eq!(3, v.len());
         assert_eq!(vec![Opcode::LoadInt(15), Opcode::Next], xs.code);
