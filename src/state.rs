@@ -173,7 +173,7 @@ impl State {
     }
 
     pub fn load_source(&mut self, source: Lex) -> Xresult {
-        self.context_open(ContextMode::Load, Some(source))?;
+        self.context_open(ContextMode::Load, Some(source));
         let depth = self.nested.len();
         let result = self.build();
         if result.is_err() {
@@ -188,7 +188,7 @@ impl State {
     }
 
     pub fn interpret(&mut self, source: &str) -> Xresult {
-        self.context_open(ContextMode::Eval, Some(Lex::from_str(source)))?;
+        self.context_open(ContextMode::Eval, Some(Lex::from_str(source)));
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
@@ -286,7 +286,7 @@ impl State {
         }
     }
 
-    fn context_open(&mut self, mode: ContextMode, mut source: Option<Lex>) -> Xresult {
+    fn context_open(&mut self, mode: ContextMode, mut source: Option<Lex>) {
         if let Some(source) = source.as_mut() {
             let id = self.debug_map.add_buffer(source.buffer());
             source.set_source_id(id);
@@ -311,7 +311,6 @@ impl State {
         }
         std::mem::swap(&mut self.ctx, &mut tmp);
         self.nested.push(tmp);
-        OK
     }
 
     fn context_close(&mut self) -> Xresult {
@@ -1232,7 +1231,8 @@ fn core_word_nil(xs: &mut State) -> Xresult {
 }
 
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
-    xs.context_open(ContextMode::Nested, None)
+    xs.context_open(ContextMode::Nested, None);
+    OK
 }
 
 fn core_word_nested_end(xs: &mut State) -> Xresult {
