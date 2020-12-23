@@ -386,9 +386,9 @@ impl State {
         }
     }
 
-    pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult {
+    pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult1<Xref> {
         let xf = Xfn::Native(XfnPtr(x));
-        self.dict_insert(
+        let idx = self.dict_insert(
             name.to_string(),
             Entry::Function {
                 immediate: false,
@@ -396,7 +396,7 @@ impl State {
                 len: Some(0),
             },
         )?;
-        OK
+        Ok(Xref::Word(idx))
     }
 
     fn load_core(&mut self) -> Xresult {
