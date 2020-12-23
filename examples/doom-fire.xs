@@ -44,7 +44,7 @@
 FIRE_WIDTH FIRE_HEIGHT minifb_new var fb
 
 [
-FIRE_HEIGHT 1- FIRE_WIDTH * 0 do 0 loop
+FIRE_HEIGHT dec FIRE_WIDTH * 0 do 0 loop
 FIRE_WIDTH 0 do 36 loop
 ] var fire_img
 
