@@ -64,7 +64,7 @@ FIRE_WIDTH 0 do 36 loop
 ;
 
 : calc_color
-    fire_img_get random 3 * round 1 bit-and -
+    fire_img_get random 3 * round 1 band -
 ;
 
 : spread_fire_random
@@ -86,21 +86,21 @@ FIRE_WIDTH 0 do 36 loop
 : update_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 2 do
-            FIRE_WIDTH i * j + spread_fire
+            FIRE_WIDTH I * J + spread_fire
         loop
     loop
 ;
 
 : draw_fire_pixel
-    i j rot fb minifb_put_pixel
+    I J rot fb minifb_put_pixel
 ;    
 
 : draw_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 0 do
-            FIRE_WIDTH i * j + fire_img_get
+            FIRE_WIDTH I * J + fire_img_get
             PALETTE get
-            0xff000000 bit-or  # add alpha
+            0xff000000 bor  # add alpha
             draw_fire_pixel
         loop
     loop

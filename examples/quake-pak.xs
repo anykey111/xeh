@@ -23,13 +23,13 @@
     "data" entry assoc
 ;
 
-var quake-pak-list
+[] var quake-pak-list
 
 : quake-pak-open
     quake-pak-header local header
     "size" header get 64 / local count
     [ count 0 do quake-pak-entry loop ] local entries
-    [ count 0 do i entries get quake-pak-read-entry loop ]
+    [ count 0 do I entries get quake-pak-read-entry loop ]
     dup -> quake-pak-list
 ;
 

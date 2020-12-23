@@ -2,7 +2,7 @@ big-endian
 
 [
     256 0 do
-        24 unsigned 0xff00_0000 bit-or
+        24 unsigned 0xff00_0000 bor
     loop
 ] var pal
 
@@ -16,8 +16,8 @@ big-endian
     zoom local x
     1 zoom 0 do
         1 zoom 0 do
-            x i +
-            y j +
+            x I +
+            y J +
             color
             fb
             minifb_put_pixel
@@ -27,9 +27,9 @@ big-endian
 
 16 0 do
     16 0 do
-        i
-        j
-        j 16 * i + pal get
+        I
+        J
+        J 16 * I + pal get
         draw_color
     loop
 loop
