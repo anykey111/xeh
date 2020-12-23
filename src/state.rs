@@ -357,7 +357,7 @@ impl State {
         Ok(Xref::Heap(a))
     }
 
-    pub fn variable_value(&self, name: &str) -> Xresult1<&Cell> {
+    pub fn get_var_by_name(&self, name: &str) -> Xresult1<&Cell> {
         let e = self.dict_find(name)
                     .and_then(|idx| self.dict_at(idx))
                     .ok_or(Xerr::UnknownWord)?;

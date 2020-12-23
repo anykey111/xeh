@@ -42,7 +42,7 @@ impl MiniFb {
 fn minifb_new(xs: &mut State) -> Xresult {
     let height = xs.pop_data()?.into_usize()?;
     let width = xs.pop_data()?.into_usize()?;
-    let scale = match xs.variable_value("minifb-default-scale") {
+    let scale = match xs.get_var_by_name("minifb-default-scale") {
         Ok(Cell::Int(2)) => Scale::X2,
         Ok(Cell::Int(4)) => Scale::X4,
         Ok(Cell::Int(8)) => Scale::X8,
