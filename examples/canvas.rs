@@ -138,7 +138,7 @@ fn bytearray_from(xs: &mut State) -> Xresult {
     }
 }
 
-fn main() {
+fn main() -> Xresult {
     let mut xs = State::new().unwrap();
 
     xs.defword(">bytearray", bytearray_from).unwrap();
@@ -152,6 +152,6 @@ fn main() {
     xs.defword("minifb_put_pixel", minifb_put_pixel).unwrap();
     xs.defvar("minifb-default-scale", Cell::Int(1)).unwrap();
 
-    let args: Vec<String> = std::env::args().collect();
-    xeh::repl::run_with_args(&mut xs, args).unwrap();
+    let args = xeh::repl::parse_args()?;
+    xeh::repl::run_with_args(&mut xs, args)
 }

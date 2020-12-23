@@ -74,21 +74,38 @@ fn run_tty_repl(xs: &mut State, load_history: bool) {
     }
 }
 
-pub fn run_with_args(xs: &mut State, args: Vec<String>) -> Xresult {
+pub struct XcmdArgs {
+    pub debug: bool,
+    pub binary_path: Option<String>,
+    pub script_path: Option<String>,
+}
+
+pub fn parse_args() -> Xresult1<XcmdArgs> {
     let mut opts = Options::new();
     opts.optopt("s", "", "set script file name", "path");
     opts.optopt("i", "", "input binary file ", "path");
     opts.optflag("d", "", "enable debugging");
-    let matches = opts.parse(&args[1..]).unwrap();
-    if let Some(path) = matches.opt_str("i") {
-        xs.set_binary_input(&path).unwrap();
-    }
-    if matches.opt_present("d") {
+    let it = std::env::args().skip(1);
+    let matches = opts.parse(it).map_err(|_| Xerr::InputParseError)?;
+    let binary_path = matches.opt_str("i");
+    let script_path = matches.opt_str("s");
+    let debug = matches.opt_present("d");
+    Ok(XcmdArgs {
+        debug,
+        binary_path,
+        script_path,
+    })
+}
+
+pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
+    if args.debug {
         xs.set_state_recording(true);
     }
-    if matches.opt_present("s") {
-        let filename = matches.opt_str("s").expect("script file name");
-        let src = Lex::from_file(&filename).unwrap();
+    if let Some(path) = args.binary_path {
+        xs.set_binary_input(&path)?;
+    }
+    if let Some(path) = args.script_path {
+        let src = Lex::from_file(&path).unwrap();
         if let Err(e) = xs.load_source(src) {
             eprintln!("{}", xs.error_context(&e));
             xs.run_repl()?;
