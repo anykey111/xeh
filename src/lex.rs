@@ -26,6 +26,32 @@ pub struct Lex {
     source_id: Option<usize>,
 }
 
+#[derive(Default)]
+pub struct LexErrContext {
+    filename: Option<String>,
+    location: Option<Location>,
+    single_line: Option<String>,
+}
+
+impl std::fmt::Debug for LexErrContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(loc) = self.location.as_ref() {
+            if let Some(filename) = self.filename.as_ref() {
+                write!(f, "{}:", filename)?;
+            }
+            writeln!(f, "{}:{}:", loc.line, loc.col)?;
+            if let Some(s) = self.single_line.as_ref() {
+                writeln!(f, "{}", s)?;
+                for _ in 1..loc.col {
+                    f.write_str("-")?;
+                }
+                f.write_str("^")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Lex {
     pub fn from_str(s: &str) -> Self {
         Self::from_string(s.to_string())
@@ -65,18 +91,14 @@ impl Lex {
         self.source_id
     }
 
-    pub fn error_location(&self) -> String {
-        let mut buf = String::new();
+    pub fn error_context(&self) -> LexErrContext {
+        let mut ctx = LexErrContext::default();
         if let Some((_tok, l)) = self.last_token() {
-            let s = self.buffer.lines().nth(l.line - 1).unwrap();
-            let name = self.path.as_ref().map(|p| p.as_str()).unwrap_or("<buffer>");
-            buf = format!("{}:{}:{}:\n{}\n", name, l.line, l.col, s);
-            for _ in 1..l.col {
-                buf.push('-');
-            }
-            buf.push('^');
+            ctx.location = Some(l.clone());
+            ctx.filename = self.path.clone();
+            ctx.single_line = self.buffer.lines().nth(l.line - 1).map(|s| s.to_string());
         }
-        buf
+        ctx
     }
 
     pub fn last_token(&self) -> Option<(&str, &Location)> {
