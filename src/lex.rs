@@ -52,6 +52,17 @@ impl std::fmt::Debug for LexErrContext {
     }
 }
 
+fn is_bracket(c: char) -> bool {
+    match c {
+        '(' | ')' | '[' | ']' | '{' | '}' => true,
+        _ => false,
+    }
+}
+
+fn is_special(c: char) -> bool {
+    is_bracket(c) || c == '"' || c == '#'
+}
+
 impl Lex {
     pub fn from_str(s: &str) -> Self {
         Self::from_string(s.to_string())
@@ -150,23 +161,12 @@ impl Lex {
         }
     }
 
-    fn is_schar(c: char) -> bool {
-        match c {
-            '(' | ')' | '[' | ']' | '{' | '}' => true,
-            _ => false,
-        }
-    }
-
-    fn is_special(c: char) -> bool {
-        Self::is_schar(c) || c == '"' || c == '#'
-    }
-
     fn parse_word(&mut self) -> Xresult1<Tok> {
         let start = self.cursor.pos;
         let mut loc = self.cursor.clone();
         while let Some((_, c)) = self.peek() {
-            if c.is_ascii_whitespace() || Self::is_special(c) {
-                if self.cursor.pos == start && Self::is_schar(c) {
+            if c.is_ascii_whitespace() || is_special(c) {
+                if self.cursor.pos == start && is_bracket(c) {
                     self.take();
                 }
                 break;
@@ -186,13 +186,13 @@ impl Lex {
             sign_minus = true;
             x = it.next();
         }
-        let mut digits: Vec<u8> = Vec::new();
+        let mut digits = String::with_capacity(w.len());
         match x {
             Some(c) if c.is_digit(10) => {
                 if sign_minus {
-                    digits.push('-' as u8);
+                    digits.push('-');
                 }
-                digits.push(c as u8);
+                digits.push(c);
             }
             _ => return Ok(Tok::Word(w.to_string())),
         }
@@ -201,31 +201,24 @@ impl Lex {
             match it.next() {
                 Some('x') | Some('X') => radix = 16,
                 Some('b') | Some('B') => radix = 2,
-                Some(c) if c.is_digit(10) => {
-                    digits.push('0' as u8);
-                    digits.push(c as u8);
-                }
-                None => digits.push('0' as u8),
-                _ => {
-                    return Ok(Tok::Word(w.to_string()));
-                }
+                Some(c) => if c.is_digit(10) {
+                    digits.push('0');
+                    digits.push(c);
+                } else {
+                    return Err(Xerr::InputParseError);
+                },
+                None => digits.push('0'),
             }
         }
         while let Some(c) = it.next() {
             if c == '_' {
                 continue;
             }
-            if c.is_digit(radix) {
-                digits.push(c as u8);
-            } else {
-                return Ok(Tok::Word(w.to_string()));
-            }
+            digits.push(c);
         }
-        let s = String::from_utf8_lossy(&digits);
-        if let Some(i) = Xint::from_str_radix(&s, radix).ok() {
-            return Ok(Tok::Num(i));
-        }
-        return Ok(Tok::Word(w.to_string()));
+        Xint::from_str_radix(&digits, radix)
+            .map(|n| Tok::Num(n))
+            .map_err(|_| Xerr::InputParseError)
     }
 
     fn parse_string(&mut self) -> Xresult1<Tok> {
@@ -309,10 +302,11 @@ fn test_lex_num() {
     assert_eq!(Tok::Num(0), lex.next().unwrap());
     assert_eq!(Tok::Num(3), lex.next().unwrap());
     assert_eq!(Tok::Num(0xff00), lex.next().unwrap());
-    let mut lex = Lex::from_str("--1 1- 0x1x");
+    let mut lex = Lex::from_str("--1 1- 0x1x 0x1G3");
     assert_eq!(Tok::Word("--1".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Word("1-".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Word("0x1x".to_string()), lex.next().unwrap());
+    assert_eq!(Err(Xerr::InputParseError), lex.next());
+    assert_eq!(Err(Xerr::InputParseError), lex.next());
+    assert_eq!(Err(Xerr::InputParseError), lex.next());
 }
 
 #[test]
