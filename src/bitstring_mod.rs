@@ -8,12 +8,12 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("bytes", bin_read_bytes)?;
     xs.defword("signed", bin_read_signed)?;
     xs.defword("unsigned", bin_read_unsigned)?;
-    xs.defword("bitstring", |xs| xs.push_data(Cell::Bitstr(Xbitstr::new())))?;
-    xs.defword("bitstring-append", bitstring_append)?;
-    xs.defword("bitstring-invert", bitstring_invert)?;
-    xs.defword(">bitstring", to_bitstring)?;
-    xs.defword("bitstring>signed", bitstring_to_signed)?;
-    xs.defword("bitstring>unsigned", bitstring_to_unsigned)?;
+    xs.defword("bitstr", |xs| xs.push_data(Cell::Bitstr(Xbitstr::new())))?;
+    xs.defword("bitstr-append", bitstring_append)?;
+    xs.defword("bitstr-invert", bitstring_invert)?;
+    xs.defword(">bitstr", to_bitstring)?;
+    xs.defword("bitstr>signed", bitstring_to_signed)?;
+    xs.defword("bitstr>unsigned", bitstring_to_unsigned)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
     xs.defword("?", bin_match)?;
@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn test_bitstring_mod() {
         let mut xs = Xstate::new().unwrap();
-        xs.interpret("[0 0xff] >bitstring").unwrap();
+        xs.interpret("[0 0xff] >bitstr").unwrap();
         let s = xs.pop_data().unwrap();
         assert_eq!(s, Cell::Bitstr(Xbitstr::from(&vec![0, 255])));
         xs.set_binary_input_data(&vec![1, 255, 0]).unwrap();
@@ -286,10 +286,10 @@ mod tests {
         assert_eq!(Cell::Int(-128), xs.pop_data().unwrap());
         xs.interpret("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstring"));
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstring"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[\"1\"] >bitstring"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("{} >bitstring"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstr"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstr"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[\"1\"] >bitstr"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("{} >bitstr"));
     }
 
     #[test]
@@ -333,8 +333,8 @@ mod tests {
     fn test_bitstr_open() {
         let mut xs = Xstate::new().unwrap();
         xs.interpret("
-        [1 5 7] >bitstring bitstr-open u8
-        [3] >bitstring bitstr-open u8
+        [1 5 7] >bitstr bitstr-open u8
+        [3] >bitstr bitstr-open u8
         bitstr-close
         u8").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
