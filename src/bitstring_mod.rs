@@ -41,18 +41,44 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("i16le", |xs| read_signed_nb(xs, 16, Byteorder::LE))?;
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
-    xs.defword("binary-input-seek", binary_input_seek)?;
-    xs.bs_input = xs.defvar("binary-input", Cell::Bitstr(Bitstring::new()))?;
-    xs.bs_isbig = xs.defvar("binary-bigendian", ZERO)?;
-    xs.bs_chunk = xs.defvar("binary-chunk", Cell::Bitstr(Bitstring::new()))?;
+    xs.defword("seek", bitstring_seek)?;
+    xs.defword("bitstr-open", bitstring_open)?;
+    xs.defword("bitstr-close", bitstring_close)?;
+    xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
+    xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
+    xs.bs_chunk = xs.defvar("*bitstr-chunk*", Cell::Bitstr(Bitstring::new()))?;
+    xs.bs_flow = xs.defvar("*bitstr-flow*", Cell::Vector(Xvec::default()))?;
     OK
 }
 
-fn binary_input_seek(xs: &mut Xstate) -> Xresult {
+fn bitstring_seek(xs: &mut Xstate) -> Xresult {
     let pos = xs.pop_data()?.into_usize()?;
     let mut bs = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
     bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
     xs.set_var(xs.bs_input, Cell::Bitstr(bs)).map(|_| ())
+}
+
+fn bitstring_open(xs: &mut Xstate) -> Xresult {
+    let new_bin = xs.pop_data()?.into_bitstring()?;
+    let old_bin = xs.get_var(xs.bs_input)?.clone();
+    let flow = match xs.get_var(xs.bs_flow)? {
+        Cell::Vector(v) => v.push_back(old_bin),
+        _ => return Err(Xerr::TypeError),
+    };
+    xs.set_var(xs.bs_flow, Cell::Vector(flow))?;
+    xs.set_var(xs.bs_input, Cell::Bitstr(new_bin))?;
+    OK
+}
+
+fn bitstring_close(xs: &mut Xstate) -> Xresult {
+    let flow = xs.get_var(xs.bs_flow)?.clone().into_vector()?;
+    let old_bin = flow.last()
+        .ok_or(Xerr::ControlFlowError)?
+        .clone()
+        .into_bitstring()?;
+    xs.set_var(xs.bs_flow, Cell::Vector(flow.drop_last().unwrap()))?;
+    xs.set_var(xs.bs_input, Cell::Bitstr(old_bin))?;
+    OK
 }
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
@@ -282,7 +308,7 @@ mod tests {
         xs.set_binary_input_data(&vec![1, 2, 3, 0]).unwrap();
         xs.interpret("8 unsigned").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-        xs.interpret("binary-chunk").unwrap();
+        xs.interpret("*bitstr-chunk*").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(8, s.len());
         assert_eq!(BitstringFormat::Unsigned(Byteorder::LE), s.format());
@@ -297,21 +323,41 @@ mod tests {
         assert_eq!(2, s.len());
         xs.interpret("big-endian 2 signed").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        xs.interpret("binary-chunk").unwrap();
+        xs.interpret("*bitstr-chunk*").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
         assert_eq!(BitstringFormat::Signed(Byteorder::BE), s.format());
     }
 
     #[test]
+    fn test_bitstr_open() {
+        let mut xs = Xstate::new().unwrap();
+        xs.interpret("
+        [1 5 7] >bitstring bitstr-open u8
+        [3] >bitstring bitstr-open u8
+        bitstr-close
+        u8").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("*bitstr-input*").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(vec![7], s.to_bytes());
+        xs.interpret("bitstr-close *bitstr-input*").unwrap();
+        let s2 = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(0, s2.len());
+        assert_eq!(Err(Xerr::ControlFlowError), xs.interpret("bitstr-close"));
+    }
+
+    #[test]
     fn test_bitstring_input_seek() {
         let mut xs = Xstate::new().unwrap();
         xs.set_binary_input_data(&vec![100, 200]).unwrap();
-        assert_eq!(Err(Xerr::OutOfRange), xs.interpret("100 binary-input-seek"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] binary-input-seek"));
-        xs.interpret("8 binary-input-seek 8 unsigned").unwrap();
+        assert_eq!(Err(Xerr::OutOfRange), xs.interpret("100 seek"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] seek"));
+        xs.interpret("8 seek 8 unsigned").unwrap();
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
-        xs.interpret("0 binary-input-seek 8 unsigned").unwrap();
+        xs.interpret("0 seek 8 unsigned").unwrap();
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
     }
 }

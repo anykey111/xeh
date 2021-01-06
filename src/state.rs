@@ -125,6 +125,7 @@ pub struct State {
     pub(crate) bs_input: Xref,
     pub(crate) bs_isbig: Xref,
     pub(crate) bs_chunk: Xref,
+    pub(crate) bs_flow: Xref,
     // default base
     pub(crate) base: Xref,
 }
