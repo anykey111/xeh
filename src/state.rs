@@ -467,6 +467,8 @@ impl State {
             Def("assert", core_word_assert),
             Def("assert-eq", core_word_assert_eq),
             Def(".", core_word_display_top),
+            Def("print", core_word_print),
+            Def("newline", core_word_newline),
             Def("HEX", core_word_hex),
             Def("DEC", core_word_decimal),
             Def("OCT", core_word_octal),
@@ -1493,6 +1495,21 @@ fn core_word_display_top(xs: &mut State) -> Xresult {
         Cell::Int(16) => println!("{:16?}", val),
         _ => println!("{:10?}", val),
     };
+    OK
+}
+
+fn core_word_print(xs: &mut State) -> Xresult {
+    let val = xs.pop_data()?;
+    match xs.get_var(xs.base)? {
+        Cell::Int(2) => print!("{:2?}", val),
+        Cell::Int(16) => print!("{:16?}", val),
+        _ => print!("{:10?}", val),
+    };
+    OK
+}
+
+fn core_word_newline(_xs: &mut State) -> Xresult {
+    println!("");
     OK
 }
 
