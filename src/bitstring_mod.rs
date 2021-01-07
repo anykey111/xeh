@@ -42,6 +42,8 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
     xs.defword("seek", bitstring_seek)?;
+    xs.defword("offset", bitstr_offset)?;
+    xs.defword("remain", bitstr_remain)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
     xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
@@ -56,6 +58,28 @@ fn bitstring_seek(xs: &mut Xstate) -> Xresult {
     let mut bs = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
     bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
     xs.set_var(xs.bs_input, Cell::Bitstr(bs)).map(|_| ())
+}
+
+fn bitstr_offset(xs: &mut Xstate) -> Xresult {
+    match xs.get_var(xs.bs_input)? {
+        Cell::Bitstr(bs) => {
+            let offs = bs.start() as Xint;
+            xs.push_data(Cell::Int(offs))?;
+            OK
+        }
+        _ => Err(Xerr::TypeError)
+    }
+}
+
+fn bitstr_remain(xs: &mut Xstate) -> Xresult {
+    match xs.get_var(xs.bs_input)? {
+        Cell::Bitstr(bs) => {
+            let n = bs.len() as Xint;
+            xs.push_data(Cell::Int(n))?;
+            OK
+        }
+        _ => Err(Xerr::TypeError)
+    }
 }
 
 fn bitstring_open(xs: &mut Xstate) -> Xresult {
@@ -359,5 +383,18 @@ mod tests {
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
         xs.interpret("0 seek 8 unsigned").unwrap();
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
+    }
+
+    
+    #[test]
+    fn test_bitstr_remain() {
+        let mut xs = Xstate::new().unwrap();
+        xs.set_binary_input_data(&vec![1, 2]).unwrap();
+        xs.interpret("remain").unwrap();
+        assert_eq!(Cell::Int(16), xs.pop_data().unwrap());
+        xs.interpret("5 bits drop remain").unwrap();
+        assert_eq!(Cell::Int(11), xs.pop_data().unwrap());
+        xs.interpret("11 bits drop remain").unwrap();
+        assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
     }
 }
