@@ -112,6 +112,8 @@ pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
         } else if let Err(e) = xs.run() {
             eprintln!("{}", xs.error_context(&e));
             xs.run_repl()?;
+        } else if args.debug {
+            xs.run_repl()?;
         }
     } else {
         xs.run_repl()?;
