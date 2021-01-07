@@ -321,8 +321,8 @@ impl State {
             prev_ctx.source = self.ctx.source.take();
         }
         if self.ctx.mode == ContextMode::Nested {
-            // clear context code after evaluation
-            self.code.truncate(prev_ctx.cs_len);
+            // purge nested context code after evaluation
+            self.code.truncate(self.ctx.cs_len);
             if prev_ctx.mode == ContextMode::Load {
                 // compile evaluation result
                 while self.data_stack.len() > self.ctx.ds_len {
