@@ -18,7 +18,7 @@
 
 : quake-pak-read-entry
     local entry
-    entry "offset" get 8 * binary-input-seek
+    entry "offset" get 8 * seek
     entry "size" get bytes
     "data" entry assoc
 ;

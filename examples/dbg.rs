@@ -5,25 +5,24 @@ use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use raqote::{DrawOptions, DrawTarget, PathBuilder, Point, SolidSource, Source, StrokeStyle};
 
 use xeh::prelude::*;
-use xeh::state::format_xstate;
 
 fn main() -> Xresult {
-    let mut xs = Xstate::new().unwrap();
+    let mut xs = Xstate::new()?;
+    let args = xeh::repl::parse_args()?;
 
-    let xd_width = xs.defonce("xd-width", Xcell::from(640u32))?;
-    let xd_height = xs.defonce("xd-height", Xcell::from(480u32))?;
-    let xd_text_size = xs.defonce("xd-text-size", Xcell::from(16.0))?;
-    let xd_bg_color = xs.defonce("xd-background-color", Xcell::from(0x272822u32))?;
-    let xd_text_color = xs.defonce("xd-text-color", Xcell::from(0xf8f8f2u32))?;
+    let width = 640;
+    let height = 480;
+    let text_size = 16.0;
 
-    let filename = std::env::args().nth(1).expect("source file");
-    xs.set_state_recording(true);
-    xs.load_file(&filename).unwrap();
+    let filename = args.script_path.expect("source file");
+    xs.set_state_recording(args.debug);
+    let src = xeh::lex::Lex::from_file(&filename).unwrap();
+    xs.load_source(src)?;
 
     let mut window = Window::new(
         "XEH Debugger",
-        xs.fetch_var(&xd_width)?.try_into()?,
-        xs.fetch_var(&xd_height)?.try_into()?,
+        width,
+        height,
         WindowOptions {
             ..WindowOptions::default()
         },
@@ -44,9 +43,8 @@ fn main() -> Xresult {
     while window.is_open() && running {
         let width = size.0 as f32;
         let height = size.1 as f32;
-        let background_color = solid_color(xs.fetch_var(&xd_bg_color)?.try_into()?);
-        let text_color = solid_color(xs.fetch_var(&xd_text_color)?.try_into()?);
-        let text_size: f32 = xs.fetch_var(&xd_text_size)?.try_into()?;
+        let background_color = solid_color(0x272822);
+        let text_color = solid_color(0xf8f8f2);
 
         dt.clear(background_color);
         let mut pb = PathBuilder::new();
@@ -60,16 +58,16 @@ fn main() -> Xresult {
             &DrawOptions::new(),
         );
 
-        for (i, text) in format_xstate(&xs).iter().enumerate() {
-            dt.draw_text(
-                &font,
-                text_size,
-                text,
-                Point::new(0., (i + 1) as f32 * text_size),
-                &Source::Solid(text_color),
-                &DrawOptions::new(),
-            );
-        }
+        // for (i, text) in format_xstate(&xs).iter().enumerate() {
+        //     dt.draw_text(
+        //         &font,
+        //         text_size,
+        //         text,
+        //         Point::new(0., (i + 1) as f32 * text_size),
+        //         &Source::Solid(text_color),
+        //         &DrawOptions::new(),
+        //     );
+        // }
 
         for k in window.get_keys_pressed(KeyRepeat::No).iter().flatten() {
             match k {
