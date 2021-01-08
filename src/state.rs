@@ -132,9 +132,6 @@ pub struct State {
 }
 
 impl State {
-    pub fn run_repl(&mut self) -> Xresult {
-        crate::repl::run(self)
-    }
 
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);

@@ -132,5 +132,5 @@ pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
             }
         }
     }
-    xs.run_repl()
+    crate::repl::run(xs)
 }
