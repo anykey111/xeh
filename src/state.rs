@@ -121,6 +121,7 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
+    pub(crate) about_to_stop: bool,
     // current input binary
     pub(crate) bs_input: Xref,
     pub(crate) bs_isbig: Xref,
@@ -467,6 +468,7 @@ impl State {
             Def("round", core_word_round),
             Def("assert", core_word_assert),
             Def("assert-eq", core_word_assert_eq),
+            Def("bye", core_word_bye),
             Def(".", core_word_display_top),
             Def("print", core_word_print),
             Def("newline", core_word_newline),
@@ -1487,6 +1489,11 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
         eprintln!("[1]: {:?}", b);
         Err(Xerr::DebugAssertion)
     }
+}
+
+fn core_word_bye(xs: &mut State) -> Xresult {
+    xs.about_to_stop = true;
+    Err(Xerr::Next)
 }
 
 fn core_word_display_top(xs: &mut State) -> Xresult {

@@ -1,16 +1,16 @@
-use crate::state::*;
 use crate::error::*;
 use crate::lex::*;
+use crate::state::*;
+use getopts::Options;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use getopts::Options;
 
 pub fn run(xs: &mut State) -> Xresult {
     crate::repl::run_tty_repl(xs, true);
     OK
 }
 
-fn eval_line(xs: &mut State, line: &str) {
+fn eval_line(xs: &mut State, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
         if let Err(e) = xs.next() {
@@ -35,10 +35,11 @@ fn eval_line(xs: &mut State, line: &str) {
     } else if cmd == ".top" {
         if let Some(val) = xs.get_data(0) {
             println!("\t{:?}", val);
-        }        
+        }
     } else {
-        let _ = xs.interpret(line);
+        xs.interpret(line)?;
     }
+    OK
 }
 
 fn run_tty_repl(xs: &mut State, load_history: bool) {
@@ -47,29 +48,33 @@ fn run_tty_repl(xs: &mut State, load_history: bool) {
         let _ = rl.load_history("history.txt");
     }
     loop {
+        if xs.about_to_stop {
+            eprintln!("BYE!");
+            break;
+        }
         let readline = rl.readline(">");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                eval_line(xs, &line);
+                let _ = eval_line(xs, &line);
             }
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                break;
+                eprintln!("CTRL-C");
+                xs.about_to_stop = true;
             }
             Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
-                break;
+                eprintln!("CTRL-D");
+                xs.about_to_stop = true;
             }
             Err(err) => {
-                println!("Error: {:?}", err);
-                break;
+                eprintln!("Error: {:?}", err);
+                xs.about_to_stop = true;
             }
         }
     }
     if load_history {
         if let Err(e) = rl.save_history("history.txt") {
-            println!("history save faield: {:}", e);
+            eprintln!("history save faield: {:}", e);
         }
     }
 }
@@ -77,23 +82,25 @@ fn run_tty_repl(xs: &mut State, load_history: bool) {
 pub struct XcmdArgs {
     pub debug: bool,
     pub binary_path: Option<String>,
-    pub script_path: Option<String>,
+    pub sources: Vec<String>,
+    pub eval: Option<String>,
 }
 
 pub fn parse_args() -> Xresult1<XcmdArgs> {
     let mut opts = Options::new();
-    opts.optopt("s", "", "set script file name", "path");
     opts.optopt("i", "", "input binary file ", "path");
+    opts.optopt("e", "", "evaluate expression", "expression");
     opts.optflag("d", "", "enable debugging");
     let it = std::env::args().skip(1);
     let matches = opts.parse(it).map_err(|_| Xerr::InputParseError)?;
+    let debug= matches.opt_present("d");
     let binary_path = matches.opt_str("i");
-    let script_path = matches.opt_str("s");
-    let debug = matches.opt_present("d");
+    let eval = matches.opt_str("e");
     Ok(XcmdArgs {
         debug,
         binary_path,
-        script_path,
+        sources: matches.free,
+        eval,
     })
 }
 
@@ -104,19 +111,26 @@ pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
     if let Some(path) = args.binary_path {
         xs.set_binary_input(&path)?;
     }
-    if let Some(path) = args.script_path {
-        let src = Lex::from_file(&path).unwrap();
-        if let Err(e) = xs.load_source(src) {
-            eprintln!("{}", xs.error_context(&e));
-            xs.run_repl()?;
-        } else if let Err(e) = xs.run() {
-            eprintln!("{}", xs.error_context(&e));
-            xs.run_repl()?;
-        } else if args.debug {
-            xs.run_repl()?;
-        }
-    } else {
-        xs.run_repl()?;
+    for filename in args.sources.iter() {
+        let src = Lex::from_file(filename).map_err(|e| {
+            eprintln!("{}: {:?}", filename, e);
+            Xerr::IOError
+        })?;
+        xs.load_source(src)?;
     }
-    OK
+    let mut result = OK;
+    if !args.sources.is_empty() {
+        result = xs.run();
+        if let Err(e) = &result {
+            eprintln!("{}", xs.error_context(e));
+        }
+    }
+    if let Some(s) = args.eval {
+        if result.is_ok() {
+            if let Err(e) = xs.interpret(&s) {
+                eprintln!("{}", xs.error_context(&e));
+            }
+        }
+    }
+    xs.run_repl()
 }
