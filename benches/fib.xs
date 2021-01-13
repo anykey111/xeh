@@ -9,4 +9,4 @@
     then
 ;
 
-36 fib .
+36 fib println

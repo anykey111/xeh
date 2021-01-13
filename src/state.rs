@@ -466,7 +466,8 @@ impl State {
             Def("assert", core_word_assert),
             Def("assert-eq", core_word_assert_eq),
             Def("bye", core_word_bye),
-            Def(".", core_word_display_top),
+            Def(".", core_word_println),
+            Def("println", core_word_println),
             Def("print", core_word_print),
             Def("newline", core_word_newline),
             Def("HEX", core_word_hex),
@@ -1493,14 +1494,9 @@ fn core_word_bye(xs: &mut State) -> Xresult {
     Err(Xerr::Next)
 }
 
-fn core_word_display_top(xs: &mut State) -> Xresult {
-    let val = xs.pop_data()?;
-    match xs.get_var(xs.base)? {
-        Cell::Int(2) => println!("{:2?}", val),
-        Cell::Int(16) => println!("{:16?}", val),
-        _ => println!("{:10?}", val),
-    };
-    OK
+fn core_word_println(xs: &mut State) -> Xresult {
+    core_word_print(xs)?;
+    core_word_newline(xs)
 }
 
 fn core_word_print(xs: &mut State) -> Xresult {
