@@ -1,3 +1,5 @@
+use std::println;
+
 use crate::bitstring::*;
 use crate::cell::*;
 use crate::error::*;
@@ -44,12 +46,15 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("seek", bitstring_seek)?;
     xs.defword("offset", bitstr_offset)?;
     xs.defword("remain", bitstr_remain)?;
+    xs.defword("dump", bitstr_dump)?;
+    xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
+    xs.dump_start = xs.defvar("*dump-start*", Cell::Int(0))?;
     xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
     xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
     xs.bs_chunk = xs.defvar("*bitstr-chunk*", Cell::Bitstr(Bitstring::new()))?;
-    xs.bs_flow = xs.defvar("*bitstr-flow*", Cell::Vector(Xvec::default()))?;
+    xs.bs_flow = xs.defvar("*bitstr-flow*", Cell::Vector(Xvec::new()))?;
     OK
 }
 
@@ -60,26 +65,50 @@ fn bitstring_seek(xs: &mut Xstate) -> Xresult {
     xs.set_var(xs.bs_input, Cell::Bitstr(bs)).map(|_| ())
 }
 
-fn bitstr_offset(xs: &mut Xstate) -> Xresult {
+fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
     match xs.get_var(xs.bs_input)? {
-        Cell::Bitstr(bs) => {
-            let offs = bs.start() as Xint;
-            xs.push_data(Cell::Int(offs))?;
-            OK
-        }
-        _ => Err(Xerr::TypeError)
+        Cell::Bitstr(bs) => Ok(bs),
+        _ => Err(Xerr::TypeError),
     }
 }
 
+fn bitstr_offset(xs: &mut Xstate) -> Xresult {
+    let offs = bitstr_input(xs)?.start() as Xint;
+    xs.push_data(Cell::Int(offs))
+}
+
 fn bitstr_remain(xs: &mut Xstate) -> Xresult {
-    match xs.get_var(xs.bs_input)? {
-        Cell::Bitstr(bs) => {
-            let n = bs.len() as Xint;
-            xs.push_data(Cell::Int(n))?;
-            OK
-        }
-        _ => Err(Xerr::TypeError)
+    let n = bitstr_input(xs)?.len() as Xint;
+    xs.push_data(Cell::Int(n))
+}
+
+fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
+    let start = xs.pop_data()?.into_int()?;
+    xs.set_var(xs.dump_start, Cell::Int(start))?;
+    bitstr_dump(xs)
+}
+
+fn bitstr_dump(xs: &mut Xstate) -> Xresult {
+    let mut start = xs.get_var(xs.dump_start)?.to_usize()?;
+    let mut s = bitstr_input(xs)?.clone();
+    if start < s.start() || start >= s.end() {
+        start = s.start();
     }
+    s.seek(start);
+    let data = s.slice();
+    let count = data.len().min(16 * 8);
+    for i in 0..count {
+        if i % 16 == 0 {
+            print!("{:05x}:", (start / 8) + i);
+        }
+        print!(" {:02x}", data[i]);
+        if i % 16 == 15 {
+            println!("");
+        }
+    }
+    let new_start = Cell::from(start + count * 8);
+    xs.set_var(xs.dump_start, new_start)?;
+    OK
 }
 
 fn bitstring_open(xs: &mut Xstate) -> Xresult {
@@ -96,7 +125,8 @@ fn bitstring_open(xs: &mut Xstate) -> Xresult {
 
 fn bitstring_close(xs: &mut Xstate) -> Xresult {
     let flow = xs.get_var(xs.bs_flow)?.clone().into_vector()?;
-    let old_bin = flow.last()
+    let old_bin = flow
+        .last()
         .ok_or(Xerr::ControlFlowError)?
         .clone()
         .into_bitstring()?;
@@ -186,10 +216,8 @@ fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
-    xs.set_var(
-        xs.bs_isbig,
-        if bo == Byteorder::LE { ZERO } else { ONE },
-    ).map(|_| ())
+    xs.set_var(xs.bs_isbig, if bo == Byteorder::LE { ZERO } else { ONE })
+        .map(|_| ())
 }
 
 fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
@@ -356,11 +384,14 @@ mod tests {
     #[test]
     fn test_bitstr_open() {
         let mut xs = Xstate::new().unwrap();
-        xs.interpret("
+        xs.interpret(
+            "
         [1 5 7] >bitstr bitstr-open u8
         [3] >bitstr bitstr-open u8
         bitstr-close
-        u8").unwrap();
+        u8",
+        )
+        .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
@@ -385,7 +416,6 @@ mod tests {
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
     }
 
-    
     #[test]
     fn test_bitstr_remain() {
         let mut xs = Xstate::new().unwrap();

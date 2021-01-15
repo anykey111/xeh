@@ -129,6 +129,8 @@ pub struct State {
     pub(crate) bs_flow: Xref,
     // default base
     pub(crate) base: Xref,
+    // dump state
+    pub(crate) dump_start: Xref,
 }
 
 impl State {
