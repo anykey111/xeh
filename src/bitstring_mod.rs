@@ -50,6 +50,9 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
+    xs.defword("B", bit);
+    xs.defword("KB", kibit);
+    xs.defword("MB", mibit);
     xs.dump_start = xs.defvar("*dump-start*", Cell::Int(0))?;
     xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
     xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
@@ -321,6 +324,21 @@ fn read_unsigned_nb(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     set_rest(xs, rest)
 }
 
+fn bit(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.into_int()?;
+    xs.push_data(Cell::Int(n * 8))
+}
+
+fn kibit(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.into_int()?;
+    xs.push_data(Cell::Int(n * 8 * 1024))
+}
+
+fn mibit(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.into_int()?;
+    xs.push_data(Cell::Int(n * 8 * 1024 * 1024))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,5 +444,17 @@ mod tests {
         assert_eq!(Cell::Int(11), xs.pop_data().unwrap());
         xs.interpret("11 bits drop remain").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
+    }
+
+    #[test]
+    fn test_bitstr_num_bytes() {
+        let mut xs = Xstate::new().unwrap();
+        xs.interpret("1 B").unwrap();
+        assert_eq!(Cell::Int(8), xs.pop_data().unwrap());
+        xs.interpret("1 KB").unwrap();
+        assert_eq!(Cell::Int(1024 * 8), xs.pop_data().unwrap());
+        xs.interpret("1 MB").unwrap();
+        assert_eq!(Cell::Int(1024 * 1024 * 8), xs.pop_data().unwrap());
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"1\" B"));
     }
 }
