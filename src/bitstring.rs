@@ -183,7 +183,7 @@ impl Bitstring {
     }
 
     pub fn seek(&mut self, pos: usize) -> Option<usize> {
-        if pos < self.end() {
+        if pos <= self.end() {
             self.range.start = pos;
             Some(pos)
         } else {
@@ -272,11 +272,11 @@ impl Bitstring {
         bytes
     }
 
-    fn slice(&self) -> &[u8] {
+    pub fn slice(&self) -> &[u8] {
         &self.data[self.bytes_range()]
     }
 
-    fn bytes_range(&self) -> BitstringRange {
+    pub fn bytes_range(&self) -> BitstringRange {
         let i = self.range.start / 8;
         let e = upper_bound_index(self.range.end);
         i..e
