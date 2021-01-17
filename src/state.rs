@@ -226,6 +226,9 @@ impl State {
                 Tok::Num(n) => {
                     self.code_emit_value(Cell::Int(n))?;
                 }
+                Tok::Real(r) => {
+                    self.code_emit_value(Cell::Real(r))?;
+                }
                 Tok::Str(s) => {
                     self.code_emit_value(Cell::Str(s))?;
                 }

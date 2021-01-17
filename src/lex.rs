@@ -1,11 +1,12 @@
 use crate::error::*;
-use crate::cell::Xint;
+use crate::cell::{Xint, Xreal};
 
 #[derive(Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
     Word(String),
     Num(Xint),
+    Real(Xreal),
     Str(String),
 }
 
@@ -205,7 +206,7 @@ impl Lex {
                     digits.push('0');
                     digits.push(c);
                 } else {
-                    return Err(Xerr::InputParseError);
+                    digits.push(c);
                 },
                 None => digits.push('0'),
             }
@@ -218,6 +219,7 @@ impl Lex {
         }
         Xint::from_str_radix(&digits, radix)
             .map(|n| Tok::Num(n))
+            .or(w.parse::<Xreal>().map(|r| Tok::Real(r)))
             .map_err(|_| Xerr::InputParseError)
     }
 
@@ -307,6 +309,15 @@ fn test_lex_num() {
     assert_eq!(Err(Xerr::InputParseError), lex.next());
     assert_eq!(Err(Xerr::InputParseError), lex.next());
     assert_eq!(Err(Xerr::InputParseError), lex.next());
+}
+
+#[test]
+fn test_lex_real() {
+    let mut lex = Lex::from_str("1e5 0.5 1.5");
+    assert_eq!(Tok::Real(100000.0), lex.next().unwrap());
+    assert_eq!(Tok::Real(0.5), lex.next().unwrap());
+    assert_eq!(Tok::Real(1.5), lex.next().unwrap());
+    assert_eq!(Err(Xerr::InputParseError), Lex::from_str("0.0.1").next());
 }
 
 #[test]
