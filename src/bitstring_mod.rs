@@ -50,9 +50,9 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
-    xs.defword("B", bit);
-    xs.defword("KB", kibit);
-    xs.defword("MB", mibit);
+    xs.defword("B", bit)?;
+    xs.defword("KB", kibit)?;
+    xs.defword("MB", mibit)?;
     xs.dump_start = xs.defvar("*dump-start*", Cell::Int(0))?;
     xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
     xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
