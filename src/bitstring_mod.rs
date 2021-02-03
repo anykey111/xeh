@@ -100,12 +100,21 @@ fn bitstr_dump(xs: &mut Xstate) -> Xresult {
     s.seek(start);
     let data = s.slice();
     let count = data.len().min(16 * 8);
+    let mut ascii = String::new();
     for i in 0..count {
         if i % 16 == 0 {
             print!("{:05x}:", (start / 8) + i);
         }
         print!(" {:02x}", data[i]);
+        let c = std::char::from_u32(data[i] as u32).unwrap();
+        if c.is_ascii_graphic() {
+            ascii.push(c);
+        } else {
+            ascii.push('.');
+        }
         if i % 16 == 15 {
+            print!("    {}", ascii);
+            ascii.clear();
             println!("");
         }
     }
