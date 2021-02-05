@@ -430,6 +430,7 @@ impl State {
             Def("defer", core_word_defer),
             Def("do", core_word_do),
             Def("loop", core_word_loop),
+            Def("breakpoint", core_word_breakpoint),
         ]
         .iter()
         {
@@ -1493,7 +1494,7 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
 
 fn core_word_bye(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
-    Err(Xerr::DebugBreak)
+    core_word_breakpoint(xs)
 }
 
 fn core_word_println(xs: &mut State) -> Xresult {
@@ -1530,6 +1531,14 @@ fn core_word_octal(xs: &mut State) -> Xresult {
 
 fn core_word_binary(xs: &mut State) -> Xresult {
     xs.set_var(xs.base, Cell::Int(2)).map(|_| ())
+}
+
+fn core_word_breakpoint(xs: &mut State) -> Xresult {
+    if xs.ctx.mode == ContextMode::Load {
+        xs.code_emit(Opcode::Break, DebugInfo::Empty)
+    } else {
+        Err(Xerr::DebugBreak)
+    }
 }
 
 #[cfg(test)]
