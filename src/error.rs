@@ -24,7 +24,7 @@ pub enum Xerr {
     OutOfRange,
     BinaryMatchError,
     // return to interpreter loop
-    Next,
+    DebugBreak,
 }
 
 pub type Xresult = Xresult1<()>;

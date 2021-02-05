@@ -207,7 +207,6 @@ impl State {
                 && !self.has_pending_flow()
                 && self.ip() < self.code_origin()
             {
-                self.code_emit(Opcode::Next, DebugInfo::Empty)?;
                 self.run()?;
             }
             match self.next_token()? {
@@ -216,7 +215,6 @@ impl State {
                         break Err(Xerr::ControlFlowError);
                     }
                     if self.ip() < self.code_origin() {
-                        self.code_emit(Opcode::Next, DebugInfo::Empty)?;
                         if self.ctx.mode != ContextMode::Load {
                             self.run()?;
                         }
@@ -559,20 +557,19 @@ impl State {
     }
 
     pub fn run(&mut self) -> Xresult {
-        loop {
-            if let Err(e) = self.next() {
-                break if e == Xerr::Next { OK } else { Err(e) };
-            }
+        while self.ip() < self.code.len() {
+            self.next()?;
         }
+        OK
     }
 
     pub fn next(&mut self) -> Xresult {
         let ip = self.ip();
         match self.code.get(ip).cloned().ok_or(Xerr::InternalError)? {
             Opcode::Nop => self.next_ip(),
-            Opcode::Next => {
+            Opcode::Break => {
                 self.next_ip()?;
-                Err(Xerr::Next)
+                Err(Xerr::DebugBreak)
             }
             Opcode::Jump(offs) => self.jump_to(offs),
             Opcode::JumpIf(offs) => {
@@ -1275,7 +1272,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         if xs.ip() == at { " * " } else { "   " },
         match &xs.code[at] {
             Opcode::Nop => format!("nop"),
-            Opcode::Next => format!("next"),
+            Opcode::Break => format!("break"),
             Opcode::Call(a) => format!("call       {:#x}", a),
             Opcode::Deferred(a) => format!("defer      {:#x}", a),
             Opcode::NativeCall(x) => format!("callx      {:#x}", x.0 as usize),
@@ -1496,7 +1493,7 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
 
 fn core_word_bye(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
-    Err(Xerr::Next)
+    Err(Xerr::DebugBreak)
 }
 
 fn core_word_println(xs: &mut State) -> Xresult {
@@ -1741,7 +1738,6 @@ mod tests {
     fn test_nested_interpreter() {
         let mut xs = State::new().unwrap();
         xs.load("(3 5 *)").unwrap();
-        assert_eq!(vec![Opcode::LoadInt(15), Opcode::Next], xs.code);
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
         xs.interpret("(2 2 +)").unwrap();
@@ -1751,7 +1747,6 @@ mod tests {
         xs.interpret("(3 var n [n 0 do I loop])").unwrap();
         let v = xs.pop_data().unwrap().into_vector().unwrap();
         assert_eq!(3, v.len());
-        assert_eq!(vec![Opcode::LoadInt(15), Opcode::Next], xs.code);
     }
 
     #[test]
