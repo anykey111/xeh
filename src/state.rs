@@ -567,7 +567,6 @@ impl State {
     pub fn next(&mut self) -> Xresult {
         let ip = self.ip();
         match self.code.get(ip).cloned().ok_or(Xerr::InternalError)? {
-            Opcode::Nop => self.next_ip(),
             Opcode::Break => {
                 self.next_ip()?;
                 Err(Xerr::DebugBreak)
@@ -1272,7 +1271,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         at,
         if xs.ip() == at { " * " } else { "   " },
         match &xs.code[at] {
-            Opcode::Nop => format!("nop"),
             Opcode::Break => format!("break"),
             Opcode::Call(a) => format!("call       {:#x}", a),
             Opcode::Deferred(a) => format!("defer      {:#x}", a),
