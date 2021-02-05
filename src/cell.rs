@@ -76,7 +76,7 @@ impl fmt::Debug for Cell {
             Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => f.debug_list().entries(s.bits()).finish(),
-            Cell::Ref(x) =>  write!(f, "ref {:?}", x),
+            Cell::Ref(x) => write!(f, "ref {:?}", x),
             Cell::AnyRc(x) => match x.try_borrow() {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),

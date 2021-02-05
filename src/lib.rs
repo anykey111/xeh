@@ -1,15 +1,15 @@
 extern crate rand;
 
-pub mod lex;
-mod opcodes;
 mod arith;
 pub mod bitstring;
 mod bitstring_mod;
-pub mod error;
 pub mod cell;
-pub mod state;
-pub mod repl;
 pub mod debug;
+pub mod error;
+pub mod lex;
+mod opcodes;
+pub mod repl;
+pub mod state;
 
 pub mod prelude {
     pub use std::convert::TryInto;

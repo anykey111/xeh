@@ -134,7 +134,6 @@ pub struct State {
 }
 
 impl State {
-
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);
         if err == &Xerr::UnknownWord || err == &Xerr::InputParseError {
@@ -360,14 +359,15 @@ impl State {
     }
 
     pub fn get_var_by_name(&self, name: &str) -> Xresult1<&Cell> {
-        let e = self.dict_find(name)
-                    .and_then(|idx| self.dict_at(idx))
-                    .ok_or(Xerr::UnknownWord)?;
+        let e = self
+            .dict_find(name)
+            .and_then(|idx| self.dict_at(idx))
+            .ok_or(Xerr::UnknownWord)?;
         match e {
             Entry::Variable(a) => self.get_var(Xref::Heap(*a)),
-            Entry::Function{..} => Err(Xerr::ReadonlyAddress),
+            Entry::Function { .. } => Err(Xerr::ReadonlyAddress),
             Entry::Deferred => Err(Xerr::UnknownWord),
-        }        
+        }
     }
 
     pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
@@ -383,7 +383,7 @@ impl State {
                 let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
                 std::mem::swap(&mut val, x);
                 Ok(val)
-            },
+            }
             _ => Err(Xerr::InvalidAddress),
         }
     }
@@ -1050,8 +1050,10 @@ fn core_word_vec_begin(xs: &mut State) -> Xresult {
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Vec => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end)),
-                                  DebugInfo::Comment("]")),
+        Flow::Vec => xs.code_emit(
+            Opcode::NativeCall(XfnPtr(vec_builder_end)),
+            DebugInfo::Comment("]"),
+        ),
         _ => Err(Xerr::ControlFlowError),
     }
 }
@@ -1090,8 +1092,10 @@ fn core_word_map_begin(xs: &mut State) -> Xresult {
 
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow()? {
-        Flow::Map => xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_end)),
-                                  DebugInfo::Comment("}")),
+        Flow::Map => xs.code_emit(
+            Opcode::NativeCall(XfnPtr(map_builder_end)),
+            DebugInfo::Comment("}"),
+        ),
         _ => Err(Xerr::ControlFlowError),
     }
 }

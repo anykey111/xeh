@@ -57,9 +57,7 @@ impl DebugMap {
     }
 
     pub fn find_debug_location(&self, at: usize) -> Option<&DebugLoc> {
-        self.code_map.get(at).and_then(|x| {
-            x.1.as_ref()
-        })
+        self.code_map.get(at).and_then(|x| x.1.as_ref())
     }
 
     pub fn format_location(&self, at: usize) -> Option<String> {
@@ -68,8 +66,12 @@ impl DebugMap {
             let loc = &dloc.location;
             format!(
                 "{}:{}:{}:\n{}\n{}",
-                "none", loc.line, loc.col, src.lines().nth(loc.line - 1).unwrap(),
-                format!("{:->1$}", '^', loc.col))
+                "none",
+                loc.line,
+                loc.col,
+                src.lines().nth(loc.line - 1).unwrap(),
+                format!("{:->1$}", '^', loc.col)
+            )
         })
     }
 }

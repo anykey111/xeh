@@ -93,7 +93,7 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     opts.optflag("d", "", "enable debugging");
     let it = std::env::args().skip(1);
     let matches = opts.parse(it).map_err(|_| Xerr::InputParseError)?;
-    let debug= matches.opt_present("d");
+    let debug = matches.opt_present("d");
     let binary_path = matches.opt_str("i");
     let eval = matches.opt_str("e");
     Ok(XcmdArgs {

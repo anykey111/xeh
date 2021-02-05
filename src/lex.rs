@@ -1,5 +1,5 @@
-use crate::error::*;
 use crate::cell::{Xint, Xreal};
+use crate::error::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Tok {
@@ -202,12 +202,14 @@ impl Lex {
             match it.next() {
                 Some('x') | Some('X') => radix = 16,
                 Some('b') | Some('B') => radix = 2,
-                Some(c) => if c.is_digit(10) {
-                    digits.push('0');
-                    digits.push(c);
-                } else {
-                    digits.push(c);
-                },
+                Some(c) => {
+                    if c.is_digit(10) {
+                        digits.push('0');
+                        digits.push(c);
+                    } else {
+                        digits.push(c);
+                    }
+                }
                 None => digits.push('0'),
             }
         }

@@ -143,7 +143,7 @@ impl Bitstring {
                 '1' => {
                     buf[n / 8] |= 1u8 << i;
                     n += 1;
-                },
+                }
                 c => return Err(c),
             };
         }
@@ -155,7 +155,7 @@ impl Bitstring {
     pub fn to_bin_string(&self) -> String {
         let mut s = String::with_capacity(self.len());
         s.extend(self.bits().map(|x| if x > 0 { '1' } else { '0' }));
-        return s;        
+        return s;
     }
 
     pub fn start(&self) -> usize {
