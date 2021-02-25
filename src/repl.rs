@@ -1,8 +1,10 @@
 use crate::error::*;
 use crate::lex::*;
 use crate::state::*;
+use crate::cell::*;
 use crate::bitstring::Bitstring;
 use getopts::Options;
+use mapr::Mmap;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -110,11 +112,21 @@ pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
         xs.set_state_recording(true);
     }
     if let Some(ref path) = args.binary_path {
-        let buf = std::fs::read(path).map_err(|e| {
-            eprintln!("{}: {}", path, e.to_string());
+        let file = std::fs::File::open(path).map_err(|e| {
+            eprintln!("{}: {:?}", path, e);
             Xerr::IOError
-        })?;
-        xs.set_binary_input(Bitstring::from(buf))?;
+        })?;                                                         
+        let (mm, slice) = unsafe {
+            let mm = Mmap::map(&file).map_err(|e| {
+                eprintln!("{}: {:?}", path, e);
+                Xerr::IOError
+            })?;
+            let ptr = mm.as_ptr();
+            let slice = std::slice::from_raw_parts(ptr, mm.len());
+            (mm, slice)
+        };
+        xs.alloc_cell(Cell::from_any(mm))?;
+        xs.set_binary_input(Bitstring::from(slice))?;
     }
     for filename in args.sources.iter() {
         let src = Lex::from_file(filename).map_err(|e| {

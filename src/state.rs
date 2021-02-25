@@ -530,7 +530,7 @@ impl State {
         self.patch_insn(at, insn)
     }
 
-    fn alloc_cell(&mut self, val: Cell) -> Xresult1<usize> {
+    pub fn alloc_cell(&mut self, val: Cell) -> Xresult1<usize> {
         let a = self.heap.len();
         self.heap.push(val);
         Ok(a)
