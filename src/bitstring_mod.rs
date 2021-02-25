@@ -188,7 +188,7 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
 
 fn into_bitstring(val: Cell) -> Xresult1<Bitstring> {
     match val {
-        Cell::Str(s) => Ok(Bitstring::from(s.as_bytes())),
+        Cell::Str(s) => Ok(Bitstring::from(s.as_bytes().to_vec())),
         Cell::Vector(v) => {
             let mut tmp = Vec::with_capacity(v.len());
             for x in v.iter() {
@@ -357,8 +357,8 @@ mod tests {
         let mut xs = Xstate::new().unwrap();
         xs.interpret("[0 0xff] >bitstr").unwrap();
         let s = xs.pop_data().unwrap();
-        assert_eq!(s, Cell::Bitstr(Xbitstr::from(&vec![0, 255])));
-        xs.set_binary_input_data(&vec![1, 255, 0]).unwrap();
+        assert_eq!(s, Cell::Bitstr(Xbitstr::from(vec![0, 255])));
+        xs.set_binary_input(Xbitstr::from(vec![1, 255, 0])).unwrap();
         xs.interpret("u8").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         xs.interpret("i8").unwrap();
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn test_bitstring_match() {
         let mut xs = Xstate::new().unwrap();
-        xs.set_binary_input_data(&vec![0x31, 0x32, 0x33]).unwrap();
+        xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
         assert_eq!(Err(Xerr::BinaryMatchError), xs.interpret("\"124\" ?"));
         xs.interpret("\"123\" ?").unwrap();
         assert_eq!(Err(Xerr::TypeError), xs.interpret("{} ?"));
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_bitstring_chunk() {
         let mut xs = Xstate::new().unwrap();
-        xs.set_binary_input_data(&vec![1, 2, 3, 0]).unwrap();
+        xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
         xs.interpret("8 unsigned").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         xs.interpret("*bitstr-chunk*").unwrap();
@@ -434,7 +434,7 @@ mod tests {
     #[test]
     fn test_bitstring_input_seek() {
         let mut xs = Xstate::new().unwrap();
-        xs.set_binary_input_data(&vec![100, 200]).unwrap();
+        xs.set_binary_input(Xbitstr::from(vec![100, 200])).unwrap();
         assert_eq!(Err(Xerr::OutOfRange), xs.interpret("100 seek"));
         assert_eq!(Err(Xerr::TypeError), xs.interpret("[] seek"));
         xs.interpret("8 seek 8 unsigned").unwrap();
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn test_bitstr_remain() {
         let mut xs = Xstate::new().unwrap();
-        xs.set_binary_input_data(&vec![1, 2]).unwrap();
+        xs.set_binary_input(Xbitstr::from(vec![1, 2])).unwrap();
         xs.interpret("remain").unwrap();
         assert_eq!(Cell::Int(16), xs.pop_data().unwrap());
         xs.interpret("5 bits drop remain").unwrap();

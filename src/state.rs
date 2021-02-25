@@ -4,6 +4,7 @@ use crate::debug::*;
 use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
+use crate::bitstring::Bitstring;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
@@ -154,18 +155,8 @@ impl State {
         buf
     }
 
-    pub fn set_binary_input(&mut self, path: &str) -> Xresult {
-        let buf = std::fs::read(path).map_err(|e| {
-            eprintln!("{}: {}", path, e.to_string());
-            Xerr::IOError
-        })?;
-        let s = Xbitstr::from(buf);
-        self.set_var(self.bs_input, Cell::Bitstr(s)).map(|_| ())
-    }
-
-    pub fn set_binary_input_data(&mut self, data: &[u8]) -> Xresult {
-        let s = Xbitstr::from(data);
-        self.set_var(self.bs_input, Cell::Bitstr(s)).map(|_| ())
+    pub fn set_binary_input(&mut self, bin: Bitstring) -> Xresult {
+        self.set_var(self.bs_input, Cell::Bitstr(bin)).map(|_| ())
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
