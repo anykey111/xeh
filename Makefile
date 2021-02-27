@@ -1,8 +1,8 @@
 fire:
-	cargo run --release --example canvas -- -s examples/doom-fire.xs
+	cargo run --release --example canvas -- examples/doom-fire.xs
 
 q1pal:
-	cargo run --release --example canvas -- -d -s examples/quake-palette.xs -i test/palette.lmp
+	cargo run --release --example canvas -- -d  examples/quake-palette.xs -i test/palette.lmp
 
 perf:
 	RUSTFLAGS='-C force-frame-pointers=y' cargo build --release
@@ -12,4 +12,4 @@ release:
 	cargo build --release
 
 fibench:
-	time target/release/xeh -s benches/fib.xs
+	time target/release/xeh benches/fib.xs

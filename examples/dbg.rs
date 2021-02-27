@@ -14,7 +14,7 @@ fn main() -> Xresult {
     let height = 480;
     let text_size = 16.0;
 
-    let filename = args.script_path.expect("source file");
+    let filename = args.sources.first().expect("source file");
     xs.set_state_recording(args.debug);
     let src = xeh::lex::Lex::from_file(&filename).unwrap();
     xs.load_source(src)?;
