@@ -86,20 +86,23 @@ fn bitstr_remain(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
-    let start = xs.pop_data()?.into_int()?;
-    xs.set_var(xs.dump_start, Cell::Int(start))?;
-    bitstr_dump(xs)
+    let start = xs.pop_data()?.into_usize()?;
+    let end = start + 16 * 8 * 8;
+    bitstr_dump_range(xs, start..end)
 }
 
 fn bitstr_dump(xs: &mut Xstate) -> Xresult {
-    let mut start = xs.get_var(xs.dump_start)?.to_usize()?;
-    let mut s = bitstr_input(xs)?.clone();
-    if start < s.start() || start >= s.end() {
-        start = s.start();
-    }
-    s.seek(start);
+    let start = xs.get_var(xs.dump_start)?.to_usize()?;
+    let end = start + 16 * 8 * 8;
+    bitstr_dump_range(xs, start..end)?;
+    xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
+}
+
+fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange) -> Xresult {
+    let mut s = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+    let start = s.seek(r.start).ok_or_else(|| Xerr::OutOfRange)?;
+    let count = r.len().min(s.len()) / 8;
     let data = s.slice();
-    let count = data.len().min(16 * 8);
     let mut ascii = String::new();
     for i in 0..count {
         if i % 16 == 0 {
@@ -118,8 +121,6 @@ fn bitstr_dump(xs: &mut Xstate) -> Xresult {
             println!("");
         }
     }
-    let new_start = Cell::from(start + count * 8);
-    xs.set_var(xs.dump_start, new_start)?;
     OK
 }
 

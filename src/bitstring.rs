@@ -126,7 +126,7 @@ pub type CowBytes = Cow<'static, [u8]>;
 #[derive(Clone, Default)]
 pub struct Bitstring {
     format: BitstringFormat,
-    range: BitstringRange,
+    pub (crate) range: BitstringRange,
     data: Rc<CowBytes>,
 }
 
