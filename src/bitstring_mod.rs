@@ -46,6 +46,7 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("seek", bitstring_seek)?;
     xs.defword("offset", bitstr_offset)?;
     xs.defword("remain", bitstr_remain)?;
+    xs.defword("find", bitstr_find)?;
     xs.defword("dump", bitstr_dump)?;
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
@@ -59,6 +60,19 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.bs_chunk = xs.defvar("*bitstr-chunk*", Cell::Bitstr(Bitstring::new()))?;
     xs.bs_flow = xs.defvar("*bitstr-flow*", Cell::Vector(Xvec::new()))?;
     OK
+}
+
+fn bitstr_find(xs: &mut Xstate) -> Xresult {
+    let pat = bitstring_from(xs.pop_data()?)?;
+    let s = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+    if !(pat.is_bytestring() && s.is_bytestring()) {
+        return Err(Xerr::UnalignedBitstr);
+    }
+    if let Some(pos) = twoway::find_bytes(s.slice(), pat.slice()) {
+        xs.push_data(Cell::from(pos))
+    } else {
+        xs.push_data(Cell::Nil)
+    }
 }
 
 fn bitstring_seek(xs: &mut Xstate) -> Xresult {
@@ -151,7 +165,7 @@ fn bitstring_close(xs: &mut Xstate) -> Xresult {
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
     let head = xs.pop_data()?.into_bitstring()?;
     let tail = xs.pop_data()?;
-    let tail = into_bitstring(tail)?;
+    let tail = bitstring_from(tail)?;
     let result = head.append(&tail);
     xs.push_data(Cell::Bitstr(result))
 }
@@ -183,11 +197,11 @@ fn bitstring_to_unsigned(xs: &mut Xstate) -> Xresult {
 
 fn to_bitstring(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
-    let s = into_bitstring(val)?;
+    let s = bitstring_from(val)?;
     xs.push_data(Cell::Bitstr(s))
 }
 
-fn into_bitstring(val: Cell) -> Xresult1<Bitstring> {
+fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
     match val {
         Cell::Str(s) => Ok(Bitstring::from(s.as_bytes().to_vec())),
         Cell::Vector(v) => {
@@ -243,7 +257,7 @@ fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
 
 fn bin_match(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
-    let pat = into_bitstring(val)?;
+    let pat = bitstring_from(val)?;
     let (s, rest) = read_bitstring(xs, pat.len())?;
     if s != pat {
         return Err(Xerr::BinaryMatchError);
@@ -466,5 +480,19 @@ mod tests {
         xs.interpret("1 MB").unwrap();
         assert_eq!(Cell::Int(1024 * 1024 * 8), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::TypeError), xs.interpret("\"1\" B"));
+    }
+
+    #[test]
+    fn test_bitstr_find() {
+        let mut xs = Xstate::new().unwrap();
+        xs.interpret("[33 55 77] >bitstr bitstr-open [77] find").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        xs.interpret("[55 77] find").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("[] find").unwrap();
+        assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
+        xs.interpret("[56] find").unwrap();
+        assert_eq!(Ok(Cell::Nil), xs.pop_data());
+        assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [56] find"));
     }
 }

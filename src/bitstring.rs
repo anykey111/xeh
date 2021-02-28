@@ -174,7 +174,7 @@ impl Bitstring {
         self.range.end - self.range.start
     }
 
-    fn is_bytestring(&self) -> bool {
+    pub fn is_bytestring(&self) -> bool {
         (self.range.start % 8 == 0) && (self.range.end % 8 == 0)
     }
 
