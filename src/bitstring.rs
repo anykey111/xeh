@@ -293,6 +293,13 @@ impl Bitstring {
         }
     }
 
+    pub fn iter8<'a>(&'a self) -> Iter8<'a> {
+        Iter8 {
+            pos: self.range.start,
+            bs: self,
+        }
+    }
+
     fn clear_padding_bits(&mut self) {
         let r = self.range.clone();
         let start_pad = r.start % 8;
@@ -431,6 +438,31 @@ impl<'a> Iterator for Bits<'a> {
             self.pos += 1;
             Some(val)
         }
+    }
+}
+
+pub struct Iter8<'a> {
+    pos: usize,
+    bs: &'a Bitstring,
+}
+
+impl<'a> Iterator for Iter8<'a> {
+    type Item = (u8, u32);
+    fn next(&mut self) -> Option<Self::Item> {
+        let start = self.pos;
+        let end = self.bs.end();
+        if start >= end {
+            return None;
+        }
+        let len = (end - start).min(8);
+        let idx = start / 8;
+        let (mut val, n) = cut_bits(self.bs.data[idx], start, start + len);
+        if n < len {
+            let (val2, n2) = cut_bits(self.bs.data[idx + 1], start + n, start + len);
+            val = (val << n2 ) | val2;
+        }
+        self.pos += len;
+        Some((val, len as u32))
     }
 }
 
@@ -682,5 +714,21 @@ mod tests {
         let s = Bitstring::from(vec![0xc0]);
         let res: Vec<_> = s.bits().collect();
         assert_eq!(vec![0, 0, 0, 0, 0, 0, 1, 1], res);
+    }
+
+    #[test]
+    fn test_iter8() {
+        let a = Bitstring::from(vec![0xaf, 0xbc]);
+        let mut it = a.iter8();
+        assert_eq!(Some((0xaf, 8)), it.next());
+        assert_eq!(Some((0xbc, 8)), it.next());
+        assert_eq!(None, it.next());
+        // unaligned
+        let mut b = Bitstring::from(vec![0x12, 0x34]);
+        b.seek(4).unwrap();
+        let mut it = b.iter8();
+        assert_eq!(Some((0x14, 8)), it.next());
+        assert_eq!(Some((0x3, 4)), it.next());
+        assert_eq!(None, it.next());
     }
 }
