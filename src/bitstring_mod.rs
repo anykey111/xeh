@@ -486,9 +486,9 @@ mod tests {
     fn test_bitstr_find() {
         let mut xs = Xstate::new().unwrap();
         xs.interpret("[33 55 77] >bitstr bitstr-open [77] find").unwrap();
-        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
         xs.interpret("[55 77] find").unwrap();
-        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
         xs.interpret("[] find").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         xs.interpret("[56] find").unwrap();
