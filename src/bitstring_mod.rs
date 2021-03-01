@@ -69,7 +69,7 @@ fn bitstr_find(xs: &mut Xstate) -> Xresult {
         return Err(Xerr::UnalignedBitstr);
     }
     if let Some(pos) = twoway::find_bytes(s.slice(), pat.slice()) {
-        xs.push_data(Cell::from(pos))
+        xs.push_data(Cell::from(pos * 8))
     } else {
         xs.push_data(Cell::Nil)
     }
