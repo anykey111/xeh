@@ -36,7 +36,8 @@ fn bit_mask(len: usize) -> u8 {
 fn cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
     let start_bit = start % 8;
     let len = (end - start).min(8 - start_bit);
-    let result = x.wrapping_shr(start_bit as u32) & bit_mask(len);
+    let shift = 8 - (start_bit + len);
+    let result = x.wrapping_shr(shift as u32) & bit_mask(len);
     (result, len)
 }
 
@@ -87,17 +88,19 @@ macro_rules! num_to_big {
     ($val:expr, $num_bits:expr) => {{
         let val = $val;
         let num_bits: usize = $num_bits;
-        let mut bs = Bitstring::new();
-        let buf = Rc::make_mut(&mut bs.data).to_mut();
+        let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
         let mut i = num_bits;
         while i > 0 {
             let n = i.min(8);
             let x = val.wrapping_shr((i - n) as u32) as u8;
-            buf.push(x);
+            tmp.push(x << (8 - n));
             i -= n;
         }
-        bs.range = 0..num_bits;
-        bs
+        Bitstring {
+            format: BitstringFormat::Raw,
+            range: BitstringRange::from(0..num_bits),
+            data: Rc::new(Cow::from(tmp)),
+        }
     }};
 }
 
@@ -105,17 +108,19 @@ macro_rules! num_to_little {
     ($val:expr, $num_bits:expr) => {{
         let val = $val;
         let num_bits: usize = $num_bits;
-        let mut bs = Bitstring::new();
-        let buf = Rc::make_mut(&mut bs.data).to_mut();
+        let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
         let mut i = 0;
         while i < num_bits {
             let n = (num_bits - i).min(8);
             let x = val.wrapping_shr(i as u32) as u8;
-            buf.push(x);
+            tmp.push(x << (8 - n));
             i += n;
         }
-        bs.range = 0..num_bits;
-        bs
+        Bitstring {
+            format: BitstringFormat::Raw,
+            range: BitstringRange::from(0..num_bits),
+            data: Rc::new(Cow::from(tmp)),
+        }
     }};
 }
 
@@ -140,7 +145,7 @@ impl Bitstring {
         let mut buf = Vec::new();
         buf.resize_with(s.len(), || 0u8);
         for c in s.chars() {
-            let i = n % 8;
+            let i = 7 - (n % 8);
             match c {
                 '_' | ' ' => continue,
                 '0' => n += 1,
@@ -253,26 +258,12 @@ impl Bitstring {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let src = self.slice();
         if self.is_bytestring() {
-            return src.to_vec();
+            return self.slice().to_vec();
         }
         let cap = (self.len() + 8) / 8;
         let mut bytes = Vec::with_capacity(cap);
-        let mut acc = 0u32;
-        let mut n = 0;
-        fold_bits!(self.range, src, |x, num_bits| {
-            acc |= (x as u32) << n;
-            n += num_bits;
-            if n >= 8 {
-                bytes.push(acc as u8);
-                n -= 8;
-                acc = acc >> 8;
-            }
-        });
-        if n > 0 {
-            bytes.push(acc as u8);
-        }
+        bytes.extend(self.iter8().map(|(val, _)| val));
         bytes
     }
 
@@ -300,31 +291,18 @@ impl Bitstring {
         }
     }
 
-    fn clear_padding_bits(&mut self) {
-        let r = self.range.clone();
-        let start_pad = r.start % 8;
-        let data = Rc::make_mut(&mut self.data).to_mut();
-        data[r.start / 8] &= !bit_mask(start_pad);
-        let end_pad = r.end % 8;
-        if end_pad > 0 {
-            data[r.end / 8] &= bit_mask(end_pad);
-        }
-    }
-
     pub fn detach(&self) -> Bitstring {
         if self.len() == 0 {
             Bitstring::new()
         } else {
-            let start = self.range.start % 8;
-            let end = start + self.len();
-            let tmp = Vec::from(self.slice());
-            let mut s = Bitstring {
+            let end = self.len();
+            let mut tmp = Vec::with_capacity(upper_bound_index(end));
+            tmp.extend(self.iter8().map(|(val, n)| val << (8 - n)));
+            Bitstring {
                 format: BitstringFormat::Raw,
-                range: BitstringRange::from(start..end),
+                range: BitstringRange::from(0..end),
                 data: Rc::new(Cow::from(tmp)),
-            };
-            s.clear_padding_bits();
-            s
+            }
         }
     }
 
@@ -341,14 +319,13 @@ impl Bitstring {
         if self.is_bytestring() && tail.is_bytestring() {
             return self.append_bytes_mut(tail);
         }
-        let mut pos = self.range.end;
+        let mut pos = self.range.end; 
         let new_len = upper_bound_index(pos + tail.len());
         let data = Rc::make_mut(&mut self.data).to_mut();
         data.resize_with(new_len, || 0);
         for x in tail.bits() {
             let i = pos / 8;
-            let offset = pos % 8;
-            data[i] |= x << offset;
+            data[i] |= x << (7 - (pos % 8));
             pos += 1;
         }
         let start = self.range.start;
@@ -371,12 +348,12 @@ impl Bitstring {
         } else {
             self.detach()
         };
-        let r = s.bytes_range();
+        let r = s.range.clone();
         let data = Rc::make_mut(&mut s.data).to_mut();
-        for x in data[r].iter_mut() {
-            *x = !*x;
+        for pos in r {
+            let i = pos / 8;
+            data[i] ^= 1 << (7 - (pos % 8));
         }
-        s.clear_padding_bits();
         s
     }
 }
@@ -433,7 +410,7 @@ impl<'a> Iterator for Bits<'a> {
             None
         } else {
             let i = self.pos / 8;
-            let offset = self.pos % 8;
+            let offset = 7 - (self.pos % 8);
             let val = (self.bs.data[i] >> offset) & 1;
             self.pos += 1;
             Some(val)
@@ -477,8 +454,11 @@ mod tests {
     fn test_split_at() {
         let bs = Bitstring::from(vec![0x7f]);
         let (a, b) = bs.split_at(4).unwrap();
-        assert_eq!(a.to_i64(LE), -8);
-        assert_eq!(b.to_u64(BE), 7);
+        assert_eq!(a.to_u64(BE), 7);
+        assert_eq!(b.to_i64(LE), -8);
+        let (a, b) = bs.split_at(1).unwrap();
+        assert_eq!(a.to_u64(LE), 0);
+        assert_eq!(b.to_u64(LE), 0x7f);
     }
 
     #[test]
@@ -511,11 +491,12 @@ mod tests {
         assert_eq!(b.to_bytes(), vec![0xff]);
         let c = a.read(4).unwrap().detach();
         assert_eq!(c.range, (0..4));
-        assert_eq!(c.to_bytes(), vec![0x0f]);
+        assert_eq!(c.to_bytes(), vec![2]);
+        assert_eq!(c.detach().data[0], 0x20);
         assert_eq!(a.range, (12..16));
         let mut x = Bitstring::from(vec![0x12, 0x34]);
         x.read(4).unwrap();
-        assert_eq!(x.read(8).unwrap().to_bytes(), vec![0x41]);
+        assert_eq!(x.read(8).unwrap().to_bytes(), vec![0x23]);
     }
 
     #[test]
@@ -598,7 +579,7 @@ mod tests {
         assert_eq!(c.bits().collect::<Vec<_>>(), vec![0, 1, 1, 1, 1]);
         let c_inv = c.invert();
         assert_eq!(c_inv.bits().collect::<Vec<_>>(), vec![1, 0, 0, 0, 0]);
-        assert_eq!(c_inv.data[0], 0x01);
+        assert_eq!(c_inv.data[0], 0x80);
     }
 
     #[test]
@@ -631,6 +612,9 @@ mod tests {
         let bs = Bitstring::from_u64(1, 3, BE);
         assert_eq!(bs.to_i64(BE), 1);
         assert_eq!(bs.to_bytes(), vec![1]);
+        let ls = Bitstring::from_u64(1, 3, LE);
+        assert_eq!(ls.to_i64(LE), 1);
+        assert_eq!(ls.to_bytes(), vec![1]);
         assert_eq!(
             Bitstring::from_u64(0x12345678, 32, LE).to_bytes(),
             vec![0x78, 0x56, 0x34, 0x12]
@@ -687,12 +671,11 @@ mod tests {
 
     #[test]
     fn test_cut() {
-        assert_eq!((0b1111, 4), cut_bits(0b11110000, 4, 12));
-        assert_eq!((0b111, 3), cut_bits(0b11110000, 5, 8));
-        assert_eq!((0b1110000, 7), cut_bits(0b11110000, 0, 7));
-        assert_eq!((0b11110000, 8), cut_bits(0b11110000, 0, 8));
-        assert_eq!((0b11110000, 8), cut_bits(0b11110000, 0, 9));
-        assert_eq!((0b1111000, 7), cut_bits(0b11110000, 1, 8));
+        assert_eq!((1, 1), cut_bits(0b1_0000_100, 0, 1));
+        assert_eq!((0, 4), cut_bits(0b1_0000_100, 1, 5));
+        assert_eq!((4, 3), cut_bits(0b1_0000_100, 5, 8));
+        assert_eq!((1, 1), cut_bits(0b1_0000_100, 8, 9));
+        assert_eq!((4, 3), cut_bits(0b1_0000_100, 5, 100));
     }
 
     #[test]
@@ -711,9 +694,9 @@ mod tests {
 
     #[test]
     fn test_bits() {
-        let s = Bitstring::from(vec![0xc0]);
+        let s = Bitstring::from(vec![0b11000000]);
         let res: Vec<_> = s.bits().collect();
-        assert_eq!(vec![0, 0, 0, 0, 0, 0, 1, 1], res);
+        assert_eq!(vec![1, 1, 0, 0, 0, 0, 0, 0], res);
     }
 
     #[test]
@@ -724,11 +707,11 @@ mod tests {
         assert_eq!(Some((0xbc, 8)), it.next());
         assert_eq!(None, it.next());
         // unaligned
-        let mut b = Bitstring::from(vec![0x12, 0x34]);
+        let mut b = Bitstring::from(vec![0xab, 0xcd]);
         b.seek(4).unwrap();
         let mut it = b.iter8();
-        assert_eq!(Some((0x14, 8)), it.next());
-        assert_eq!(Some((0x3, 4)), it.next());
+        assert_eq!(Some((0xbc, 8)), it.next());
+        assert_eq!(Some((0xd, 4)), it.next());
         assert_eq!(None, it.next());
     }
 }
