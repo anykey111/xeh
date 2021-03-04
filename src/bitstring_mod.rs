@@ -495,5 +495,7 @@ mod tests {
         xs.interpret("[56] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
         assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [56] find"));
+        xs.interpret("[0x31 0x32 0x33] >bitstr bitstr-open \"23\" find").unwrap();
+        assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 }
