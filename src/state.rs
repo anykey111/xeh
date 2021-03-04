@@ -5,6 +5,7 @@ use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
 use crate::bitstring::Bitstring;
+use std::{fs::OpenOptions, io::Write, io::BufWriter};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
@@ -465,6 +466,7 @@ impl State {
             Def("println", core_word_println),
             Def("print", core_word_print),
             Def("newline", core_word_newline),
+            Def("file-write", core_word_file_write),
             Def("HEX", core_word_hex),
             Def("DEC", core_word_decimal),
             Def("OCT", core_word_octal),
@@ -1507,6 +1509,35 @@ fn core_word_print(xs: &mut State) -> Xresult {
 
 fn core_word_newline(_xs: &mut State) -> Xresult {
     println!("");
+    OK
+}
+
+fn core_word_file_write(xs: &mut State) -> Xresult {
+    let path = xs.pop_data()?.into_string()?;
+    let data = xs.pop_data()?;
+    let open = || OpenOptions::new().create(true).write(true).truncate(true).open(&path);
+    let io_err = |e | {
+        eprintln!("{}: {}", path, e);
+        Xerr::IOError
+    };
+    match data {
+        Cell::Bitstr(s) => {
+            let mut file = open().map_err(io_err)?;
+            if s.is_bytestring() {
+                file.write_all(s.slice()).map_err(io_err)?;
+            } else {
+                let mut buf = BufWriter::new(file);
+                for x in s.iter8() {
+                    buf.write_all(&[x.0]).map_err(io_err)?;
+                }
+            }
+        }
+        Cell::Str(s) => {
+            let mut file = open().map_err(io_err)?;
+            file.write_all(s.as_bytes()).map_err(io_err)?;
+        }
+        _ => return Err(Xerr::TypeError),
+    };
     OK
 }
 

@@ -202,7 +202,7 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::Bitstr(s))
 }
 
-fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
+pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
     match val {
         Cell::Str(s) => Ok(Bitstring::from(s.as_bytes().to_vec())),
         Cell::Vector(v) => {
