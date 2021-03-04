@@ -102,7 +102,8 @@ fn bitstr_remain(xs: &mut Xstate) -> Xresult {
 fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
     let start = xs.pop_data()?.into_usize()?;
     let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end)
+    bitstr_dump_range(xs, start..end)?;
+    xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
 }
 
 fn bitstr_dump(xs: &mut Xstate) -> Xresult {
