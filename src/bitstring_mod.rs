@@ -43,6 +43,14 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("i16le", |xs| read_signed_nb(xs, 16, Byteorder::LE))?;
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
+    xs.defword("i8>bitstr", |xs| num_to_bitstr(xs, 8, i8::MIN.into(), i8::MAX.into()))?;
+    xs.defword("u8>bitstr", |xs| num_to_bitstr(xs, 8, u8::MIN.into(), u8::MAX.into()))?;
+    xs.defword("i16>bitstr", |xs| num_to_bitstr(xs, 16, i16::MIN.into(), i16::MAX.into()))?;
+    xs.defword("u16>bitstr", |xs| num_to_bitstr(xs, 16, u16::MIN.into(), u16::MAX.into()))?;
+    xs.defword("i32>bitstr", |xs| num_to_bitstr(xs, 32, i32::MIN.into(), i32::MAX.into()))?;
+    xs.defword("u32>bitstr", |xs| num_to_bitstr(xs, 32, u32::MIN.into(), u32::MAX.into()))?;
+    xs.defword("i64>bitstr", |xs| num_to_bitstr(xs, 64, i64::MIN.into(), i64::MAX.into()))?;
+    xs.defword("u64>bitstr", |xs| num_to_bitstr(xs, 64, u64::MIN.into(), u64::MAX.into()))?;
     xs.defword("seek", bitstring_seek)?;
     xs.defword("offset", bitstr_offset)?;
     xs.defword("remain", bitstr_remain)?;
@@ -194,6 +202,20 @@ fn bitstring_to_unsigned(xs: &mut Xstate) -> Xresult {
     }
     let x = s.to_u128(bo) as Xint;
     xs.push_data(Cell::Int(x))
+}
+
+fn num_to_bitstr(xs: &mut Xstate, num_bits: usize, min: Xint, max: Xint) -> Xresult {
+    let val = xs.pop_data()?.into_int()?;
+    let bo = default_byteorder(xs)?;
+    if val < min || val > max {
+        return Err(Xerr::IntegerOverflow);
+    }
+    let s = if val < 0 {
+        Bitstring::from_i64(val as i64, num_bits, bo)
+    } else {
+        Bitstring::from_u64(val as u64, num_bits, bo)
+    };
+    xs.push_data(Cell::Bitstr(s))
 }
 
 fn to_bitstring(xs: &mut Xstate) -> Xresult {
@@ -445,6 +467,18 @@ mod tests {
         let s2 = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(0, s2.len());
         assert_eq!(Err(Xerr::ControlFlowError), xs.interpret("bitstr-close"));
+    }
+
+    #[test]
+    fn test_bitstr_from_int() {
+        let xs = &mut Xstate::new().unwrap();
+        let pop_bytes = |xs: &mut Xstate| xs.pop_data()?.into_bitstring().map(|s| s.to_bytes());
+        xs.interpret("-128 i8>bitstr").unwrap();
+        assert_eq!(Ok(vec![0x80]), pop_bytes(xs));
+        xs.interpret("255 u8>bitstr").unwrap();
+        assert_eq!(Ok(vec![0xff]), pop_bytes(xs));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("-128 u8>bitstr"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("128 i8>bitstr"));
     }
 
     #[test]
