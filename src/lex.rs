@@ -238,6 +238,16 @@ impl Lex {
                     self.cursor.pos = start;
                     return Err(Xerr::InputIncomplete);
                 }
+                Some('\\') => {
+                    let c = self.take().ok_or(Xerr::InputParseError)?;
+                    match c {
+                        '\\' => s.push(c),
+                        '\"' => s.push(c),
+                        'n' => s.push('\n'),
+                        'r' => s.push('\r'),
+                        _ => return Err(Xerr::InputParseError),
+                    }
+                },
                 Some('"') => break,
                 Some(c) => {
                     if c != '\n' {
@@ -345,4 +355,12 @@ fn test_lex_str() {
     assert_eq!(Err(Xerr::InputIncomplete), lex.next());
     lex.buffer.push_str("\"");
     assert_eq!(Ok(Tok::Str(" xx ".to_string())), lex.next());
+}
+
+#[test]
+fn test_lex_escape() {
+    let mut lex = Lex::from_str(r#""\\ \" \r \n""#);
+    assert_eq!(Ok(Tok::Str("\\ \" \r \n".to_string())), lex.next());
+    let mut lex = Lex::from_str(r#" " \x " "#);
+    assert_eq!(Err(Xerr::InputParseError), lex.next());
 }
