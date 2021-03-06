@@ -1,19 +1,15 @@
-use crate::error::*;
-use crate::lex::*;
-use crate::state::*;
-use crate::cell::*;
-use crate::bitstring::Bitstring;
+use crate::prelude::*;
+use crate::state::format_opcode;
 use getopts::Options;
-use mapr::Mmap;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub fn run(xs: &mut State) -> Xresult {
+pub fn run(xs: &mut Xstate) -> Xresult {
     crate::repl::run_tty_repl(xs, true);
     OK
 }
 
-fn eval_line(xs: &mut State, line: &str) -> Xresult {
+fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
         if let Err(e) = xs.next() {
@@ -45,7 +41,7 @@ fn eval_line(xs: &mut State, line: &str) -> Xresult {
     OK
 }
 
-fn run_tty_repl(xs: &mut State, load_history: bool) {
+fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
     let mut rl = Editor::<()>::new();
     if load_history {
         let _ = rl.load_history("history.txt");
@@ -110,33 +106,15 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     })
 }
 
-pub fn run_with_args(xs: &mut State, args: XcmdArgs) -> Xresult {
+pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if args.debug {
         xs.set_state_recording(true);
     }
     if let Some(ref path) = args.binary_path {
-        let file = std::fs::File::open(path).map_err(|e| {
-            eprintln!("{}: {:?}", path, e);
-            Xerr::IOError
-        })?;                                                         
-        let (mm, slice) = unsafe {
-            let mm = Mmap::map(&file).map_err(|e| {
-                eprintln!("{}: {:?}", path, e);
-                Xerr::IOError
-            })?;
-            let ptr = mm.as_ptr();
-            let slice = std::slice::from_raw_parts(ptr, mm.len());
-            (mm, slice)
-        };
-        xs.alloc_cell(Cell::from_any(mm))?;
-        xs.set_binary_input(Bitstring::from(slice))?;
+        crate::file::load_binary(xs, path)?;
     }
     for filename in args.sources.iter() {
-        let src = Lex::from_file(filename).map_err(|e| {
-            eprintln!("{}: {:?}", filename, e);
-            Xerr::IOError
-        })?;
-        xs.load_source(src)?;
+        crate::file::load_source(xs, filename)?;
     }
     let mut result = OK;
     if !args.sources.is_empty() {

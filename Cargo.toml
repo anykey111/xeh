@@ -4,12 +4,15 @@ version = "0.1.0"
 authors = ["rivo <db05@bk.ru>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["mmap"]
+mmap = ["mapr"]
 
 [dependencies]
 rpds = "0.7"
 rustyline = "6.1.2"
 getopts = "0.2"
 rand = "*"
-mapr = "0.8"
 twoway = "0.2.1"
+
+mapr = { version = "0.8", optional = true }

@@ -10,10 +10,11 @@ pub mod lex;
 mod opcodes;
 pub mod repl;
 pub mod state;
+mod file;
 
 pub mod prelude {
     pub use std::convert::TryInto;
     pub type Xstate = crate::state::State;
-    pub type Xcell = crate::cell::Cell;
-    pub use crate::error::{Xerr, Xresult, OK};
+    pub use crate::error::*;
+    pub use crate::cell::*;
 }
