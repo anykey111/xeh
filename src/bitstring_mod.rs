@@ -51,10 +51,10 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("u32>bitstr", |xs| num_to_bitstr(xs, 32, u32::MIN.into(), u32::MAX.into()))?;
     xs.defword("i64>bitstr", |xs| num_to_bitstr(xs, 64, i64::MIN.into(), i64::MAX.into()))?;
     xs.defword("u64>bitstr", |xs| num_to_bitstr(xs, 64, u64::MIN.into(), u64::MAX.into()))?;
-    xs.defword("seek", bitstring_seek)?;
-    xs.defword("offset", bitstr_offset)?;
-    xs.defword("remain", bitstr_remain)?;
-    xs.defword("find", bitstr_find)?;
+    xs.defword("seek", seek_bin)?;
+    xs.defword("offset", offset_bin)?;
+    xs.defword("remain", remain_bin)?;
+    xs.defword("find", find_bin)?;
     xs.defword("dump", bitstr_dump)?;
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
@@ -70,24 +70,25 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     OK
 }
 
-fn bitstr_find(xs: &mut Xstate) -> Xresult {
+fn find_bin(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(xs.pop_data()?)?;
-    let s = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+    let s = bitstr_input(xs)?;
     if !(pat.is_bytestring() && s.is_bytestring()) {
         return Err(Xerr::UnalignedBitstr);
     }
     if let Some(pos) = twoway::find_bytes(s.slice(), pat.slice()) {
-        xs.push_data(Cell::from(pos * 8))
+        let offs = s.start() + pos * 8;
+        xs.push_data(Cell::from(offs))
     } else {
         xs.push_data(Cell::Nil)
     }
 }
 
-fn bitstring_seek(xs: &mut Xstate) -> Xresult {
+fn seek_bin(xs: &mut Xstate) -> Xresult {
     let pos = xs.pop_data()?.into_usize()?;
-    let mut bs = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
-    bs.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
-    xs.set_var(xs.bs_input, Cell::Bitstr(bs)).map(|_| ())
+    let mut s = bitstr_input(xs)?.clone();
+    s.seek(pos).ok_or_else(|| Xerr::OutOfRange)?;
+    xs.set_var(xs.bs_input, Cell::Bitstr(s)).map(|_| ())
 }
 
 fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
@@ -97,12 +98,12 @@ fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
     }
 }
 
-fn bitstr_offset(xs: &mut Xstate) -> Xresult {
+fn offset_bin(xs: &mut Xstate) -> Xresult {
     let offs = bitstr_input(xs)?.start() as Xint;
     xs.push_data(Cell::Int(offs))
 }
 
-fn bitstr_remain(xs: &mut Xstate) -> Xresult {
+fn remain_bin(xs: &mut Xstate) -> Xresult {
     let n = bitstr_input(xs)?.len() as Xint;
     xs.push_data(Cell::Int(n))
 }
