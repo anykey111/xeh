@@ -5,8 +5,11 @@ authors = ["rivo <db05@bk.ru>"]
 edition = "2018"
 
 [features]
-default = ["mmap"]
+default = ["mmap", "stdio"]
+# memory-mapped files
 mmap = ["mapr"]
+# print to console
+stdio = []
 
 [dependencies]
 rpds = "0.7"

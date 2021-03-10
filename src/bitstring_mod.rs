@@ -1,5 +1,4 @@
-use std::println;
-
+use std::fmt::Write;
 use crate::bitstring::*;
 use crate::cell::*;
 use crate::error::*;
@@ -128,21 +127,24 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange) -> Xresult {
     let count = r.len().min(s.len()) / 8;
     let data = s.slice();
     let mut ascii = String::new();
+    let mut out = String::new();
     for i in 0..count {
         if i % 16 == 0 {
-            print!("{:05x}:", (start / 8) + i);
+            write!(&mut out, "{:05x}:", (start / 8) + i).unwrap();
         }
-        print!(" {:02x}", data[i]);
+        write!(&mut out, " {:02x}", data[i]).unwrap();
         let c = std::char::from_u32(data[i] as u32).unwrap();
         if c.is_ascii_graphic() {
             ascii.push(c);
         } else {
             ascii.push('.');
         }
-        if i % 16 == 15 {
-            print!("    {}", ascii);
+        if i % 16 == 15 || (i + 1) == count {
+            write!(&mut out, "    {}", ascii).unwrap();
+            writeln!(&mut out, "").unwrap();
+            xs.display(&out);
+            out.clear();
             ascii.clear();
-            println!("");
         }
     }
     OK

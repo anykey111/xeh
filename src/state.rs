@@ -121,7 +121,7 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
-    error_msg: Option<String>,
+    stdout_sink: String,
     pub(crate) about_to_stop: bool,
     // current input binary
     pub(crate) bs_input: Xref,
@@ -147,6 +147,26 @@ impl State {
         error_text
     }
 
+    pub fn display_error(&mut self, mut msg: String) {
+        msg.push_str("\n");
+        self.display(&msg);
+    }
+
+    pub fn display(&mut self, msg: &str) {
+        #[cfg(not(feature = "stdio"))]
+        self.stdout_sink.push_str(msg);
+        #[cfg(feature = "stdio")]
+        eprintln!("{}", msg);
+    }
+
+    pub fn display_str(&mut self) -> &str {
+        &self.stdout_sink
+    }
+
+    pub fn display_clear(&mut self) {
+        self.stdout_sink.clear();
+    }
+
     pub fn current_line(&self) -> String {
         let mut buf = String::new();
         if let Some(loc) = self.debug_map.format_location(self.ip()) {
@@ -169,7 +189,8 @@ impl State {
         let result = self.build();
         if result.is_err() {
             if let Some(lex) = self.ctx.source.as_ref() {
-                eprintln!("{:?}", lex.error_context());
+                let e = lex.error_context();
+                self.display_error(format!("{:?}", e));
             }
             while self.nested.len() > depth {
                 self.context_close()?;
@@ -184,17 +205,12 @@ impl State {
         let result = self.build();
         if let Err(e) = result.as_ref() {
             let msg = self.error_context(e);
-            eprintln!("{}", msg);
-            self.error_msg = Some(msg);
+            self.display_error(msg);
             while self.nested.len() > depth {
                 self.context_close()?;
             }
         }
         result
-    }
-
-    pub fn error_message(&self) -> &str {
-        self.error_msg.as_ref().map(|s| s.as_str()).unwrap_or("")
     }
 
     fn build(&mut self) -> Xresult {
@@ -1487,8 +1503,8 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
         xs.pop_data()?;
         OK
     } else {
-        eprintln!("[0]: {:?}", a);
-        eprintln!("[1]: {:?}", b);
+        let msg = format!("[0]: {:?}\n[1]: {:?}", a, b);
+        xs.display_error(msg);
         Err(Xerr::DebugAssertion)
     }
 }
@@ -1506,15 +1522,15 @@ fn core_word_println(xs: &mut State) -> Xresult {
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
     match xs.get_var(xs.base)? {
-        Cell::Int(2) => print!("{:2?}", val),
-        Cell::Int(16) => print!("{:16?}", val),
-        _ => print!("{:10?}", val),
+        Cell::Int(2) => xs.display(&format!("{:2?}", val)),
+        Cell::Int(16) => xs.display(&format!("{:16?}", val)),
+        _ => xs.display(&format!("{:10?}", val)),
     };
     OK
 }
 
-fn core_word_newline(_xs: &mut State) -> Xresult {
-    println!("");
+fn core_word_newline(xs: &mut State) -> Xresult {
+    xs.display("\n");
     OK
 }
 
