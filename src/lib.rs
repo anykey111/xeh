@@ -1,5 +1,3 @@
-extern crate rand;
-
 mod arith;
 pub mod bitstring;
 mod bitstring_mod;

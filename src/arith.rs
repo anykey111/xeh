@@ -140,11 +140,10 @@ pub fn core_word_bitnot(xs: &mut State) -> Xresult {
     }
 }
 
-use rand::prelude::*;
-
 pub fn core_word_random(xs: &mut State) -> Xresult {
-    let mut rng = rand::thread_rng();
-    let r: f64 = rng.gen();
+    let mut buf = [0u8; 4];
+    getrandom::getrandom(&mut buf).unwrap();
+    let r = u32::from_le_bytes(buf) as Xreal / u32::MAX as Xreal;
     xs.push_data(Cell::Real(r))
 }
 
