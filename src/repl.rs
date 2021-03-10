@@ -119,14 +119,14 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     let mut result = OK;
     if !args.sources.is_empty() {
         result = xs.run();
-        if let Err(e) = &result {
-            eprintln!("{}", xs.error_context(e));
+        if result.is_err() {
+            eprintln!("{}", xs.error_message());
         }
     }
     if let Some(s) = args.eval {
         if result.is_ok() {
-            if let Err(e) = xs.interpret(&s) {
-                eprintln!("{}", xs.error_context(&e));
+            if xs.interpret(&s).is_err() {
+                eprintln!("{}", xs.error_message());
             }
         }
     }

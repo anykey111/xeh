@@ -121,6 +121,7 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
+    error_msg: Option<String>,
     pub(crate) about_to_stop: bool,
     // current input binary
     pub(crate) bs_input: Xref,
@@ -182,12 +183,18 @@ impl State {
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
-            eprintln!("{}", self.error_context(e));
+            let msg = self.error_context(e);
+            eprintln!("{}", msg);
+            self.error_msg = Some(msg);
             while self.nested.len() > depth {
                 self.context_close()?;
             }
         }
         result
+    }
+
+    pub fn error_message(&self) -> &str {
+        self.error_msg.as_ref().map(|s| s.as_str()).unwrap_or("")
     }
 
     fn build(&mut self) -> Xresult {
