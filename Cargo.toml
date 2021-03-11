@@ -9,11 +9,11 @@ default = ["mmap", "stdio"]
 # memory-mapped files
 mmap = ["mapr"]
 # print to console
-stdio = []
+stdio = ["rustyline"]
 
 [dependencies]
 rpds = "0.7"
-rustyline = "6.1.2"
+rustyline = { version = "6.1.2", optional = true }
 getopts = "0.2"
 getrandom = { version = "0.2.2", features = ["js"] }
 twoway = "0.2.1"

@@ -6,6 +6,7 @@ pub mod debug;
 pub mod error;
 pub mod lex;
 mod opcodes;
+#[cfg(feature = "stdio")]
 pub mod repl;
 pub mod state;
 mod file;
