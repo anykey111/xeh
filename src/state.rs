@@ -1496,11 +1496,9 @@ fn core_word_assert(xs: &mut State) -> Xresult {
 }
 
 fn core_word_assert_eq(xs: &mut State) -> Xresult {
-    let a = xs.get_data(0).ok_or(Xerr::StackUnderflow)?;
-    let b = xs.get_data(1).ok_or(Xerr::StackUnderflow)?;
+    let a = xs.pop_data()?;
+    let b = xs.pop_data()?;
     if a == b {
-        xs.pop_data()?;
-        xs.pop_data()?;
         OK
     } else {
         let msg = format!("[0]: {:?}\n[1]: {:?}", a, b);
