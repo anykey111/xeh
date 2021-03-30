@@ -76,10 +76,14 @@ impl fmt::Debug for Cell {
             Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Fun(x) => write!(f, "{:?}", x),
-            Cell::Bitstr(s) => f
-                .debug_list()
-                .entries(s.iter8().map(|x| Cell::Int(x.0 as Xint)))
-                .finish(),
+            Cell::Bitstr(s) => if s.is_bytestring() {
+                    f
+                    .debug_list()
+                    .entries(s.iter8().map(|x| Cell::Int(x.0 as Xint)))
+                    .finish()
+                } else {
+                    write!(f, "0s{}", s.to_bin_string())
+                },
             Cell::Ref(x) => write!(f, "ref {:?}", x),
             Cell::AnyRc(x) => match x.try_borrow() {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
