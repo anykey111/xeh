@@ -128,6 +128,14 @@ use std::borrow::Cow;
 
 pub type CowBytes = Cow<'static, [u8]>;
 
+use std::fmt;
+
+impl fmt::Debug for Bitstring {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_bin_string())
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Bitstring {
     format: BitstringFormat,

@@ -11,6 +11,9 @@ pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
 pub type Xcell = Cell;
 
+pub const BIG: crate::bitstring::Byteorder = crate::bitstring::Byteorder::BE;
+pub const LITTLE: crate::bitstring::Byteorder = crate::bitstring::Byteorder::LE;
+
 #[derive(Clone, Copy)]
 pub struct XfnPtr(pub XfnType);
 

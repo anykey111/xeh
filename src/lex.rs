@@ -1,4 +1,4 @@
-use crate::cell::{Xint, Xreal};
+use crate::{cell::{Xint, Xreal}, prelude::*};
 use crate::error::*;
 
 #[derive(Debug, PartialEq)]
@@ -8,6 +8,7 @@ pub enum Tok {
     Num(Xint),
     Real(Xreal),
     Str(String),
+    Bstr(Xbitstr),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -200,8 +201,22 @@ impl Lex {
         let mut radix = 10;
         if x == Some('0') {
             match it.next() {
-                Some('x') | Some('X') => radix = 16,
-                Some('b') | Some('B') => radix = 2,
+                Some('x') => radix = 16,
+                Some('b') => radix = 2,
+                Some('s') => {
+                    let mut tmp = Xbitstr::new();
+                    let s0 = Xbitstr::from_u64(0, 1, LITTLE);
+                    let s1 = Xbitstr::from_u64(1, 1, BIG);
+                    while let Some(c) = it.next() {
+                        match c {
+                            '_' => continue,
+                            '0' => tmp = tmp.append(&s0),
+                            '1' => tmp = tmp.append(&s1),
+                            _ => Err(Xerr::InputParseError)?,
+                        }
+                    };
+                    return Ok(Tok::Bstr(tmp));
+                }
                 Some(c) => {
                     if c.is_digit(10) {
                         digits.push('0');
@@ -362,5 +377,14 @@ fn test_lex_escape() {
     let mut lex = Lex::from_str(r#""\\ \" \r \n""#);
     assert_eq!(Ok(Tok::Str("\\ \" \r \n".to_string())), lex.next());
     let mut lex = Lex::from_str(r#" " \x " "#);
+    assert_eq!(Err(Xerr::InputParseError), lex.next());
+}
+
+#[test]
+fn test_lex_bstr() {
+    let mut lex = Lex::from_str(" 0s001 0s10_01 0s 0s2");
+    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("001").unwrap())), lex.next());
+    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("1001").unwrap())), lex.next());
+    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("").unwrap())), lex.next());
     assert_eq!(Err(Xerr::InputParseError), lex.next());
 }
