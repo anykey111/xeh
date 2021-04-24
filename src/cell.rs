@@ -1,7 +1,7 @@
 use crate::error::{Xerr, Xresult, Xresult1};
 use crate::state::State;
 
-pub type Xvec<T> = rpds::Vector<T>;
+pub type Xvec = rpds::Vector<Cell>;
 pub type Xmap = rpds::Vector<(Cell, Cell)>;
 pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut State) -> Xresult;
@@ -48,7 +48,8 @@ pub enum Cell {
     Int(Xint),
     Real(Xreal),
     Str(String),
-    Vector(Xvec<Cell>),
+    Key(String),
+    Vector(Xvec),
     Map(Xmap),
     Fun(Xfn),
     Ref(Xref),
@@ -76,6 +77,7 @@ impl fmt::Debug for Cell {
             },
             Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) => write!(f, "{}", s),
+            Cell::Key(k) => write!(f, "{}:", k),
             Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Fun(x) => write!(f, "{:?}", x),
@@ -117,12 +119,14 @@ impl PartialEq for Cell {
             (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
             (Cell::Ref(a), Cell::Ref(b)) => a == b,
+            (Cell::Key(a), Cell::Key(b)) => a == b,
             _ => false,
         }
     }
 }
 
 impl Cell {
+
     pub fn into_ref(self) -> Xresult1<Xref> {
         match self {
             Cell::Ref(xref) => Ok(xref),
@@ -144,7 +148,7 @@ impl Cell {
         }
     }
 
-    pub fn into_vector(self) -> Result<Xvec<Cell>, Xerr> {
+    pub fn into_vector(self) -> Result<Xvec, Xerr> {
         match self {
             Cell::Vector(x) => Ok(x),
             _ => Err(Xerr::TypeError),
@@ -307,3 +311,4 @@ impl TryInto<bool> for Cell {
 
 pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
+pub const NIL: Cell = Cell::Nil;

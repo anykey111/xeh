@@ -5,6 +5,7 @@ use crate::error::*;
 pub enum Tok {
     EndOfInput,
     Word(String),
+    Key(String),
     Num(Xint),
     Real(Xreal),
     Str(String),
@@ -196,7 +197,13 @@ impl Lex {
                 }
                 digits.push(c);
             }
-            _ => return Ok(Tok::Word(w.to_string())),
+            _ => if w.ends_with(':') && w.len() > 1 {
+                let mut k = w.to_string();
+                k.pop();
+                return Ok(Tok::Key(k));
+            } else {
+                return Ok(Tok::Word(w.to_string()))
+            },
         }
         let mut radix = 10;
         if x == Some('0') {

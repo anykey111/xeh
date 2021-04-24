@@ -245,6 +245,9 @@ impl State {
                 Tok::Bstr(s) => {
                     self.code_emit_value(Cell::Bitstr(s))?;
                 }
+                Tok::Key(key) => {
+                    self.code_emit_value(Cell::Key(key))?;
+                }
                 Tok::Word(name) => {
                     let idx = match self.dict_find(&name) {
                         Some(idx) => idx,
