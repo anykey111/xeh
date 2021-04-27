@@ -3,7 +3,6 @@ use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
 pub type Xmap = rpds::Vector<(Cell, Cell)>;
-pub type Xhashmap<K, V> = rpds::HashTrieMap<K, V>;
 pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i128;
 pub type Xreal = f64;
