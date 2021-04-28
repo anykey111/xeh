@@ -461,6 +461,7 @@ impl State {
             Def("K", core_word_counter_k),
             Def("length", core_word_length),
             Def("get", core_word_get),
+            Def(".", core_word_key_get),
             Def("assoc", core_word_assoc),
             Def("dup", |xs| xs.dup_data()),
             Def("drop", |xs| xs.drop_data()),
@@ -489,7 +490,6 @@ impl State {
             Def("assert", core_word_assert),
             Def("assert-eq", core_word_assert_eq),
             Def("bye", core_word_bye),
-            Def(".", core_word_println),
             Def("println", core_word_println),
             Def("print", core_word_print),
             Def("newline", core_word_newline),
@@ -1465,6 +1465,23 @@ fn core_word_get(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_key_get(xs: &mut State) -> Xresult {
+    let k = xs.pop_data()?;
+    if !k.is_key() {
+        return Err(Xerr::ExpectingKey);
+    }
+    if xs.top_data().ok_or(Xerr::StackUnderflow)?.is_key() {
+        core_word_key_get(xs)?;
+    }
+    let m = xs.pop_data()?.into_map()?;
+    let val = m
+                .iter()
+                .find(|kv| kv.0 == k)
+                .map(|kv| kv.1.clone())
+                .unwrap_or(Cell::Nil);
+    xs.push_data(val)
+}
+
 fn core_word_assoc(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(mut x) => {
@@ -1712,6 +1729,17 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_key_get() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("{a: {b: {c: 3}}} a: b: c: .").unwrap();
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        xs.interpret("{} x: .").unwrap();
+        assert_eq!(Ok(Cell::Nil), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("a: ."));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] a: ."));
     }
 
     #[test]

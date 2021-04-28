@@ -140,6 +140,13 @@ impl Cell {
         }
     }
 
+    pub fn is_key(&self) -> bool {
+        match self {
+            Cell::Key(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn into_string(self) -> Xresult1<String> {
         match self {
             Cell::Str(s) => Ok(s),
