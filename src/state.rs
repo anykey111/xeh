@@ -16,6 +16,22 @@ enum Entry {
     },
 }
 
+struct DictEntry {
+    name: String,
+    entry: Entry,
+    help: Option<String>,
+}
+
+impl DictEntry {
+    fn new(name: String, entry: Entry) -> Self {
+        Self {
+            name,
+            entry,
+            help: None,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct FunctionFlow {
     dict_idx: usize,
@@ -110,7 +126,7 @@ fn journal_state_change(rec: &mut Vec<StateChange>, x: StateChange) {
 
 #[derive(Default)]
 pub struct State {
-    dict: Vec<(String, Entry)>,
+    dict: Vec<DictEntry>,
     heap: Vec<Cell>,
     code: Vec<Opcode>,
     debug_map: DebugMap,
@@ -373,7 +389,7 @@ impl State {
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<Xref> {
         // shadow previous definition
         let a = self.alloc_cell(val)?;
-        self.dict_insert(name.to_string(), Entry::Variable(a))?;
+        self.dict_insert(DictEntry::new(name.to_string(), Entry::Variable(a)))?;
         Ok(Xref::Heap(a))
     }
 
@@ -409,15 +425,20 @@ impl State {
 
     pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult1<Xref> {
         let xf = Xfn::Native(XfnPtr(x));
-        let idx = self.dict_insert(
+        let idx = self.dict_insert(DictEntry::new(
             name.to_string(),
             Entry::Function {
                 immediate: false,
                 xf,
                 len: Some(0),
-            },
+            })
         )?;
         Ok(Xref::Word(idx))
+    }
+
+    pub fn help(&self, name: &str) -> Option<&String> {
+        let a = self.dict_find(name)?;
+        self.dict.get(a).and_then(|x| x.help.as_ref())
     }
 
     fn load_core(&mut self) -> Xresult {
@@ -453,7 +474,14 @@ impl State {
         ]
         .iter()
         {
-            core_insert_word(self, i.0, i.1, true)?;
+            self.dict_insert(DictEntry::new(
+            i.0.to_string(),
+                Entry::Function {
+                    immediate: true,
+                    xf: Xfn::Native(XfnPtr(i.1)),
+                    len: None,
+                })
+            )?;
         }
         for i in [
             Def("I", core_word_counter_i),
@@ -502,23 +530,30 @@ impl State {
         ]
         .iter()
         {
-            core_insert_word(self, i.0, i.1, false)?;
+            self.dict_insert(DictEntry::new(
+                i.0.to_string(),
+                    Entry::Function {
+                        immediate: false,
+                        xf: Xfn::Native(XfnPtr(i.1)),
+                        len: None,
+                    }
+                ))?;
         }
         OK
     }
 
-    fn dict_insert(&mut self, name: String, e: Entry) -> Xresult1<usize> {
+    fn dict_insert(&mut self, e: DictEntry) -> Xresult1<usize> {
         let wa = self.dict.len();
-        self.dict.push((name, e));
+        self.dict.push(e);
         Ok(wa)
     }
 
     pub fn dict_find(&self, name: &str) -> Option<usize> {
-        self.dict.iter().rposition(|x| x.0 == name)
+        self.dict.iter().rposition(|x| x.name == name)
     }
 
     fn dict_at(&self, idx: usize) -> Option<&Entry> {
-        self.dict.get(idx).map(|x| &x.1)
+        self.dict.get(idx).map(|x| &x.entry)
     }
 
     fn code_origin(&self) -> usize {
@@ -940,18 +975,6 @@ impl State {
     }
 }
 
-fn core_insert_word(xs: &mut State, name: &str, x: XfnType, immediate: bool) -> Xresult {
-    xs.dict_insert(
-        name.to_string(),
-        Entry::Function {
-            immediate,
-            xf: Xfn::Native(XfnPtr(x)),
-            len: None,
-        },
-    )?;
-    OK
-}
-
 fn take_if_flow(xs: &mut State) -> Xresult1<usize> {
     for (i, f) in xs.flow_stack[xs.ctx.fs_len..].iter().rev().enumerate() {
         match f {
@@ -1155,14 +1178,13 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::Jump(0), DebugInfo::Comment(":"))?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
-    let dict_idx = xs.dict_insert(
+    let dict_idx = xs.dict_insert(DictEntry::new(
         name,
         Entry::Function {
             immediate: false,
             xf,
             len: None,
-        },
-    )?;
+        }))?;
     xs.push_flow(Flow::Fun(FunctionFlow {
         dict_idx,
         start,
@@ -1179,7 +1201,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
             match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)? {
-                (_, Entry::Function { ref mut len, .. }) => *len = Some(fun_len),
+                DictEntry { entry: Entry::Function { ref mut len, .. }, ..} => *len = Some(fun_len),
                 _ => panic!("entry type"),
             }
             xs.patch_jump(start, offs)
@@ -1193,14 +1215,14 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
         .top_function_flow()
         .map(|f| f.dict_idx)
         .ok_or(Xerr::ControlFlowError)?;
-    match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)?.1 {
+    match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)?.entry {
         Entry::Function {
             ref mut immediate, ..
         } => {
             *immediate = true;
             OK
         }
-        _ => panic!("entry type"),
+        _ => Err(Xerr::ControlFlowError),
     }
 }
 
@@ -1229,7 +1251,7 @@ fn core_word_variable(xs: &mut State) -> Xresult {
         let val = xs.pop_data()?;
         xs.alloc_cell(val)?
     };
-    xs.dict_insert(name, Entry::Variable(a))?;
+    xs.dict_insert(DictEntry::new(name, Entry::Variable(a)))?;
     OK
 }
 
@@ -1287,7 +1309,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             DebugInfo::Word(a) => xs
                 .dict
                 .get(*a)
-                .map(|e| e.0.as_str())
+                .map(|e| e.name.as_str())
                 .unwrap_or("<entry not found>"),
         })
         .unwrap_or("");
@@ -1329,7 +1351,7 @@ fn core_word_defer(xs: &mut State) -> Xresult {
         _ => return Err(Xerr::ExpectingName),
     };
     if xs.dict_find(&name).is_none() {
-        xs.dict_insert(name, Entry::Deferred)?;
+        xs.dict_insert(DictEntry::new(name, Entry::Deferred))?;
     }
     OK
 }
