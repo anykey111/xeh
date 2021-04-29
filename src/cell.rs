@@ -51,7 +51,6 @@ pub enum Cell {
     Vector(Xvec),
     Map(Xmap),
     Fun(Xfn),
-    Ref(Xref),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
 }
@@ -88,7 +87,6 @@ impl fmt::Debug for Cell {
                 } else {
                     write!(f, "0s{}", s.to_bin_string())
                 },
-            Cell::Ref(x) => write!(f, "ref {:?}", x),
             Cell::AnyRc(x) => match x.try_borrow() {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
@@ -117,7 +115,6 @@ impl PartialEq for Cell {
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
             (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
-            (Cell::Ref(a), Cell::Ref(b)) => a == b,
             (Cell::Key(a), Cell::Key(b)) => a == b,
             _ => false,
         }
@@ -125,13 +122,6 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
-
-    pub fn into_ref(self) -> Xresult1<Xref> {
-        match self {
-            Cell::Ref(xref) => Ok(xref),
-            _ => Err(Xerr::TypeError),
-        }
-    }
 
     pub fn is_true(&self) -> bool {
         match self {

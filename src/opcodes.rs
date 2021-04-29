@@ -13,7 +13,6 @@ pub enum Opcode {
     Load(usize),
     LoadNil,
     LoadInt(Xint),
-    LoadRef(Xref),
     Store(usize),
     InitLocal(usize),
     LoadLocal(usize),

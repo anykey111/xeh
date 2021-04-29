@@ -563,7 +563,6 @@ impl State {
     fn code_emit_value(&mut self, val: Cell) -> Xresult {
         match val {
             Cell::Int(i) => self.code_emit(Opcode::LoadInt(i), DebugInfo::Empty),
-            Cell::Ref(p) => self.code_emit(Opcode::LoadRef(p), DebugInfo::Empty),
             Cell::Nil => self.code_emit(Opcode::LoadNil, DebugInfo::Empty),
             val => {
                 let a = self.alloc_cell(val)?;
@@ -669,10 +668,6 @@ impl State {
             },
             Opcode::LoadInt(n) => {
                 self.push_data(Cell::Int(n))?;
-                self.next_ip()
-            }
-            Opcode::LoadRef(xr) => {
-                self.push_data(Cell::Ref(xr))?;
                 self.next_ip()
             }
             Opcode::LoadNil => {
@@ -1328,7 +1323,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
-            Opcode::LoadRef(a) => format!("loadref    {:?}", a),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
