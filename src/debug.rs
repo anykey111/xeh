@@ -65,8 +65,7 @@ impl DebugMap {
             let src = &self.sources[dloc.source_id];
             let loc = &dloc.location;
             format!(
-                "{}:{}:{}:\n{}\n{}",
-                "none",
+                "{}:{}:\n{}\n{}",
                 loc.line,
                 loc.col,
                 src.lines().nth(loc.line - 1).unwrap(),
