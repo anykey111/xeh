@@ -110,42 +110,47 @@ fn remain_bin(xs: &mut Xstate) -> Xresult {
 fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
     let start = xs.pop_data()?.into_usize()?;
     let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end)?;
+    bitstr_dump_range(xs, start..end, 8)?;
     xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
 }
 
 fn bitstr_dump(xs: &mut Xstate) -> Xresult {
     let start = xs.get_var(xs.dump_start)?.to_usize()?;
     let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end)?;
+    bitstr_dump_range(xs, start..end, 8)?;
     xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
 }
 
-fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange) -> Xresult {
-    let mut s = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
-    let start = s.seek(r.start).ok_or_else(|| Xerr::OutOfRange)?;
-    let count = r.len().min(s.len()) / 8;
-    let data = s.slice();
-    let mut ascii = String::new();
-    let mut out = String::new();
-    for i in 0..count {
-        if i % 16 == 0 {
-            write!(&mut out, "{:05x}:", (start / 8) + i).unwrap();
+pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
+    let mut input = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+    let marker = input.start() / 8;
+    input.seek(r.start).ok_or_else(|| Xerr::OutOfRange)?;
+    let part = input.read(r.len().min(input.len())).unwrap();
+    let mut hex = String::new();
+    let mut addr = part.start() / 8;
+    for chunk in part.slice().chunks(ncols) {
+        write!(&mut hex, "{:02x}:", addr).unwrap();
+        for i in 0..ncols {
+            hex.push(if addr + i == marker { '*' } else { ' ' });
+            if i < chunk.len() {
+                write!(&mut hex, "{:02x}", chunk[i]).unwrap();
+            } else {
+                hex.push_str("  ");
+            }
         }
-        write!(&mut out, " {:02x}", data[i]).unwrap();
-        let c = std::char::from_u32(data[i] as u32).unwrap();
-        if c.is_ascii_graphic() {
-            ascii.push(c);
-        } else {
-            ascii.push('.');
+        hex.push_str(" | ");
+        // print ascii part
+        for x in chunk {
+            let c = std::char::from_u32(*x as u32).unwrap();
+            if c.is_ascii_graphic() {
+                hex.push(c);
+            } else {
+                hex.push('.');
+            }
         }
-        if i % 16 == 15 || (i + 1) == count {
-            write!(&mut out, "    {}", ascii).unwrap();
-            writeln!(&mut out, "").unwrap();
-            xs.display(&out);
-            out.clear();
-            ascii.clear();
-        }
+        addr += chunk.len();
+        xs.display(&hex);
+        hex.clear();
     }
     OK
 }

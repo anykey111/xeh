@@ -183,6 +183,13 @@ impl State {
         self.stdout_sink.clear();
     }
 
+    pub fn display_dump(&mut self, rows: usize, cols: usize) -> Xresult {
+        let bs = self.get_var(self.bs_input)?.clone().into_bitstring()?;
+        let start = bs.start();
+        let end = start + rows * cols * 8;
+        crate::bitstring_mod::bitstr_dump_range(self, start..end, cols)
+    }
+
     pub fn current_line(&self) -> String {
         let mut buf = String::new();
         if let Some(loc) = self.debug_map.format_location(self.ip()) {
