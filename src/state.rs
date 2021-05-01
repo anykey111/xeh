@@ -185,7 +185,7 @@ impl State {
 
     pub fn display_dump(&mut self, rows: usize, cols: usize) -> Xresult {
         let bs = self.get_var(self.bs_input)?.clone().into_bitstring()?;
-        let start = bs.start();
+        let start = bs.start() - (bs.start() % (cols * 8));
         let end = start + rows * cols * 8;
         crate::bitstring_mod::bitstr_dump_range(self, start..end, cols)
     }
