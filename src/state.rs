@@ -172,7 +172,7 @@ impl State {
         #[cfg(not(feature = "stdio"))]
         self.stdout_sink.push_str(msg);
         #[cfg(feature = "stdio")]
-        eprintln!("{}", msg);
+        eprint!("{}", msg);
     }
 
     pub fn display_str(&mut self) -> &str {

@@ -129,7 +129,7 @@ pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xr
     let mut hex = String::new();
     let mut addr = part.start() / 8;
     for chunk in part.slice().chunks(ncols) {
-        write!(&mut hex, "{:02x}:", addr).unwrap();
+        write!(&mut hex, "0{:02x}:", addr).unwrap();
         for i in 0..ncols {
             hex.push(if addr + i == marker { '*' } else { ' ' });
             if i < chunk.len() {
@@ -148,6 +148,7 @@ pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xr
                 hex.push('.');
             }
         }
+        hex.push('\n');
         addr += chunk.len();
         xs.display(&hex);
         hex.clear();
