@@ -443,6 +443,26 @@ impl State {
         Ok(Xref::Word(idx))
     }
 
+    pub fn defwordself(&mut self, name: &str, x: XfnType, slf: Cell) -> Xresult1<Xref> {
+        let start = self.code_origin();
+        self.code_emit(Opcode::Jump(0), DebugInfo::Comment("jump over"))?;
+        let fn_addr = self.code_origin();
+        self.code_emit_value(slf)?;
+        self.code_emit(Opcode::NativeCall(XfnPtr(x)), DebugInfo::Comment("call self"))?;
+        self.code_emit(Opcode::Ret, DebugInfo::Comment("leave"))?;
+        let len = self.code_origin() - start;
+        let word_addr = self.dict_insert(DictEntry::new(
+            name.to_string(),
+            Entry::Function {
+                immediate: false,
+                xf: Xfn::Interp(fn_addr),
+                len: Some(len),
+            }))?;
+        let offs = jump_offset(start, self.code_origin());
+        self.patch_jump(start, offs)?;
+        Ok(Xref::Word(word_addr))
+    }
+
     pub fn help(&self, name: &str) -> Option<&String> {
         let a = self.dict_find(name)?;
         self.dict.get(a).and_then(|x| x.help.as_ref())
@@ -1841,5 +1861,16 @@ mod tests {
         xs.defvar("Y", Cell::Nil).unwrap();
         xs.interpret("4 var Z").unwrap();
         xs.defvar("Z", Cell::Nil).unwrap();
+    }
+
+    #[test]
+    fn test_defwordself() {
+        let mut xs = State::new().unwrap();
+        xs.defwordself( "self1", |xs| {
+            assert_eq!(Ok(ONE), xs.pop_data());
+            xs.push_data(ZERO)
+        }, ONE).unwrap();
+        xs.interpret("self1").unwrap();
+        assert_eq!(Ok(ZERO), xs.pop_data());
     }
 }
