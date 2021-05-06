@@ -210,11 +210,9 @@ impl State {
         self.context_open(ContextMode::Load, Some(source));
         let depth = self.nested.len();
         let result = self.build();
-        if result.is_err() {
-            if let Some(lex) = self.ctx.source.as_ref() {
-                let e = lex.error_context();
-                self.display_error(format!("{:?}", e));
-            }
+        if let Err(e) = result.as_ref() {
+            let errstr = self.error_context(e);
+            self.display_error(errstr);
             while self.nested.len() > depth {
                 self.context_close()?;
             }
