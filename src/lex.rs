@@ -93,6 +93,10 @@ impl Lex {
         Ok(lex)
     }
 
+    pub fn set_path(&mut self, path: &str) {
+        self.path = Some(path.to_string());
+    }
+
     pub fn buffer(&mut self) -> &String {
         &self.buffer
     }

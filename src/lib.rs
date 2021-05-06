@@ -16,4 +16,6 @@ pub mod prelude {
     pub type Xstate = crate::state::State;
     pub use crate::error::*;
     pub use crate::cell::*;
+    pub type Xlex = crate::lex::Lex;
+    pub type Xcell = crate::cell::Cell;
 }
