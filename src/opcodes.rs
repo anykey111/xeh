@@ -10,6 +10,7 @@ pub enum Opcode {
     JumpIf(isize),
     JumpIfNot(isize),
     Jump(isize),
+    CaseOf(isize),
     Load(usize),
     LoadNil,
     LoadInt(Xint),

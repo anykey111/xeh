@@ -32,19 +32,23 @@ impl DictEntry {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FunctionFlow {
     dict_idx: usize,
     start: usize,
     locals: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Flow {
     If(usize),
+    Else(usize),
     Begin(usize),
     While(usize),
     Leave(usize),
+    Case,
+    CaseOf(usize),
+    CaseEndOf(usize),
     Vec,
     Map,
     Fun(FunctionFlow),
@@ -153,12 +157,10 @@ pub struct State {
 impl State {
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);
-        if err == &Xerr::UnknownWord || err == &Xerr::InputParseError {
-            if let Some(lex) = self.ctx.source.as_ref() {
-                error_text.push_str(&format!("{:?}", lex.error_context()));
-            }
-        } else if let Some(loc) = self.debug_map.format_location(self.ip()) {
+        if let Some(loc) = self.debug_map.format_location(self.ip()) {
             error_text.push_str(&loc);
+        } else if let Some(lex) = self.ctx.source.as_ref() {
+            error_text.push_str(&format!("{:?}", lex.error_context()));
         }
         error_text
     }
@@ -472,6 +474,10 @@ impl State {
             Def("if", core_word_if),
             Def("else", core_word_else),
             Def("then", core_word_then),
+            Def("case", case_word),
+            Def("of", of_word),
+            Def("endof", endof_word),
+            Def("endcase", endcase_word),
             Def("begin", core_word_begin),
             Def("while", core_word_while),
             Def("repeat", core_word_repeat),
@@ -614,6 +620,7 @@ impl State {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
             Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
+            Opcode::CaseOf(_) => Opcode::CaseOf(offs),
             _ => panic!("not a jump instruction at={}", at),
         };
         self.patch_insn(at, insn)
@@ -659,6 +666,16 @@ impl State {
             Opcode::JumpIfNot(offs) => {
                 let t = self.pop_data()?;
                 self.jump_if(!t.is_true(), offs)
+            }
+            Opcode::CaseOf(rel) => {
+                let a = self.pop_data()?;
+                let b = self.top_data().ok_or(Xerr::StackUnderflow)?;
+                if &a == b {
+                    self.pop_data()?;
+                    self.next_ip()
+                } else {
+                    self.jump_to(rel)
+                }
             }
             Opcode::Call(a) => {
                 self.push_return(ip + 1)?;
@@ -995,41 +1012,87 @@ impl State {
     }
 }
 
-fn take_if_flow(xs: &mut State) -> Xresult1<usize> {
-    for (i, f) in xs.flow_stack[xs.ctx.fs_len..].iter().rev().enumerate() {
-        match f {
-            Flow::If(if_org) => {
-                let org = *if_org;
-                let pos = xs.flow_stack.len() - (i + 1);
-                xs.flow_stack.remove(pos);
-                return Ok(org);
-            }
+fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
+    for i in (xs.ctx.fs_len..xs.flow_stack.len()).rev() {
+        let t = match xs.flow_stack[i] {
+            Flow::If(_) => true,
+            Flow::Else(_) => true,
+            Flow::Case => true,
+            Flow::CaseOf(_) => true,
+            Flow::CaseEndOf(_) => true,
             Flow::Leave(_) => continue,
             _ => break,
+        };
+        if t {
+            return Ok(xs.flow_stack.remove(i))
         }
     }
-    return Err(Xerr::ControlFlowError);
+    Err(Xerr::ControlFlowError)
 }
 
 fn core_word_if(xs: &mut State) -> Xresult {
-    let fwd = Flow::If(xs.code_origin());
-    xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Comment("if"))?;
-    xs.push_flow(fwd)
+    let org = xs.code_origin();
+    xs.push_flow(Flow::If(org))?;
+    xs.code_emit(Opcode::JumpIfNot(0), DebugInfo::Empty)    
 }
 
 fn core_word_else(xs: &mut State) -> Xresult {
-    let if_org = take_if_flow(xs)?;
-    let fwd = Flow::If(xs.code_origin());
+    let if_org = match take_first_cond_flow(xs)? {
+        Flow::If(org) => org,
+        _ => return Err(Xerr::ControlFlowError),
+    };
+    let else_org = xs.code_origin();
+    xs.push_flow(Flow::Else(else_org))?;
     xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("else"))?;
-    xs.push_flow(fwd)?;
+    let rel = jump_offset(if_org, xs.code_origin());
+    xs.patch_jump(if_org, rel)
+}
+
+fn core_word_then(xs: &mut State) -> Xresult {
+    let if_org = match take_first_cond_flow(xs)? {
+        Flow::If(org) => org,
+        Flow::Else(org) => org,
+        _ => return Err(Xerr::ControlFlowError),
+    };  
     let offs = jump_offset(if_org, xs.code_origin());
     xs.patch_jump(if_org, offs)
 }
 
-fn core_word_then(xs: &mut State) -> Xresult {
-    let if_org = take_if_flow(xs)?;
-    let offs = jump_offset(if_org, xs.code_origin());
-    xs.patch_jump(if_org, offs)
+fn case_word(xs: &mut State) -> Xresult {
+    xs.push_flow(Flow::Case)
+}
+
+fn endcase_word(xs: &mut State) -> Xresult {
+    let endcase_org = xs.code_origin();
+    loop {
+        match take_first_cond_flow(xs)? {
+            Flow::CaseEndOf(endof_org) => {
+                let rel = jump_offset(endof_org, endcase_org);
+                xs.patch_jump(endof_org, rel)?;
+            }
+            Flow::Case => break OK,
+            _ => break Err(Xerr::ControlFlowError),
+        }
+    }
+}
+
+fn of_word(xs: &mut State) -> Xresult {
+    let of_org = xs.code_origin();
+    xs.push_flow(Flow::CaseOf(of_org))?;
+    xs.code_emit(Opcode::CaseOf(0), DebugInfo::Empty)
+}
+
+fn endof_word(xs: &mut State) -> Xresult {
+    match take_first_cond_flow(xs)? {
+        Flow::CaseOf(of_org) => {
+            let endof_org = xs.code_origin();
+            xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("go to endcase"))?;
+            let next_case_rel = jump_offset(of_org, xs.code_origin());
+            xs.patch_jump(of_org, next_case_rel)?;
+            xs.push_flow(Flow::CaseEndOf(endof_org))
+        }
+        _ => Err(Xerr::ControlFlowError),
+    }
 }
 
 fn core_word_begin(xs: &mut State) -> Xresult {
@@ -1092,8 +1155,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
 fn core_word_leave(xs: &mut State) -> Xresult {
     let leave = Flow::Leave(xs.code_origin());
     xs.code_emit(Opcode::Jump(0), DebugInfo::Comment("leave"))?;
-    xs.push_flow(leave)?;
-    OK
+    xs.push_flow(leave)
 }
 
 fn jump_offset(origin: usize, dest: usize) -> isize {
@@ -1346,6 +1408,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
             Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(at, offs)),
             Opcode::JumpIfNot(offs) => format!("jumpifnot  ${:05x}", jumpaddr(at, offs)),
             Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
+            Opcode::CaseOf(rel) => format!("caseof     ${:05x}", jumpaddr(at, rel)),
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
             Opcode::LoadNil => format!("loadnil"),
@@ -1449,14 +1512,17 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
-fn counter_value(xs: &mut State, n: usize) -> Xresult {
-    match &xs.loops[xs.ctx.ls_len..].iter().nth_back(n) {
-        Some(Loop::Do { start, .. }) => {
-            let val = *start;
-            xs.push_data(Cell::Int(val))
+fn counter_value(xs: &mut State, mut n: usize) -> Xresult {
+    for x in xs.loops[xs.ctx.ls_len..].iter().rev() {
+        if let Loop::Do { start, .. } = x {
+            if n == 0 {
+                let val = *start;
+                return xs.push_data(Cell::Int(val));
+            }
+            n -= 1;
         }
-        _ => Err(Xerr::LoopStackUnderflow),
     }
+    Err(Xerr::LoopStackUnderflow)
 }
 
 fn core_word_counter_i(xs: &mut State) -> Xresult {
@@ -1759,6 +1825,10 @@ mod tests {
             assert_eq!(Ok(Cell::Int(i)), xs.pop_data());
         }
         let mut xs = State::new().unwrap();
+        xs.interpret("2 1 do [I] loop").unwrap();
+        let v1 = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(ONE, v1[0]);
+        let mut xs = State::new().unwrap();
         xs.interpret("102 100 do 12 10 do 2 0 do I J K loop loop loop")
             .unwrap();
         for i in (100..102).rev() {
@@ -1870,5 +1940,16 @@ mod tests {
         }, ONE).unwrap();
         xs.interpret("self1").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
+    }
+
+    #[test]
+    fn test_caseof() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("2 case 1 of 100 endof 2 of 200 endof endcase").unwrap();
+        assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
+        xs.interpret("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
+        assert_eq!(Ok(ZERO), xs.pop_data());
+        xs.interpret("10 0 do I I case 5 of leave endof drop endcase loop").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 }
