@@ -66,7 +66,7 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
                 xs.about_to_stop = true;
             }
             Err(err) => {
-                eprintln!("Error: {:?}", err);
+                eprintln!("readline error: {:?}", err);
                 xs.about_to_stop = true;
             }
         }
