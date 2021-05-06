@@ -157,10 +157,12 @@ pub struct State {
 impl State {
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);
-        if let Some(loc) = self.debug_map.format_location(self.ip()) {
+        if self.ctx.mode == ContextMode::Load {
+            if let Some(lex) = self.ctx.source.as_ref() {
+                error_text.push_str(&format!("{:?}", lex.error_context()));
+            }
+        } else if let Some(loc) = self.debug_map.format_location(self.ip()) {
             error_text.push_str(&loc);
-        } else if let Some(lex) = self.ctx.source.as_ref() {
-            error_text.push_str(&format!("{:?}", lex.error_context()));
         }
         error_text
     }
