@@ -68,10 +68,10 @@ impl fmt::Debug for Cell {
         match self {
             Cell::Nil => write!(f, "nil"),
             Cell::Int(n) => match f.width().unwrap_or(10) {
-                2 => write!(f, "{:#b}", n),
-                8 => write!(f, "{:#o}", n),
-                16 => write!(f, "{:#X}", n),
-                _ => write!(f, "{:#}", n),
+                2 => write!(f, "{:b}", n),
+                8 => write!(f, "{:o}", n),
+                16 => write!(f, "{:X}", n),
+                _ => write!(f, "{}", n),
             },
             Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) => write!(f, "{}", s),

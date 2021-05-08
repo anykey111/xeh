@@ -141,7 +141,7 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     state_rec: Option<Vec<StateChange>>,
-    stdout_sink: String,
+    stdout_sink: Option<String>,
     pub(crate) about_to_stop: bool,
     // current input binary
     pub(crate) bs_input: Xref,
@@ -149,7 +149,8 @@ pub struct State {
     pub(crate) bs_chunk: Xref,
     pub(crate) bs_flow: Xref,
     // default base
-    pub(crate) base: Xref,
+    pub(crate) fmt_base: Xref,
+    pub(crate) fmt_prefix: Xref,
     // dump state
     pub(crate) dump_start: Xref,
 }
@@ -176,15 +177,21 @@ impl State {
         #[cfg(not(feature = "stdio"))]
         self.stdout_sink.push_str(msg);
         #[cfg(feature = "stdio")]
-        eprint!("{}", msg);
+        if let Some(out) = self.stdout_sink.as_mut() {
+            out.push_str(msg)
+        } else {
+            eprint!("{}", msg);
+        }
     }
 
-    pub fn display_str(&mut self) -> &str {
-        &self.stdout_sink
+    pub fn display_str(&mut self) -> Option<&str> {
+        self.stdout_sink.as_ref().map(|s| s.as_ref())
     }
 
     pub fn display_clear(&mut self) {
-        self.stdout_sink.clear();
+        if let Some(out) = self.stdout_sink.as_mut() {
+            out.clear();
+        }
     }
 
     pub fn display_dump(&mut self, rows: usize, cols: usize) -> Xresult {
@@ -385,7 +392,8 @@ impl State {
 
     pub fn new() -> Xresult1<State> {
         let mut xs = State::default();
-        xs.base = xs.defvar("BASE", Cell::Int(10))?;
+        xs.fmt_base = xs.defvar("BASE", Cell::Int(10))?;
+        xs.fmt_prefix = xs.defvar("PREFIX", ONE)?;
         xs.load_core()?;
         crate::bitstring_mod::bitstring_load(&mut xs)?;
         Ok(xs)
@@ -1651,11 +1659,18 @@ fn core_word_println(xs: &mut State) -> Xresult {
 
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    match xs.get_var(xs.base)? {
-        Cell::Int(2) => xs.display(&format!("{:2?}", val)),
-        Cell::Int(16) => xs.display(&format!("{:16?}", val)),
-        _ => xs.display(&format!("{:10?}", val)),
+    let prefix = xs
+        .get_var(xs.fmt_prefix)
+        .map(|val| val.is_true())
+        .unwrap_or(false);
+    let s= match xs.get_var(xs.fmt_base)? {
+        Cell::Int(2) if prefix => format!("0b{:2?}", val),
+        Cell::Int(2)  => format!("{:2?}", val),
+        Cell::Int(16) if prefix => format!("0x{:16?}", val),
+        Cell::Int(16) => format!("{:16?}", val),
+        _ => format!("{:10?}", val),
     };
+    xs.display(&s);
     OK
 }
 
@@ -1665,19 +1680,19 @@ fn core_word_newline(xs: &mut State) -> Xresult {
 }
 
 fn core_word_hex(xs: &mut State) -> Xresult {
-    xs.set_var(xs.base, Cell::Int(16)).map(|_| ())
+    xs.set_var(xs.fmt_base, Cell::Int(16)).map(|_| ())
 }
 
 fn core_word_decimal(xs: &mut State) -> Xresult {
-    xs.set_var(xs.base, Cell::Int(10)).map(|_| ())
+    xs.set_var(xs.fmt_base, Cell::Int(10)).map(|_| ())
 }
 
 fn core_word_octal(xs: &mut State) -> Xresult {
-    xs.set_var(xs.base, Cell::Int(8)).map(|_| ())
+    xs.set_var(xs.fmt_base, Cell::Int(8)).map(|_| ())
 }
 
 fn core_word_binary(xs: &mut State) -> Xresult {
-    xs.set_var(xs.base, Cell::Int(2)).map(|_| ())
+    xs.set_var(xs.fmt_base, Cell::Int(2)).map(|_| ())
 }
 
 fn core_word_breakpoint(xs: &mut State) -> Xresult {
