@@ -235,17 +235,23 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
 
 pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
     match val {
-        Cell::Str(s) => Ok(Bitstring::from(s.as_bytes().to_vec())),
+        Cell::Str(s) => Ok(Bitstring::from(s.into_bytes())),
         Cell::Vector(v) => {
-            let mut tmp = Vec::with_capacity(v.len());
+            let mut tmp = Xbitstr::new();
             for x in v.iter() {
                 match x {
                     Cell::Int(i) => {
                         if 0 <= *i && *i <= 255 {
-                            tmp.push(*i as u8);
+                            tmp = tmp.append(&Xbitstr::from(vec![*i as u8]));
                         } else {
                             return Err(Xerr::IntegerOverflow);
                         }
+                    }
+                    Cell::Str(s) => {
+                        tmp = tmp.append(&Xbitstr::from(s.as_bytes().to_vec()));
+                    }
+                    Cell::Bitstr(s) => {
+                        tmp = tmp.append(&s);
                     }
                     _ => return Err(Xerr::TypeError),
                 }
@@ -253,7 +259,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
             Ok(Bitstring::from(tmp))
         }
         Cell::Bitstr(s) => Ok(s),
-        _ => Err(Xerr::TypeError),
+        _ => Err(Xerr::TypeError)
     }
 }
 
@@ -414,8 +420,10 @@ mod tests {
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstr"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[\"1\"] >bitstr"));
         assert_eq!(Err(Xerr::TypeError), xs.interpret("{} >bitstr"));
+        xs.interpret("[\"1\" 0x32 0s0011_0011] >bitstr").unwrap();
+        assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().into_bitstring().unwrap().to_bytes());
+
     }
 
     #[test]
