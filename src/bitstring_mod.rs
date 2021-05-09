@@ -150,7 +150,7 @@ pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xr
         }
         hex.push('\n');
         addr += chunk.len();
-        xs.display(&hex);
+        xs.print(&hex);
         hex.clear();
     }
     OK
