@@ -404,7 +404,7 @@ impl State {
             xs.console = Some(String::new());
         }
         xs.fmt_base = xs.defvar("BASE", Cell::Int(10))?;
-        xs.fmt_prefix = xs.defvar("PREFIX", ONE)?;
+        xs.fmt_prefix = xs.defvar("*PREFIX*", ONE)?;
         xs.load_core()?;
         crate::bitstring_mod::bitstring_load(&mut xs)?;
         Ok(xs)
@@ -579,6 +579,8 @@ impl State {
             Def("DEC", core_word_decimal),
             Def("OCT", core_word_octal),
             Def("BIN", core_word_binary),
+            Def("PREFIX", core_word_prefix),
+            Def("NO-PREFIX", core_word_no_prefix),
         ]
         .iter()
         {
@@ -1637,9 +1639,11 @@ fn core_word_print(xs: &mut State) -> Xresult {
         .map(|val| val.is_true())
         .unwrap_or(false);
     let s= match xs.get_var(xs.fmt_base)? {
-        Cell::Int(2) if prefix => format!("0b{:2?}", val),
+        Cell::Int(2) if prefix => format!("{:#2?}", val),
         Cell::Int(2)  => format!("{:2?}", val),
-        Cell::Int(16) if prefix => format!("0x{:16?}", val),
+        Cell::Int(8) if prefix => format!("{:#8?}", val),
+        Cell::Int(8)  => format!("{:8?}", val),
+        Cell::Int(16) if prefix => format!("{:#16?}", val),
         Cell::Int(16) => format!("{:16?}", val),
         _ => format!("{:10?}", val),
     };
@@ -1666,6 +1670,13 @@ fn core_word_octal(xs: &mut State) -> Xresult {
 
 fn core_word_binary(xs: &mut State) -> Xresult {
     xs.set_var(xs.fmt_base, Cell::Int(2)).map(|_| ())
+}
+
+fn core_word_prefix(xs: &mut State) -> Xresult {
+    xs.set_var(xs.fmt_prefix, ONE).map(|_| ())
+}
+fn core_word_no_prefix(xs: &mut State) -> Xresult {
+    xs.set_var(xs.fmt_prefix, ZERO).map(|_| ())
 }
 
 fn core_word_breakpoint(xs: &mut State) -> Xresult {
@@ -1946,5 +1957,19 @@ mod tests {
         assert_eq!(Ok(ZERO), xs.pop_data());
         xs.interpret("10 0 do I I case 5 of leave endof drop endcase loop").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_fmt_prefix() {
+        let mut xs = State::new().unwrap();
+        xs.console = Some(String::new());
+        xs.interpret("255 HEX print").unwrap();
+        assert_eq!(Some("0xFF".to_string()), xs.console);
+        xs.console = Some(String::new());
+        xs.interpret("255 NO-PREFIX HEX print").unwrap();
+        assert_eq!(Some("FF".to_string()), xs.console);
+        xs.console = Some(String::new());
+        xs.interpret("[255] NO-PREFIX HEX print").unwrap();
+        assert_eq!(Some("[FF]".to_string()), xs.console);
     }
 }
