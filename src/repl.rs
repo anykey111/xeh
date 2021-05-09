@@ -114,7 +114,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         crate::file::load_binary(xs, path)?;
     }
     for filename in args.sources.iter() {
-        crate::file::load_source(xs, filename)?;
+        xs.load_source(filename)?;
     }
     let mut result = OK;
     if !args.sources.is_empty() {

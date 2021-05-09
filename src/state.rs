@@ -159,11 +159,13 @@ impl State {
     pub fn error_context(&mut self, err: &Xerr) -> String {
         let mut error_text = format!("error: {:?}\n", err);
         if self.ctx.mode == ContextMode::Load {
-            if let Some(lex) = self.ctx.source.as_ref() {
-                error_text.push_str(&format!("{:?}", lex.error_context()));
-            }
+            let lex = self.ctx.source.as_ref().unwrap();
+            error_text.push_str(&self.debug_map.format_lex_location(lex));
         } else if let Some(loc) = self.debug_map.format_location(self.ip()) {
             error_text.push_str(&loc);
+        } else {
+            let lex = self.ctx.source.as_ref().unwrap();
+            error_text.push_str(&self.debug_map.format_lex_location(lex));
         }
         error_text
     }
@@ -202,23 +204,31 @@ impl State {
     }
 
     pub fn current_line(&self) -> String {
-        let mut buf = String::new();
-        if let Some(loc) = self.debug_map.format_location(self.ip()) {
-            buf.push_str(&loc);
-        }
-        buf
+        self.debug_map.format_location(self.ip()).unwrap_or_else(|| {
+            format!("{:x}:", self.ip())
+        })
     }
 
     pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
         self.set_var(self.bs_input, Cell::Bitstr(bin)).map(|_| ())
     }
 
-    pub fn load(&mut self, source: &str) -> Xresult {
-        self.load_source(Lex::from_str(source))
+    pub fn load_source(&mut self, path: &str) -> Xresult {
+        let buf =     std::fs::read_to_string(path).map_err(|e| {
+            self.display_error(format!("{}: {}", path, e));
+            Xerr::IOError
+        })?;
+        let src = self.debug_map.add_source(&buf, Some(path.to_string()));
+        self.load1(src)
     }
 
-    pub fn load_source(&mut self, source: Lex) -> Xresult {
-        self.context_open(ContextMode::Load, Some(source));
+    pub fn load(&mut self, source: &str) -> Xresult {
+        let src = self.debug_map.add_source(source, None);
+        self.load1(src)
+    }
+
+    fn load1(&mut self, src: Lex) -> Xresult {
+        self.context_open(ContextMode::Load, Some(src));
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
@@ -231,8 +241,13 @@ impl State {
         result
     }
 
-    pub fn interpret(&mut self, source: &str) -> Xresult {
-        self.context_open(ContextMode::Eval, Some(Lex::from_str(source)));
+    pub fn interpret(&mut self, buffer: &str) -> Xresult {
+        let src = self.debug_map.add_source(buffer, None);
+        self.interpret1(src)
+    }
+
+    fn interpret1(&mut self, src: Lex) -> Xresult {
+        self.context_open(ContextMode::Eval, Some(src));
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
@@ -338,11 +353,7 @@ impl State {
         }
     }
 
-    fn context_open(&mut self, mode: ContextMode, mut source: Option<Lex>) {
-        if let Some(source) = source.as_mut() {
-            let id = self.debug_map.add_buffer(source.buffer());
-            source.set_source_id(id);
-        }
+    fn context_open(&mut self, mode: ContextMode, source: Option<Lex>) {
         let mut tmp = Context {
             ds_len: 0,
             cs_len: self.code.len(),
@@ -563,7 +574,7 @@ impl State {
             Def("print", core_word_print),
             Def("newline", core_word_newline),
             Def("file-write", crate::file::core_word_file_write),
-            Def("load", crate::file::core_word_load),
+            Def("load", core_word_load),
             Def("HEX", core_word_hex),
             Def("DEC", core_word_decimal),
             Def("OCT", core_word_octal),
@@ -1701,6 +1712,11 @@ fn core_word_breakpoint(xs: &mut State) -> Xresult {
     } else {
         Err(Xerr::DebugBreak)
     }
+}
+
+fn core_word_load(xs: &mut State) -> Xresult {
+    let path = xs.pop_data()?.into_string()?;
+    xs.load_source(&path)
 }
 
 #[cfg(test)]

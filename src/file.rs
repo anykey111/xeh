@@ -1,7 +1,6 @@
 #[cfg(feature = "mmap")]
 use mapr::Mmap;
 
-use crate::lex::Lex;
 use crate::prelude::*;
 use std::fs::File;
 use std::{fs::OpenOptions, io::BufWriter, io::Write};
@@ -38,19 +37,6 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
         Xerr::IOError
     })?;
     xs.set_binary_input(Xbitstr::from(buf))
-}
-
-pub fn load_source(xs: &mut Xstate, path: &str) -> Xresult {
-    let src = Lex::from_file(path).map_err(|e| {
-        xs.display_error(format!("{}: {}", path, e));
-        Xerr::IOError
-    })?;
-    xs.load_source(src)
-}
-
-pub fn core_word_load(xs: &mut Xstate) -> Xresult {
-    let path = xs.pop_data()?.into_string()?;
-    load_source(xs, &path)
 }
 
 pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {

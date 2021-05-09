@@ -24,35 +24,8 @@ pub struct Location {
 pub struct Lex {
     cursor: Location,
     buffer: String,
-    path: Option<String>,
     last: Option<Location>,
-    source_id: Option<usize>,
-}
-
-#[derive(Default)]
-pub struct LexErrContext {
-    filename: Option<String>,
-    location: Option<Location>,
-    single_line: Option<String>,
-}
-
-impl std::fmt::Debug for LexErrContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(loc) = self.location.as_ref() {
-            if let Some(filename) = self.filename.as_ref() {
-                write!(f, "{}:", filename)?;
-            }
-            writeln!(f, "{}:{}:", loc.line, loc.col)?;
-            if let Some(s) = self.single_line.as_ref() {
-                writeln!(f, "{}", s)?;
-                for _ in 1..loc.col {
-                    f.write_str("-")?;
-                }
-                f.write_str("^")?;
-            }
-        }
-        Ok(())
-    }
+    source_id: u32,
 }
 
 fn is_bracket(c: char) -> bool {
@@ -67,11 +40,8 @@ fn is_special(c: char) -> bool {
 }
 
 impl Lex {
-    pub fn from_str(s: &str) -> Self {
-        Self::from_string(s.to_string())
-    }
 
-    pub fn from_string(s: String) -> Self {
+    pub fn new(buffer: String, source_id: u32) -> Lex {
         Self {
             cursor: Location {
                 line: 1,
@@ -79,44 +49,14 @@ impl Lex {
                 pos: 0,
                 len: 0,
             },
-            buffer: s,
-            path: None,
+            buffer,
             last: None,
-            source_id: None,
+            source_id,
         }
     }
 
-    pub fn from_file(path: &str) -> Result<Self, std::io::Error> {
-        let buf = std::fs::read_to_string(path)?;
-        let mut lex = Self::from_string(buf);
-        lex.path = Some(path.to_string());
-        Ok(lex)
-    }
-
-    pub fn set_path(&mut self, path: &str) {
-        self.path = Some(path.to_string());
-    }
-
-    pub fn buffer(&mut self) -> &String {
-        &self.buffer
-    }
-
-    pub fn set_source_id(&mut self, id: usize) {
-        self.source_id = Some(id);
-    }
-
-    pub fn source_id(&self) -> Option<usize> {
+    pub fn source_id(&self) -> u32 {
         self.source_id
-    }
-
-    pub fn error_context(&self) -> LexErrContext {
-        let mut ctx = LexErrContext::default();
-        if let Some((_tok, l)) = self.last_token() {
-            ctx.location = Some(l.clone());
-            ctx.filename = self.path.clone();
-            ctx.single_line = self.buffer.lines().nth(l.line - 1).map(|s| s.to_string());
-        }
-        ctx
     }
 
     pub fn last_token(&self) -> Option<(&str, &Location)> {
@@ -303,99 +243,106 @@ impl Lex {
     }
 }
 
-// tests ---------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_lex_ws() {
-    let mut lex = Lex::from_str("\n\t");
-    assert_eq!(Ok(Tok::EndOfInput), lex.next());
-    assert_eq!(None, lex.last_token());
-    let mut lex = Lex::from_str("\n\t#567");
-    assert_eq!(Ok(Tok::EndOfInput), lex.next());
-    assert_eq!(None, lex.last_token());
-    let mut lex = Lex::from_str("a#b");
-    assert_eq!(Ok(Tok::Word("a".to_string())), lex.next());
-    let mut lex = Lex::from_str(" abcde \n123");
-    lex.next().unwrap();
-    let (s, loc) = lex.last_token().unwrap();
-    assert_eq!(s, "abcde");
-    assert_eq!(loc.len, 5);
-    assert_eq!(loc.line, 1);
-    assert_eq!(loc.col, 2);
-    lex.next().unwrap();
-    let (s, loc) = lex.last_token().unwrap();
-    assert_eq!(s, "123");
-    assert_eq!(loc.len, 3);
-    assert_eq!(loc.line, 2);
-    assert_eq!(loc.col, 1);
-}
+    fn new_test_lex(s: &str) -> Lex {
+        Lex::new(s.to_string(), 0)
+    }
 
-#[test]
-fn test_lex_num() {
-    let mut lex = Lex::from_str("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
-    assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Word("+".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Word("-".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Num(-1), lex.next().unwrap());
-    assert_eq!(Tok::Word("-x1".to_string()), lex.next().unwrap());
-    assert_eq!(Tok::Num(-1), lex.next().unwrap());
-    assert_eq!(Tok::Num(0), lex.next().unwrap());
-    assert_eq!(Tok::Num(3), lex.next().unwrap());
-    assert_eq!(Tok::Num(0xff00), lex.next().unwrap());
-    let mut lex = Lex::from_str("--1 1- 0x1x 0x1G3");
-    assert_eq!(Tok::Word("--1".to_string()), lex.next().unwrap());
-    assert_eq!(Err(Xerr::InputParseError), lex.next());
-    assert_eq!(Err(Xerr::InputParseError), lex.next());
-    assert_eq!(Err(Xerr::InputParseError), lex.next());
-}
+    #[test]
+    fn test_lex_ws() {
+        let mut lex = new_test_lex("\n\t");
+        assert_eq!(Ok(Tok::EndOfInput), lex.next());
+        assert_eq!(None, lex.last_token());
+        let mut lex = new_test_lex("\n\t#567");
+        assert_eq!(Ok(Tok::EndOfInput), lex.next());
+        assert_eq!(None, lex.last_token());
+        let mut lex = new_test_lex("a#b");
+        assert_eq!(Ok(Tok::Word("a".to_string())), lex.next());
+        let mut lex = new_test_lex(" abcde \n123");
+        lex.next().unwrap();
+        let (s, loc) = lex.last_token().unwrap();
+        assert_eq!(s, "abcde");
+        assert_eq!(loc.len, 5);
+        assert_eq!(loc.line, 1);
+        assert_eq!(loc.col, 2);
+        lex.next().unwrap();
+        let (s, loc) = lex.last_token().unwrap();
+        assert_eq!(s, "123");
+        assert_eq!(loc.len, 3);
+        assert_eq!(loc.line, 2);
+        assert_eq!(loc.col, 1);
+    }
 
-#[test]
-fn test_lex_real() {
-    let mut lex = Lex::from_str("1e5 0.5 1.5");
-    assert_eq!(Tok::Real(100000.0), lex.next().unwrap());
-    assert_eq!(Tok::Real(0.5), lex.next().unwrap());
-    assert_eq!(Tok::Real(1.5), lex.next().unwrap());
-    assert_eq!(Err(Xerr::InputParseError), Lex::from_str("0.0.1").next());
-}
+    #[test]
+    fn test_lex_num() {
+        let mut lex = new_test_lex("x1 + - -1 -x1 -0x1 +0 0b11 0xff_00");
+        assert_eq!(Tok::Word("x1".to_string()), lex.next().unwrap());
+        assert_eq!(Tok::Word("+".to_string()), lex.next().unwrap());
+        assert_eq!(Tok::Word("-".to_string()), lex.next().unwrap());
+        assert_eq!(Tok::Num(-1), lex.next().unwrap());
+        assert_eq!(Tok::Word("-x1".to_string()), lex.next().unwrap());
+        assert_eq!(Tok::Num(-1), lex.next().unwrap());
+        assert_eq!(Tok::Num(0), lex.next().unwrap());
+        assert_eq!(Tok::Num(3), lex.next().unwrap());
+        assert_eq!(Tok::Num(0xff00), lex.next().unwrap());
+        let mut lex = new_test_lex("--1 1- 0x1x 0x1G3");
+        assert_eq!(Tok::Word("--1".to_string()), lex.next().unwrap());
+        assert_eq!(Err(Xerr::InputParseError), lex.next());
+        assert_eq!(Err(Xerr::InputParseError), lex.next());
+        assert_eq!(Err(Xerr::InputParseError), lex.next());
+    }
 
-#[test]
-fn text_lex_schar() {
-    let mut lex = Lex::from_str("({aa : +[bb]cc)");
-    assert_eq!(Ok(Tok::Word("(".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("{".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("aa".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word(":".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("+".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("[".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("bb".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("]".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word("cc".to_string())), lex.next());
-    assert_eq!(Ok(Tok::Word(")".to_string())), lex.next());
-}
+    #[test]
+    fn test_lex_real() {
+        let mut lex = new_test_lex("1e5 0.5 1.5");
+        assert_eq!(Tok::Real(100000.0), lex.next().unwrap());
+        assert_eq!(Tok::Real(0.5), lex.next().unwrap());
+        assert_eq!(Tok::Real(1.5), lex.next().unwrap());
+        assert_eq!(Err(Xerr::InputParseError), new_test_lex("0.0.1").next());
+    }
 
-#[test]
-fn test_lex_str() {
-    let mut lex = Lex::from_str(" \"))\n[[\" ");
-    assert_eq!(Ok(Tok::Str("))[[".to_string())), lex.next());
-    let mut lex = Lex::from_str(" \" xx\n ");
-    assert_eq!(Err(Xerr::InputIncomplete), lex.next());
-    lex.buffer.push_str("\"");
-    assert_eq!(Ok(Tok::Str(" xx ".to_string())), lex.next());
-}
+    #[test]
+    fn text_lex_schar() {
+        let mut lex = new_test_lex("({aa : +[bb]cc)");
+        assert_eq!(Ok(Tok::Word("(".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("{".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("aa".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word(":".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("+".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("[".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("bb".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("]".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word("cc".to_string())), lex.next());
+        assert_eq!(Ok(Tok::Word(")".to_string())), lex.next());
+    }
 
-#[test]
-fn test_lex_escape() {
-    let mut lex = Lex::from_str(r#""\\ \" \r \n""#);
-    assert_eq!(Ok(Tok::Str("\\ \" \r \n".to_string())), lex.next());
-    let mut lex = Lex::from_str(r#" " \x " "#);
-    assert_eq!(Err(Xerr::InputParseError), lex.next());
-}
+    #[test]
+    fn test_lex_str() {
+        let mut lex = new_test_lex(" \"))\n[[\" ");
+        assert_eq!(Ok(Tok::Str("))[[".to_string())), lex.next());
+        let mut lex = new_test_lex(" \" xx\n ");
+        assert_eq!(Err(Xerr::InputIncomplete), lex.next());
+        lex.buffer.push_str("\"");
+        assert_eq!(Ok(Tok::Str(" xx ".to_string())), lex.next());
+    }
 
-#[test]
-fn test_lex_bstr() {
-    let mut lex = Lex::from_str(" 0s001 0s10_01 0s 0s2");
-    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("001").unwrap())), lex.next());
-    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("1001").unwrap())), lex.next());
-    assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("").unwrap())), lex.next());
-    assert_eq!(Err(Xerr::InputParseError), lex.next());
+    #[test]
+    fn test_lex_escape() {
+        let mut lex = new_test_lex(r#""\\ \" \r \n""#);
+        assert_eq!(Ok(Tok::Str("\\ \" \r \n".to_string())), lex.next());
+        let mut lex = new_test_lex(r#" " \x " "#);
+        assert_eq!(Err(Xerr::InputParseError), lex.next());
+    }
+
+    #[test]
+    fn test_lex_bstr() {
+        let mut lex = new_test_lex(" 0s001 0s10_01 0s 0s2");
+        assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("001").unwrap())), lex.next());
+        assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("1001").unwrap())), lex.next());
+        assert_eq!(Ok(Tok::Bstr(Xbitstr::from_str_bin("").unwrap())), lex.next());
+        assert_eq!(Err(Xerr::InputParseError), lex.next());
+    }
 }
