@@ -42,6 +42,7 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
 pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
     let path = xs.pop_data()?.into_string()?;
     let data = xs.pop_data()?;
+    let s = crate::bitstring_mod::bitstring_from(data)?;
     let open = || {
         OpenOptions::new()
             .create(true)
@@ -49,38 +50,23 @@ pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
             .truncate(true)
             .open(&path)
     };
-    match data {
-        Cell::Bitstr(s) => {
-            let mut file = open().map_err(|e| {
-                xs.log_error(format!("{}: {}", path, e));
-                Xerr::IOError
-            })?;
-            if s.is_bytestring() {
-                file.write_all(s.slice()).map_err(|e| {
-                    xs.log_error(format!("{}: {}", path, e));
-                    Xerr::IOError
-                })?;
-            } else {
-                let mut buf = BufWriter::new(file);
-                for x in s.iter8() {
-                    buf.write_all(&[x.0]).map_err(|e| {
-                        xs.log_error(format!("{}: {}", path, e));
-                        Xerr::IOError
-                    })?;
-                }
-            }
-        }
-        Cell::Str(s) => {
-            let mut file = open().map_err(|e| {
-                xs.log_error(format!("{}: {}", path, e));
-                Xerr::IOError
-            })?;
-            file.write_all(s.as_bytes()).map_err(|e| {
+    let mut file = open().map_err(|e| {
+        xs.log_error(format!("{}: {}", path, e));
+        Xerr::IOError
+    })?;
+    if s.is_bytestring() {
+        file.write_all(s.slice()).map_err(|e| {
+            xs.log_error(format!("{}: {}", path, e));
+            Xerr::IOError
+        })?;
+    } else {
+        let mut buf = BufWriter::new(file);
+        for x in s.iter8() {
+            buf.write_all(&[x.0]).map_err(|e| {
                 xs.log_error(format!("{}: {}", path, e));
                 Xerr::IOError
             })?;
         }
-        _ => return Err(Xerr::TypeError),
-    };
+    }
     OK
 }

@@ -221,6 +221,12 @@ impl From<isize> for Cell {
     }
 }
 
+impl From<u8> for Cell {
+    fn from(x: u8) -> Self {
+        Cell::Int(x as Xint)
+    }
+}
+
 impl From<u32> for Cell {
     fn from(x: u32) -> Self {
         Cell::Int(x as Xint)
