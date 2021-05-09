@@ -22,12 +22,12 @@ impl DebugMap {
     pub fn insert_with_source(&mut self, at: usize, lex: Option<&Lex>) {
         let mut dloc = None;
         if let Some(lex) = lex {
-            dloc = lex.last_token().map(|(_, line, col)| 
-                DebugLoc {
-                    source_id: lex.source_id(),
-                    line: line as u32,
-                    col: col as u32,
-                });
+            let (line, col) = lex.location();
+            dloc = Some(DebugLoc {
+                source_id: lex.source_id(),
+                line: line as u32,
+                col: col as u32,
+            });
         }
         let len = self.code_map.len();
         if at < len {
@@ -50,22 +50,21 @@ impl DebugMap {
 
     pub fn format_lex_location(&self, lex: &Lex) -> String {
         let mut buf = String::new();
-        if let Some((_tok, line, col)) = lex.last_token() {
-            let id = lex.source_id();
-            let srcbuf = &self.sources[id as usize];
-            if let Some(path) = srcbuf.path.as_ref() {
-                write!(buf, "{}:", path).unwrap();
-            } else {
-                write!(buf, "<buffer{}>:", id).unwrap();
+        let (line, col) = lex.location();
+        let id = lex.source_id();
+        let srcbuf = &self.sources[id as usize];
+        if let Some(path) = srcbuf.path.as_ref() {
+            write!(buf, "{}:", path).unwrap();
+        } else {
+            write!(buf, "<buffer{}>:", id).unwrap();
+        }
+        writeln!(buf, "{}:{}:", line, col).unwrap();
+        if let Some(s) = srcbuf.text.lines().nth(line - 1) {
+            writeln!(buf, "{}", s).unwrap();
+            for _ in 1..col {
+                buf.push('-');
             }
-            writeln!(buf, "{}:{}:", line, col).unwrap();
-            if let Some(s) = srcbuf.text.lines().nth(line - 1) {
-                writeln!(buf, "{}", s).unwrap();
-                for _ in 1..col {
-                    buf.push('-');
-                }
-                buf.push('^');
-            }
+            buf.push('^');
         }
         buf
     }

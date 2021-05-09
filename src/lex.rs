@@ -67,6 +67,15 @@ impl Lex {
         })
     }
 
+    pub fn location(&self) -> (usize, usize) {
+        if let Some(loc) = self.last.as_ref() {
+            if loc.pos <= self.cursor.pos {
+                return (loc.line, loc.col);
+            }
+        }
+        (self.cursor.line, self.cursor.col)
+    }
+
     fn peek(&self) -> Option<(usize, char)> {
         let mut it = self.buffer[self.cursor.pos..].char_indices();
         let x = it.next()?;
