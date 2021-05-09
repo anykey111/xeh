@@ -10,6 +10,7 @@ mod opcodes;
 pub mod repl;
 pub mod state;
 mod file;
+pub mod d2_plugin;
 
 pub mod prelude {
     pub use std::convert::TryInto;
