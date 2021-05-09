@@ -13,7 +13,8 @@ pub struct DebugMap {
 
 pub struct DebugLoc {
     pub source_id: u32,
-    pub location: Location,
+    pub line: u32,
+    pub col: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,10 +32,11 @@ impl DebugMap {
         } else {
             let mut dloc = None;
             let lex = lex.unwrap();
-            if let Some((_, loc)) = lex.last_token() {
+            if let Some((_, line, col)) = lex.last_token() {
                 dloc = Some(DebugLoc {
                     source_id: lex.source_id(),
-                    location: loc.clone(),
+                    line: line as u32,
+                    col: col as u32,
                 });
             }
             (dinfo, dloc)
@@ -69,7 +71,7 @@ impl DebugMap {
     pub fn format_lex_location(&self, lex: &Lex) -> String {
         use std::fmt::Write;
         let mut buf = String::new();
-        if let Some((_tok, loc)) = lex.last_token() {
+        if let Some((_tok, line, col)) = lex.last_token() {
             let id = lex.source_id();
             let srcbuf = &self.sources[id as usize];
             if let Some(path) = srcbuf.path.as_ref() {
@@ -77,10 +79,10 @@ impl DebugMap {
             } else {
                 write!(buf, "<buffer{}>:", id).unwrap();
             }
-            writeln!(buf, "{}:{}:", loc.line, loc.col).unwrap();
-            if let Some(line) = srcbuf.text.lines().nth(loc.line - 1) {
-                writeln!(buf, "{}", line).unwrap();
-                for _ in 1..loc.col {
+            writeln!(buf, "{}:{}:", line, col).unwrap();
+            if let Some(s) = srcbuf.text.lines().nth(line - 1) {
+                writeln!(buf, "{}", s).unwrap();
+                for _ in 1..col {
                     buf.push('-');
                 }
                 buf.push('^');
@@ -92,13 +94,12 @@ impl DebugMap {
     pub fn format_location(&self, at: usize) -> Option<String> {
         self.find_debug_location(at).map(|dloc| {
             let src = &self.sources[dloc.source_id as usize].text;
-            let loc = &dloc.location;
             format!(
                 "{}:{}:\n{}\n{}",
-                loc.line,
-                loc.col,
-                src.lines().nth(loc.line - 1).unwrap(),
-                format!("{:->1$}", '^', loc.col)
+                dloc.line,
+                dloc.col,
+                src.lines().nth(dloc.line as usize - 1).unwrap(),
+                format!("{:->1$}", '^', dloc.col as usize)
             )
         })
     }

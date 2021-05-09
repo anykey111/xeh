@@ -13,11 +13,11 @@ pub enum Tok {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Location {
-    pub line: usize,
-    pub col: usize,
-    pub pos: usize,
-    pub len: usize,
+struct Location {
+    line: usize,
+    col: usize,
+    pos: usize,
+    len: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -59,11 +59,11 @@ impl Lex {
         self.source_id
     }
 
-    pub fn last_token(&self) -> Option<(&str, &Location)> {
+    pub fn last_token(&self) -> Option<(&str, usize, usize)> {
         self.last.as_ref().map(|loc| {
             let start = loc.pos;
             let end = start + loc.len;
-            (&self.buffer[start..end], loc)
+            (&self.buffer[start..end], loc.line, loc.col)
         })
     }
 
@@ -263,17 +263,9 @@ mod tests {
         assert_eq!(Ok(Tok::Word("a".to_string())), lex.next());
         let mut lex = new_test_lex(" abcde \n123");
         lex.next().unwrap();
-        let (s, loc) = lex.last_token().unwrap();
-        assert_eq!(s, "abcde");
-        assert_eq!(loc.len, 5);
-        assert_eq!(loc.line, 1);
-        assert_eq!(loc.col, 2);
+        assert_eq!(("abcde", 1, 2), lex.last_token().unwrap());
         lex.next().unwrap();
-        let (s, loc) = lex.last_token().unwrap();
-        assert_eq!(s, "123");
-        assert_eq!(loc.len, 3);
-        assert_eq!(loc.line, 2);
-        assert_eq!(loc.col, 1);
+        assert_eq!(("123", 2, 1), lex.last_token().unwrap());
     }
 
     #[test]
