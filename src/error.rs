@@ -14,6 +14,7 @@ pub enum Xerr {
     RecusriveDefinition,
     ExpectingName,
     ExpectingKey,
+    NotFound,
     InvalidAddress,
     ReadonlyAddress,
     IOError,

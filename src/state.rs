@@ -544,6 +544,7 @@ impl State {
             Def(".", core_word_key_get),
             Def("assoc", core_word_assoc),
             Def("sort", core_word_sort),
+            Def("sort-by-key", core_word_sort_by_key),
             Def("rev", core_word_rev),
             Def("dup", |xs| xs.dup_data()),
             Def("drop", |xs| xs.drop_data()),
@@ -1533,6 +1534,31 @@ fn core_word_length(xs: &mut State) -> Xresult {
     }
 }
 
+fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
+    match key {
+        Cell::Int(i) => {
+            let i = if *i >= 0 {
+                *i as usize
+            } else {
+                v.len().checked_sub(i.abs() as usize).ok_or(Xerr::OutOfBounds)?
+            };
+            v.get(i).ok_or(Xerr::OutOfBounds)
+        }
+        Cell::Key{..} => {
+            let mut it = v.iter();
+            let mut val = None;
+            while let Some(x) = it.next() {
+                if x == key {
+                    val = it.next();
+                    break;
+                }
+            }
+            val.ok_or(Xerr::NotFound)
+        }
+        _ => Err(Xerr::ExpectingKey)
+    }
+}
+
 fn core_word_get(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(x) => {
@@ -1609,6 +1635,23 @@ fn core_word_sort(xs: &mut State) -> Xresult {
     let v = xs.pop_data()?.into_vector()?;
     let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
     let sorted = Xvec::from_iter(m.into_iter());
+    xs.push_data(Cell::Vector(sorted))
+}
+
+fn core_word_sort_by_key(xs: &mut State) -> Xresult {
+    use std::iter::FromIterator;
+    let key = xs.pop_data()?;
+    let v = xs.pop_data()?.into_vector()?;
+    let mut m = std::collections::BTreeMap::new();
+    for i in v.iter() {
+        let pv = if let Cell::Vector(pv) = i {
+            pv
+        } else {
+            return Err(Xerr::TypeError)
+        };
+        m.insert(vector_get_by_key(pv, &key)?, i);
+    }
+    let sorted = Xvec::from_iter(m.values().map(|x| (*x).clone()));
     xs.push_data(Cell::Vector(sorted))
 }
 
@@ -2004,6 +2047,17 @@ mod tests {
     fn test_sort() {
         let mut xs = State::new().unwrap();
         xs.interpret("[2 3 1] sort").unwrap();
+        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(Some(&Cell::Int(1)), v.get(0));
+        assert_eq!(Some(&Cell::Int(2)), v.get(1));
+        assert_eq!(Some(&Cell::Int(3)), v.get(2));
+    }
+
+    #[test]
+    fn test_sort_by_key() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("[[2] [3] [1]] 0 sort-by-key var x").unwrap();
+        xs.interpret("[ 3 0 do I x get 0 swap get loop ]").unwrap();
         let v = xs.pop_data().unwrap().into_vector().unwrap();
         assert_eq!(Some(&Cell::Int(1)), v.get(0));
         assert_eq!(Some(&Cell::Int(2)), v.get(1));
