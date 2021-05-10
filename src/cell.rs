@@ -124,6 +124,27 @@ impl PartialEq for Cell {
     }
 }
 
+use std::cmp::Ordering;
+
+impl PartialOrd for Cell {
+    fn partial_cmp(&self, other: &Cell) -> Option<Ordering> {
+        match (self, other) {
+            (Cell::Int(a), Cell::Int(b)) => a.partial_cmp(b),
+            (Cell::Real(a), Cell::Real(b)) => a.partial_cmp(b),
+            (Cell::Str(a), Cell::Str(b)) => a.partial_cmp(b),
+            (Cell::Key(a), Cell::Key(b)) => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+}
+
+impl Ord for Cell {
+    fn cmp(&self, other: &Cell) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+}
+impl Eq for Cell {}
+
 impl Cell {
 
     pub fn is_true(&self) -> bool {

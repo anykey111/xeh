@@ -543,6 +543,8 @@ impl State {
             Def("get", core_word_get),
             Def(".", core_word_key_get),
             Def("assoc", core_word_assoc),
+            Def("sort", core_word_sort),
+            Def("rev", core_word_rev),
             Def("dup", |xs| xs.dup_data()),
             Def("drop", |xs| xs.drop_data()),
             Def("swap", |xs| xs.swap_data()),
@@ -1602,6 +1604,21 @@ fn core_word_assoc(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_sort(xs: &mut State) -> Xresult {
+    use std::iter::FromIterator;
+    let v = xs.pop_data()?.into_vector()?;
+    let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
+    let sorted = Xvec::from_iter(m.into_iter());
+    xs.push_data(Cell::Vector(sorted))
+}
+
+fn core_word_rev(xs: &mut State) -> Xresult {
+    use std::iter::FromIterator;
+    let v = xs.pop_data()?.into_vector()?;
+    let rv = Xvec::from_iter(v.iter().rev().cloned());
+    xs.push_data(Cell::Vector(rv))
+}
+
 fn core_word_assert(xs: &mut State) -> Xresult {
     if xs.pop_data()?.is_true() {
         OK
@@ -1971,5 +1988,25 @@ mod tests {
         xs.console = Some(String::new());
         xs.interpret("[255] NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("[FF]".to_string()), xs.console);
+    }
+
+    #[test]
+    fn test_rev() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("[1 2 3] rev").unwrap();
+        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(Some(&Cell::Int(3)), v.get(0));
+        assert_eq!(Some(&Cell::Int(2)), v.get(1));
+        assert_eq!(Some(&Cell::Int(1)), v.get(2));
+    }
+
+    #[test]
+    fn test_sort() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("[2 3 1] sort").unwrap();
+        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        assert_eq!(Some(&Cell::Int(1)), v.get(0));
+        assert_eq!(Some(&Cell::Int(2)), v.get(1));
+        assert_eq!(Some(&Cell::Int(3)), v.get(2));
     }
 }
