@@ -120,13 +120,13 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if !args.sources.is_empty() {
         result = xs.run();
         if let Err(ref e) = result {
-            eprintln!("{:?}", e);
+            eprintln!("{}", e.message());
         }
     }
     if let Some(s) = args.eval {
         if result.is_ok() {
             if let Err(e) = xs.interpret(&s) {
-                eprintln!("{:?}", e);
+                eprintln!("{}", e.message());
             }
         }
     }

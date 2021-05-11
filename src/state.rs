@@ -155,7 +155,7 @@ pub struct State {
 
 impl State {
     pub fn error_context(&mut self, err: &Xerr) -> String {
-        let mut error_text = format!("error: {:?}\n", err);
+        let mut error_text = err.message();
         if self.ctx.mode == ContextMode::Load {
             let lex = self.ctx.source.as_ref().unwrap();
             error_text.push_str(&self.debug_map.format_lex_location(lex));

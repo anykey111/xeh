@@ -298,7 +298,8 @@ fn bin_match(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(val)?;
     let (s, rest) = read_bitstring(xs, pat.len())?;
     if s != pat {
-        return Err(Xerr::BinaryMatchError);
+        let err = Box::new((s, pat));
+        return Err(Xerr::BitMatchError(err));
     }
     set_last_chunk(xs, s)?;
     set_rest(xs, rest)
