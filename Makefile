@@ -12,4 +12,6 @@ release:
 	cargo build --release
 
 fibench:
-	time target/release/xeh benches/fib.xs
+	# measure-command { target/release/xeh benches/fib.xs -e bye }
+	time target/release/xeh benches/fib.xs -e bye
+
