@@ -13,27 +13,27 @@ fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
         if let Err(e) = xs.next() {
-            println!("{}", xs.error_context(&e));
-            println!("{}", format_opcode(xs, xs.ip()));
+            eprintln!("{}", xs.error_context(&e));
+            eprintln!("{}", format_opcode(xs, xs.ip()));
         } else {
-            println!("{}", xs.current_line());
+            eprintln!("{}", xs.current_line());
         }
     } else if cmd == ".rnext" {
         if let Err(e) = xs.rnext() {
-            println!("{}", xs.error_context(&e));
-            println!("{}", format_opcode(xs, xs.ip()));
+            eprintln!("{}", xs.error_context(&e));
+            eprintln!("{}", format_opcode(xs, xs.ip()));
         } else {
-            println!("{}", xs.current_line());
+            eprintln!("{}", xs.current_line());
         }
     } else if cmd == ".s" {
         let mut i = 0;
         while let Some(val) = xs.get_data(i) {
-            println!("\t{:1?}", val);
+            eprintln!("\t{:1?}", val);
             i += 1;
         }
     } else if cmd == ".top" {
         if let Some(val) = xs.get_data(0) {
-            println!("\t{:?}", val);
+            eprintln!("\t{:?}", val);
         }
     } else {
         xs.interpret(line)?;
