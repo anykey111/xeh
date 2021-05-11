@@ -58,9 +58,9 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
-    xs.defword("B", bit)?;
-    xs.defword("KB", kibit)?;
-    xs.defword("MB", mibit)?;
+    xs.defword("B*", bit)?;
+    xs.defword("K*", kibit)?;
+    xs.defword("M*", mibit)?;
     xs.dump_start = xs.defvar("*dump-start*", Cell::Int(0))?;
     xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
     xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
@@ -523,13 +523,13 @@ mod tests {
     #[test]
     fn test_bitstr_num_bytes() {
         let mut xs = Xstate::new().unwrap();
-        xs.interpret("1 B").unwrap();
+        xs.interpret("1 B*").unwrap();
         assert_eq!(Cell::Int(8), xs.pop_data().unwrap());
-        xs.interpret("1 KB").unwrap();
+        xs.interpret("1 K*").unwrap();
         assert_eq!(Cell::Int(1024 * 8), xs.pop_data().unwrap());
-        xs.interpret("1 MB").unwrap();
+        xs.interpret("1 M*").unwrap();
         assert_eq!(Cell::Int(1024 * 1024 * 8), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"1\" B"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"1\" B*"));
     }
 
     #[test]
