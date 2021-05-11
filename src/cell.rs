@@ -218,6 +218,10 @@ impl Cell {
         self.into_int().map(|i| i as usize)
     }
 
+    pub fn into_isize(self) -> Xresult1<isize> {
+        self.into_int().map(|i| i as isize)
+    }
+
     pub fn into_bitstring(self) -> Xresult1<Xbitstr> {
         match self {
             Cell::Bitstr(s) => Ok(s),
@@ -338,3 +342,25 @@ impl TryInto<bool> for Cell {
 pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
+
+#[macro_export]
+macro_rules! xkey {
+    ($k:ident) => {{
+        Xcell::Key(stringify!($k).to_string())
+    }};
+}
+
+#[macro_export]
+macro_rules! xvec {
+    ($e:expr) => {{
+        let mut v = Xvec::new();
+        v.push_back_mut(Xcell::from($e));
+        Xcell::Vector(v)
+    }};
+    ($e:expr, $($es:expr),+) => {{
+        let mut v = Xvec::new();
+        v.push_back_mut(Xcell::from($e));
+        $(v.push_back_mut(Xcell::from($es));)+
+        Xcell::Vector(v)
+    }};
+}

@@ -540,8 +540,9 @@ impl State {
             Def("J", core_word_counter_j),
             Def("K", core_word_counter_k),
             Def("length", core_word_length),
+            Def("set", core_word_set),
             Def("get", core_word_get),
-            Def(".", core_word_key_get),
+            Def("lookup", core_word_lookup),
             Def("assoc", core_word_assoc),
             Def("sort", core_word_sort),
             Def("sort-by-key", core_word_sort_by_key),
@@ -1534,97 +1535,84 @@ fn core_word_length(xs: &mut State) -> Xresult {
     }
 }
 
-fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
-    match key {
-        Cell::Int(i) => {
-            let i = if *i >= 0 {
-                *i as usize
-            } else {
-                v.len().checked_sub(i.abs() as usize).ok_or(Xerr::OutOfBounds)?
-            };
-            v.get(i).ok_or(Xerr::OutOfBounds)
-        }
-        Cell::Key{..} => {
-            let mut it = v.iter();
-            let mut val = None;
-            while let Some(x) = it.next() {
-                if x == key {
-                    val = it.next();
-                    break;
-                }
-            }
-            val.ok_or(Xerr::NotFound)
-        }
-        _ => Err(Xerr::ExpectingKey)
+fn vector_relative_index(v: &Xvec, index: isize) -> Xresult1<usize> {
+    if index >= 0 {
+        Ok(index as usize)
+    } else {
+        v.len().checked_sub(index.abs() as usize).ok_or(Xerr::OutOfBounds)
     }
+}
+
+fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
+    let new_index = vector_relative_index(v, index)?;
+    v.get(new_index).ok_or(Xerr::OutOfBounds)
+}
+
+fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
+    let mut it = v.iter();
+    let mut val = None;
+    while let Some(x) = it.next() {
+        if x == key {
+            val = it.next();
+            break;
+        }
+    }
+    val.ok_or(Xerr::NotFound)
 }
 
 fn core_word_get(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
-        Cell::Vector(x) => {
-            let idx = xs.pop_data()?.into_usize()?;
-            let val = x.get(idx).ok_or(Xerr::OutOfBounds)?;
-            xs.push_data(val.clone())
-        }
-        Cell::Map(x) => {
-            let k = xs.pop_data()?;
-            let val = x
-                .iter()
-                .find(|kv| kv.0 == k)
-                .map(|kv| kv.1.clone())
-                .unwrap_or(Cell::Nil);
-            xs.push_data(val.clone())
-        }
-        Cell::Str(_x) => {
-            todo!("index string")
-            // let idx = k.into_usize()?;
-            // let val = x.chars().nth(idx).ok_or(Xerr::OutOfBounds)?;
-            // xs.push_data(val.clone())
-        }
-        _ => Err(Xerr::TypeError),
+    let index = xs.pop_data()?.into_isize()?;
+    let v = xs.pop_data()?.into_vector()?;
+    xs.push_data(vector_get(&v, index)?.clone())
+}
+
+fn core_word_set(xs: &mut State) -> Xresult {
+    let val = xs.pop_data()?;
+    let index = xs.pop_data()?.into_isize()?;
+    let mut v = xs.pop_data()?.into_vector()?;
+    let new_index = vector_relative_index(&v, index)?;
+    if v.set_mut(new_index, val) {
+        xs.push_data(Cell::Vector(v))
+    } else {
+        Err(Xerr::OutOfBounds)
     }
 }
 
-fn core_word_key_get(xs: &mut State) -> Xresult {
-    let k = xs.pop_data()?;
-    if !k.is_key() {
+fn core_word_lookup(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    if !key.is_key() {
         return Err(Xerr::ExpectingKey);
     }
     if xs.top_data().ok_or(Xerr::StackUnderflow)?.is_key() {
-        core_word_key_get(xs)?;
+        core_word_lookup(xs)?;
     }
-    let m = xs.pop_data()?.into_map()?;
-    let val = m
-                .iter()
-                .find(|kv| kv.0 == k)
-                .map(|kv| kv.1.clone())
-                .unwrap_or(Cell::Nil);
-    xs.push_data(val)
+    let v = xs.pop_data()?.into_vector()?;
+    xs.push_data(vector_get_by_key(&v, &key)?.clone())
 }
 
 fn core_word_assoc(xs: &mut State) -> Xresult {
+    let val = xs.pop_data()?;
+    let key = xs.pop_data()?;
     match xs.pop_data()? {
-        Cell::Vector(mut x) => {
-            let idx = xs.pop_data()?.into_usize()?;
-            let v = xs.pop_data()?;
-            if x.set_mut(idx, v) {
-                xs.push_data(Cell::Vector(x))
-            } else {
-                Err(Xerr::OutOfBounds)
-            }
-        }
-        Cell::Map(mut x) => {
-            let k = xs.pop_data()?;
-            let v = xs.pop_data()?;
-            if let Some(idx) = x.iter().position(|kv| kv.0 == k) {
-                if !x.set_mut(idx, (k, v)) {
-                    panic!("assoc failed");
+        Cell::Vector(mut v) => {
+            let mut it = v.iter().enumerate();
+            let mut reuse = None;
+            while let Some((index, x)) = it.next() {
+                if x == &key {
+                    reuse = Some(index + 1);
+                    break;
                 }
-                xs.push_data(Cell::Map(x))
-            } else {
-                x.push_back_mut((k, v));
-                xs.push_data(Cell::Map(x))
+                it.next();
             }
+            if let Some(index) = reuse {
+                if !v.set_mut(index, val) {
+                    return Err(Xerr::OutOfBounds);
+                }
+            } else {
+                v.push_back_mut(key);
+                v.push_back_mut(val);
+            }
+            xs.push_data(Cell::Vector(v))
         }
         _ => Err(Xerr::TypeError),
     }
@@ -1755,6 +1743,7 @@ fn core_word_load(xs: &mut State) -> Xresult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{xvec, xkey};
 
     #[test]
     fn test_jump_offset() {
@@ -1909,37 +1898,37 @@ mod tests {
     }
 
     #[test]
-    fn test_key_get() {
+    fn test_get_set() {
         let mut xs = State::new().unwrap();
-        xs.interpret("{a: {b: {c: 3}}} a: b: c: .").unwrap();
-        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.interpret("{} x: .").unwrap();
-        assert_eq!(Ok(Cell::Nil), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("a: ."));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] a: ."));
+        xs.interpret("[11 22 33] 2 get").unwrap();
+        assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
+        xs.interpret("[11 22 33] -2 get").unwrap();
+        assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
+        xs.interpret("[1 2 3] 0 5 set 0 get").unwrap();
+        assert_eq!(Cell::from(5isize), xs.pop_data().unwrap());
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] 100 get"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] -100 get"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] key: get"));
     }
 
     #[test]
-    fn test_get_assoc() {
+    fn test_lookup() {
         let mut xs = State::new().unwrap();
-        xs.interpret("55 0 [11 22] assoc").unwrap();
-        let v = xs.pop_data().unwrap().into_vector().unwrap();
-        assert_eq!(Some(&Cell::Int(55)), v.get(0));
-        assert_eq!(Some(&Cell::Int(22)), v.get(1));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("55 2 [11 22] assoc"));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("2 [11 22] get"));
-        xs.interpret("1 [33 44] get").unwrap();
-        assert_eq!(Ok(Cell::Int(44)), xs.pop_data());
-        xs.interpret("3 \"a\" {\"a\" 1} assoc ").unwrap();
-        let m = xs.pop_data().unwrap().into_map().unwrap();
-        assert_eq!(
-            &(Cell::Str("a".to_string()), Cell::Int(3)),
-            m.first().unwrap()
-        );
-        xs.interpret("\"a\" {\"a\" 22} get").unwrap();
-        assert_eq!(Cell::Int(22), xs.pop_data().unwrap());
-        xs.interpret("1 {} get").unwrap();
-        assert_eq!(Cell::Nil, xs.pop_data().unwrap());
+        xs.interpret("[x: 1] x: lookup").unwrap();
+        assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
+        xs.interpret("[x: [y: [z: 10]]] x: y: z: lookup").unwrap();
+        assert_eq!(Cell::from(10isize), xs.pop_data().unwrap());
+        assert_eq!(Err(Xerr::NotFound), xs.interpret("[x: [y: [1 2 3]]] f: y: x: lookup"));
+    }
+
+    #[test]
+    fn test_assoc() {
+        let mut xs = State::new().unwrap();
+        xs.interpret("[] x: 1 assoc y: 2 assoc").unwrap();
+        assert_eq!(xvec![xkey![x], 1u32, xkey![y], 2u32], xs.pop_data().unwrap());
+        xs.interpret("[x: 1] x: 2 assoc x: lookup").unwrap();
+        assert_eq!(Xcell::from(2usize), xs.pop_data().unwrap());
+        xs.interpret("[x: 1 y: 3] x: 5 assoc x: lookup").unwrap();
     }
 
     #[test]
@@ -1965,7 +1954,7 @@ mod tests {
     #[test]
     fn test_immediate() {
         let mut xs = State::new().unwrap();
-        let res = xs.load(": f 0 [] get immediate ; f");
+        let res = xs.load(": f [] 0 get immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 
@@ -2037,30 +2026,21 @@ mod tests {
     fn test_rev() {
         let mut xs = State::new().unwrap();
         xs.interpret("[1 2 3] rev").unwrap();
-        let v = xs.pop_data().unwrap().into_vector().unwrap();
-        assert_eq!(Some(&Cell::Int(3)), v.get(0));
-        assert_eq!(Some(&Cell::Int(2)), v.get(1));
-        assert_eq!(Some(&Cell::Int(1)), v.get(2));
+        assert_eq!(xvec![3isize, 2isize, 1isize], xs.pop_data().unwrap());
     }
 
     #[test]
     fn test_sort() {
         let mut xs = State::new().unwrap();
         xs.interpret("[2 3 1] sort").unwrap();
-        let v = xs.pop_data().unwrap().into_vector().unwrap();
-        assert_eq!(Some(&Cell::Int(1)), v.get(0));
-        assert_eq!(Some(&Cell::Int(2)), v.get(1));
-        assert_eq!(Some(&Cell::Int(3)), v.get(2));
+        assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
     }
 
     #[test]
     fn test_sort_by_key() {
         let mut xs = State::new().unwrap();
-        xs.interpret("[[2] [3] [1]] 0 sort-by-key var x").unwrap();
-        xs.interpret("[ 3 0 do I x get 0 swap get loop ]").unwrap();
-        let v = xs.pop_data().unwrap().into_vector().unwrap();
-        assert_eq!(Some(&Cell::Int(1)), v.get(0));
-        assert_eq!(Some(&Cell::Int(2)), v.get(1));
-        assert_eq!(Some(&Cell::Int(3)), v.get(2));
+        xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
+        xs.interpret("[ 3 0 do x I get k: lookup loop ]").unwrap();
+        assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
     }
 }
