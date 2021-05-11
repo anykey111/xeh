@@ -50,7 +50,6 @@ enum Flow {
     CaseOf(usize),
     CaseEndOf(usize),
     Vec,
-    Map,
     Fun(FunctionFlow),
     Do { test_org: usize, jump_org: usize },
 }
@@ -58,7 +57,6 @@ enum Flow {
 #[derive(Debug, Clone)]
 pub enum Loop {
     VecBuilder { stack_ptr: usize },
-    MapBuilder { stack_ptr: usize },
     Do { start: Xint, end: Xint },
 }
 
@@ -507,8 +505,6 @@ impl State {
             Def("again", core_word_again),
             Def("[", core_word_vec_begin),
             Def("]", core_word_vec_end),
-            Def("{", core_word_map_begin),
-            Def("}", core_word_map_end),
             Def(":", core_word_def_begin),
             Def(";", core_word_def_end),
             Def("immediate", core_word_immediate),
@@ -1229,42 +1225,6 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_map_begin(xs: &mut State) -> Xresult {
-    xs.push_flow(Flow::Map)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_begin)))
-}
-
-fn core_word_map_end(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::Map => xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_end))),
-        _ => Err(Xerr::ControlFlowError),
-    }
-}
-
-fn map_builder_begin(xs: &mut State) -> Xresult {
-    let stack_ptr = xs.data_stack.len();
-    xs.push_loop(Loop::MapBuilder { stack_ptr })
-}
-
-fn map_builder_end(xs: &mut State) -> Xresult {
-    match xs.pop_loop()? {
-        Loop::MapBuilder { stack_ptr } => {
-            let top_ptr = xs.data_stack.len();
-            if top_ptr < stack_ptr || (top_ptr - stack_ptr) % 2 == 1 {
-                Err(Xerr::StackNotBalanced)
-            } else {
-                let mut m = Xmap::new();
-                for kv in xs.data_stack[stack_ptr..].chunks(2) {
-                    m.push_back_mut((kv[0].clone(), kv[1].clone()));
-                }
-                xs.dropn(top_ptr - stack_ptr)?;
-                xs.push_data(Cell::Map(m))
-            }
-        }
-        _ => Err(Xerr::ControlFlowError),
-    }
-}
-
 fn core_word_def_begin(xs: &mut State) -> Xresult {
     let name = match xs.next_token()? {
         Tok::Word(name) => name,
@@ -1529,7 +1489,6 @@ fn core_word_counter_k(xs: &mut State) -> Xresult {
 fn core_word_length(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(x) => xs.push_data(Cell::from(x.len())),
-        Cell::Map(x) => xs.push_data(Cell::from(x.len())),
         Cell::Str(x) => xs.push_data(Cell::from(x.len())),
         _ => Err(Xerr::TypeError),
     }
@@ -1847,8 +1806,6 @@ mod tests {
         let mut xs = State::new().unwrap();
         xs.interpret("[1 2 3] length").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.interpret("{\"a\" 1 \"b\" 1 } length").unwrap();
-        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         xs.interpret("\"12345\" length").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::new().unwrap();

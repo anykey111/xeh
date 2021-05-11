@@ -420,7 +420,6 @@ mod tests {
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstr"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("{} >bitstr"));
         xs.interpret("[\"1\" 0x32 0s0011_0011] >bitstr").unwrap();
         assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().into_bitstring().unwrap().to_bytes());
 
@@ -432,7 +431,6 @@ mod tests {
         xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
         assert_eq!(Err(Xerr::BinaryMatchError), xs.interpret("\"124\" ?"));
         xs.interpret("\"123\" ?").unwrap();
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("{} ?"));
         assert_eq!(Err(Xerr::OutOfRange), xs.interpret("[0] ?"));
     }
 

@@ -2,7 +2,6 @@ use crate::error::{Xerr, Xresult, Xresult1};
 use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
-pub type Xmap = rpds::Vector<(Cell, Cell)>;
 pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i128;
 pub type Xreal = f64;
@@ -49,7 +48,6 @@ pub enum Cell {
     Str(String),
     Key(String),
     Vector(Xvec),
-    Map(Xmap),
     Fun(Xfn),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
@@ -80,7 +78,6 @@ impl fmt::Debug for Cell {
             Cell::Str(s) => write!(f, "{}", s),
             Cell::Key(k) => write!(f, "{}:", k),
             Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
-            Cell::Map(v) => f.debug_list().entries(v.iter()).finish(),
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => if s.is_bytestring() {
                     f
@@ -116,7 +113,6 @@ impl PartialEq for Cell {
             (Cell::Str(a), Cell::Str(b)) => a == b,
             (Cell::Bitstr(a), Cell::Bitstr(b)) => a == b,
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
-            (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
             (Cell::Key(a), Cell::Key(b)) => a == b,
             _ => false,
@@ -171,13 +167,6 @@ impl Cell {
     pub fn into_vector(self) -> Result<Xvec, Xerr> {
         match self {
             Cell::Vector(x) => Ok(x),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-
-    pub fn into_map(self) -> Xresult1<Xmap> {
-        match self {
-            Cell::Map(x) => Ok(x),
             _ => Err(Xerr::TypeError),
         }
     }
