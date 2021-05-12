@@ -156,33 +156,37 @@ pub struct State {
 impl State {
     fn format_error(&mut self, err: &Xerr) -> String {
         use std::fmt::Write;
-        let mut msg = String::new();
+        let mut msg = String::with_capacity(1000);
+        writeln!(msg, "error: {}", err.name()).unwrap();
         match err {
-            Xerr::BitOutOfRange(ctx) => {
-                writeln!(msg, "error: bit out of range").unwrap();
-                writeln!(msg, " requested {} while only {} remain", ctx.1, ctx.0).unwrap();
+            Xerr::BitReadError(ctx) => {
+                writeln!(msg, " trying to read {} bits while only {} remain",
+                    ctx.1, ctx.0.len()).unwrap();
+            }
+            Xerr::BitSeekError(ctx) => {
+                writeln!(msg, " position {} is beyond of available limit {}",
+                    ctx.1, ctx.0.end()).unwrap();
             }
             Xerr::BitMatchError(ctx) => {
                 let src = &ctx.0;
                 let pat = &ctx.1;
-                let pos = ctx.2;
-                let at = src.start() + pos;
-                writeln!(msg, "error: bit match error at 0{:X},{} position 0{:X},{}",
-                    at / 8, at % 8, pos / 8, pos % 8).unwrap();
-                let (_, src_at) = src.split_at(pos).unwrap();
-                for (x, _) in src_at.iter8().take(8) {
+                let at = ctx.2;
+                writeln!(msg, " source bits are differ from pattern").unwrap();
+                write!(msg, " 0{:08x}.{} [", (pat.start() + at) / 8, (pat.start() + at) % 8).unwrap();
+                let (_, pat_diff) = pat.split_at(at).unwrap();
+                for (x, _) in pat_diff.iter8().take(8){
                     write!(msg, " {:02X}", x).unwrap();
                 }
-                writeln!(msg, "").unwrap();
-                let (_, pat_at) = pat.split_at(pos).unwrap();
-                for (x, _) in pat_at.iter8().take(8){
+                writeln!(msg, " ]").unwrap();
+                write!(msg, " 0{:08x}.{}: [", (src.start() + at) / 8, (src.start() + at) % 8).unwrap();
+                let (_, src_diff) = src.split_at(at).unwrap();
+                for (x, _) in src_diff.iter8().take(8) {
                     write!(msg, " {:02X}", x).unwrap();
                 }
-                writeln!(msg, "").unwrap();
+                writeln!(msg, " ]").unwrap();
+                
             }
-            _ => {
-                writeln!(msg, "error: {}", err.name()).unwrap();
-            }
+            _ => (),
         }
         msg
     }

@@ -69,8 +69,8 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     OK
 }
 
-fn out_of_range(s: &Bitstring, n: usize) -> Xerr {
-    Xerr::BitOutOfRange(Box::new((s.len(), n)))
+fn box_read_error(s: Bitstring, n: usize) -> Xerr {
+    Xerr::BitReadError(Box::new((s, n)))
 }
 
 fn find_bin(xs: &mut Xstate) -> Xresult {
@@ -90,8 +90,11 @@ fn find_bin(xs: &mut Xstate) -> Xresult {
 fn seek_bin(xs: &mut Xstate) -> Xresult {
     let pos = xs.pop_data()?.into_usize()?;
     let mut s = bitstr_input(xs)?.clone();
-    s.seek(pos).ok_or_else(|| out_of_range(&s, pos))?;
-    xs.set_var(xs.bs_input, Cell::Bitstr(s)).map(|_| ())
+    if s.seek(pos).is_none() {
+        Err(Xerr::BitSeekError(Box::new((s, pos))))
+    } else {
+        xs.set_var(xs.bs_input, Cell::Bitstr(s)).map(|_| ())
+    }
 }
 
 fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
@@ -128,7 +131,9 @@ fn bitstr_dump(xs: &mut Xstate) -> Xresult {
 pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
     let mut input = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
     let marker = input.start() / 8;
-    input.seek(r.start).ok_or_else(|| out_of_range(&input, r.start))?;
+    if input.seek(r.start).is_none() {
+        return Err(box_read_error(input, r.start));
+    }
     let part = input.read(r.len().min(input.len())).unwrap();
     let mut hex = String::new();
     let mut addr = part.start() / 8;
@@ -343,9 +348,11 @@ fn bin_read_unsigned(xs: &mut Xstate) -> Xresult {
 
 fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
     let mut rest = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
-    let s = rest.read(n as usize)
-        .ok_or_else(|| out_of_range(&rest, n))?;
-    Ok((s, rest))
+    if let Some(s) = rest.read(n as usize) {
+        Ok((s, rest))
+    } else {
+        Err(box_read_error(rest, n))
+    }
 }
 
 fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xbitstr)> {
@@ -441,7 +448,7 @@ mod tests {
         };
         xs.interpret("\"123\" ?").unwrap();
         match xs.interpret("[0] ?") {
-            Err(Xerr::BitOutOfRange(ctx)) => assert_eq!((0, 8), *ctx),
+            Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
             other => panic!("{:?}", other),
         }
     }
@@ -513,7 +520,7 @@ mod tests {
         let mut xs = Xstate::new().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![100, 200])).unwrap();
         match xs.interpret("100 seek") {
-            Err(Xerr::BitOutOfRange(ctx)) => assert_eq!((16, 100), *ctx),
+            Err(Xerr::BitSeekError(ctx)) => assert_eq!(100, ctx.1),
             other => panic!("{:?}", other),
         }
         assert_eq!(Err(Xerr::TypeError), xs.interpret("[] seek"));
