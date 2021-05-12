@@ -154,8 +154,37 @@ pub struct State {
 }
 
 impl State {
-    pub fn error_context(&mut self, err: &Xerr) -> String {
-        let mut error_text = err.message();
+    fn format_error(&mut self, err: &Xerr) -> String {
+        use std::fmt::Write;
+        let mut msg = String::new();
+        match err {
+            Xerr::BitMatchError(ctx) => {
+                let src = &ctx.0;
+                let pat = &ctx.1;
+                let pos = ctx.2;
+                let at = src.start() + pos;
+                writeln!(msg, "error: bit match error at 0{:X},{} position 0{:X},{}",
+                    at / 8, at % 8, pos / 8, pos % 8).unwrap();
+                let (_, src_at) = src.split_at(pos).unwrap();
+                for (x, _) in src_at.iter8().take(8) {
+                    write!(msg, " {:02X}", x).unwrap();
+                }
+                writeln!(msg, "").unwrap();
+                let (_, pat_at) = pat.split_at(pos).unwrap();
+                for (x, _) in pat_at.iter8().take(8){
+                    write!(msg, " {:02X}", x).unwrap();
+                }
+                writeln!(msg, "").unwrap();
+            }
+            _ => {
+                writeln!(msg, "error: {}", err.name()).unwrap();
+            }
+        }
+        msg
+    }
+
+    pub fn pretty_error(&mut self, err: &Xerr) -> String {
+        let mut error_text = self.format_error(err);
         if self.ctx.mode == ContextMode::Load {
             let lex = self.ctx.source.as_ref().unwrap();
             error_text.push_str(&self.debug_map.format_lex_location(lex));
@@ -226,7 +255,7 @@ impl State {
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
-            let errstr = self.error_context(e);
+            let errstr = self.pretty_error(e);
             self.log_error(errstr);
             while self.nested.len() > depth {
                 self.context_close()?;
@@ -245,7 +274,7 @@ impl State {
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
-            let msg = self.error_context(e);
+            let msg = self.pretty_error(e);
             self.log_error(msg);
             while self.nested.len() > depth {
                 self.context_close()?;

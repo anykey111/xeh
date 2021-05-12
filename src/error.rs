@@ -25,7 +25,7 @@ pub enum Xerr {
     InternalError,
     // bitstring errors
     OutOfRange,
-    BitMatchError(Box<(Xbitstr, Xbitstr)>),
+    BitMatchError(Box<(Xbitstr, Xbitstr, usize)>),
     UnalignedBitstr,
     // return to interpreter loop
     DebugBreak,
@@ -61,41 +61,13 @@ impl Xerr {
         Xerr::DebugBreak => "DebugBreak",
         }
     }
-
-    pub fn message(&self) -> String {
-        use std::fmt::Write;
-        let mut msg = String::new();
-        match self {
-            Xerr::BitMatchError(ctx) => {
-                let src = &ctx.0;
-                let pat = &ctx.1;
-                let pat_len = pat.len() / 8;
-                let n = pat_len.min(16);
-                writeln!(msg, "error: {} at offset {}", self.name(), src.start()).unwrap();
-                write!(msg, " found  [").unwrap();
-                for (x, _) in src.iter8().take(n) {
-                    write!(msg, " {:02X}", x).unwrap();
-                }
-                writeln!(msg, " ]").unwrap();
-                write!(msg, " expect [").unwrap();
-                for (x, _) in  pat.iter8().take(n){
-                    write!(msg, " {:02X}", x).unwrap();
-                }
-                writeln!(msg, " ]").unwrap();
-            }
-            e => {
-                writeln!(msg, "error: {}", self.name()).unwrap();
-            }
-        }
-        msg
-    }
 }
 
 use std::fmt;
 
 impl fmt::Debug for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{}", self.message()))
+        f.write_fmt(format_args!("{}", self.name()))
     }
 }
 

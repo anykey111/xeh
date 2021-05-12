@@ -297,8 +297,8 @@ fn bin_match(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let pat = bitstring_from(val)?;
     let (s, rest) = read_bitstring(xs, pat.len())?;
-    if s != pat {
-        let err = Box::new((s, pat));
+    if let Err(pos) = s.match_with(&pat) {
+        let err = Box::new((s, pat, pos));
         return Err(Xerr::BitMatchError(err));
     }
     set_last_chunk(xs, s)?;
@@ -430,7 +430,10 @@ mod tests {
     fn test_bitstring_match() {
         let mut xs = Xstate::new().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
-        assert_eq!(Err(Xerr::BinaryMatchError), xs.interpret("\"124\" ?"));
+        match xs.interpret("\"124\" ?") {
+            Err(Xerr::BitMatchError{..}) => (),
+            other => panic!("{:?}", other),
+        };
         xs.interpret("\"123\" ?").unwrap();
         assert_eq!(Err(Xerr::OutOfRange), xs.interpret("[0] ?"));
     }

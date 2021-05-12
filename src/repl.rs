@@ -13,14 +13,14 @@ fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
         if let Err(e) = xs.next() {
-            eprintln!("{}", xs.error_context(&e));
+            eprintln!("{}", xs.pretty_error(&e));
             eprintln!("{}", format_opcode(xs, xs.ip()));
         } else {
             eprintln!("{}", xs.current_line());
         }
     } else if cmd == ".rnext" {
         if let Err(e) = xs.rnext() {
-            eprintln!("{}", xs.error_context(&e));
+            eprintln!("{}", xs.pretty_error(&e));
             eprintln!("{}", format_opcode(xs, xs.ip()));
         } else {
             eprintln!("{}", xs.current_line());
@@ -120,13 +120,13 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if !args.sources.is_empty() {
         result = xs.run();
         if let Err(ref e) = result {
-            eprintln!("{}", e.message());
+            eprintln!("{}", xs.pretty_error(e));
         }
     }
     if let Some(s) = args.eval {
         if result.is_ok() {
             if let Err(e) = xs.interpret(&s) {
-                eprintln!("{}", e.message());
+                eprintln!("{}", xs.pretty_error(&e));
             }
         }
     }

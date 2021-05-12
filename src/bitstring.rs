@@ -364,19 +364,31 @@ impl Bitstring {
         }
         s
     }
+
+    pub fn match_with(&self, other: &Bitstring) -> Result<(), usize> {
+        if self.len() != other.len() {
+            Err(self.len().min(other.len()))
+        } else if self.is_bytestring() && other.is_bytestring() {
+            let a = self.slice();
+            let b = other.slice();
+            if let Some(pos) = a.iter().zip(b.iter()).position(|(a, b)| a != b) {
+                Err(pos * 8)
+            } else {
+                Ok(())
+            }
+        } else {
+            if let Some(pos) = self.iter8().zip(other.iter8()).position(|(a, b)| a.0 != b.0) {
+                Err(pos * 8)
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 impl PartialEq for Bitstring {
     fn eq(&self, other: &Bitstring) -> bool {
-        if self.len() != other.len() {
-            false
-        } else if self.is_bytestring() && other.is_bytestring() {
-            let a = self.slice();
-            let b = other.slice();
-            a.iter().zip(b).all(|x| x.0 == x.1)
-        } else {
-            self.bits().zip(other.bits()).all(|x| x.0 == x.1)
-        }
+        self.match_with(other).is_ok()
     }
 }
 
