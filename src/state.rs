@@ -158,6 +158,10 @@ impl State {
         use std::fmt::Write;
         let mut msg = String::new();
         match err {
+            Xerr::BitOutOfRange(ctx) => {
+                writeln!(msg, "error: bit out of range").unwrap();
+                writeln!(msg, " requested {} while only {} remain", ctx.1, ctx.0).unwrap();
+            }
             Xerr::BitMatchError(ctx) => {
                 let src = &ctx.0;
                 let pat = &ctx.1;

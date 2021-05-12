@@ -24,7 +24,7 @@ pub enum Xerr {
     DebugAssertion,
     InternalError,
     // bitstring errors
-    OutOfRange,
+    BitOutOfRange(Box<(usize, usize)>),
     BitMatchError(Box<(Xbitstr, Xbitstr, usize)>),
     UnalignedBitstr,
     // return to interpreter loop
@@ -55,7 +55,7 @@ impl Xerr {
         Xerr::OutOfBounds => "OutOfBounds",
         Xerr::DebugAssertion => "DebugAssertion",
         Xerr::InternalError => "InternalError",
-        Xerr::OutOfRange => "OutOfRange",
+        Xerr::BitOutOfRange{..} => "BitOutOfRange",
         Xerr::BitMatchError{..} => "BitMatchError",
         Xerr::UnalignedBitstr => "UnalignedBitstr",
         Xerr::DebugBreak => "DebugBreak",
