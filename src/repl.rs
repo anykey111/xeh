@@ -116,19 +116,18 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     for filename in args.sources.iter() {
         xs.load_source(filename)?;
     }
-    let mut result = OK;
     if !args.sources.is_empty() {
-        result = xs.run();
-        if let Err(ref e) = result {
+        let result = xs.run();
+        if let Err(e) = &result {
             eprintln!("{}", xs.pretty_error(e));
+            return result;
         }
     }
     if let Some(s) = args.eval {
-        if result.is_ok() {
-            if let Err(e) = xs.interpret(&s) {
-                eprintln!("{}", xs.pretty_error(&e));
-            }
-        }
+        xs.interpret(&s)
+    } else if args.sources.is_empty() {
+        crate::repl::run(xs)
+    } else {
+        OK
     }
-    crate::repl::run(xs)
 }
