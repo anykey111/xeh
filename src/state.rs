@@ -171,20 +171,19 @@ impl State {
                 let src = &ctx.0;
                 let pat = &ctx.1;
                 let at = ctx.2;
-                writeln!(msg, " source bits are differ from pattern").unwrap();
-                write!(msg, " 0{:08x}.{} [", (pat.start() + at) / 8, (pat.start() + at) % 8).unwrap();
-                let (_, pat_diff) = pat.split_at(at).unwrap();
-                for (x, _) in pat_diff.iter8().take(8){
-                    write!(msg, " {:02X}", x).unwrap();
-                }
-                writeln!(msg, " ]").unwrap();
-                write!(msg, " 0{:08x}.{}: [", (src.start() + at) / 8, (src.start() + at) % 8).unwrap();
+                writeln!(msg, " source bits are differ from pattern at offset {}", at).unwrap();
+                write!(msg, " [").unwrap();
                 let (_, src_diff) = src.split_at(at).unwrap();
                 for (x, _) in src_diff.iter8().take(8) {
                     write!(msg, " {:02X}", x).unwrap();
                 }
-                writeln!(msg, " ]").unwrap();
-                
+                writeln!(msg, " ] source at {}", src.start() + at).unwrap();
+                write!(msg, " [").unwrap();
+                let (_, pat_diff) = pat.split_at(at).unwrap();
+                for (x, _) in pat_diff.iter8().take(8){
+                    write!(msg, " {:02X}", x).unwrap();
+                }
+                writeln!(msg, " ] pattern at {}", pat.start() + at).unwrap();
             }
             _ => (),
         }
