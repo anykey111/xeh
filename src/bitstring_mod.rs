@@ -9,7 +9,6 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("bytes", bin_read_bytes)?;
     xs.defword("signed", bin_read_signed)?;
     xs.defword("unsigned", bin_read_unsigned)?;
-    xs.defword("bitstr", |xs| xs.push_data(Cell::Bitstr(Xbitstr::new())))?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-invert", bitstring_invert)?;
     xs.defword(">bitstr", to_bitstring)?;
