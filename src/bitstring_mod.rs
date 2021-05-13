@@ -180,7 +180,7 @@ fn write_dump_addr(buf: &mut String, pos: usize) {
 }
 
 fn bitstring_open(xs: &mut Xstate) -> Xresult {
-    let new_bin = xs.pop_data()?.into_bitstring()?;
+    let new_bin = bitstring_from(xs.pop_data()?)?;
     let old_bin = xs.get_var(xs.bs_input)?.clone();
     let flow = match xs.get_var(xs.bs_flow)? {
         Cell::Vector(v) => v.push_back(old_bin),
@@ -499,8 +499,8 @@ mod tests {
         let mut xs = Xstate::new().unwrap();
         xs.interpret(
             "
-        [1 5 7] >bitstr bitstr-open u8
-        [3] >bitstr bitstr-open u8
+        [1 5 7] bitstr-open u8
+        [3] bitstr-open u8
         bitstr-close
         u8",
         )
@@ -571,7 +571,7 @@ mod tests {
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::new().unwrap();
-        xs.interpret("[33 55 77] >bitstr bitstr-open [77] find").unwrap();
+        xs.interpret("[33 55 77] bitstr-open [77] find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
         xs.interpret("[55 77] find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
@@ -580,7 +580,7 @@ mod tests {
         xs.interpret("[56] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
         assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [56] find"));
-        xs.interpret("[0x31 0x32 0x33] >bitstr bitstr-open \"23\" find").unwrap();
+        xs.interpret("[0x31 0x32 0x33] bitstr-open \"23\" find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 }
