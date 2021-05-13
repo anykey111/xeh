@@ -130,39 +130,54 @@ fn bitstr_dump(xs: &mut Xstate) -> Xresult {
 
 pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
     let mut input = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
-    let marker = input.start() / 8;
+    let marker = input.start();
     if input.seek(r.start).is_none() {
-        return Err(box_read_error(input, r.start));
+        return Err(Xerr::BitSeekError(Box::new((input, r.start))));
     }
     let part = input.read(r.len().min(input.len())).unwrap();
-    let mut hex = String::new();
-    let mut addr = part.start() / 8;
-    for chunk in part.slice().chunks(ncols) {
-        write!(&mut hex, "0{:02x}:", addr).unwrap();
-        for i in 0..ncols {
-            hex.push(if addr + i == marker { '*' } else { ' ' });
-            if i < chunk.len() {
-                write!(&mut hex, "{:02x}", chunk[i]).unwrap();
+    let mut buf = String::new();
+    let mut pos = part.start();
+    let mut hex  = String::new();
+    let mut ascii  = String::new();
+    let mut it = part.iter8();
+    while pos < part.end() {
+        write_dump_addr(&mut buf, pos);
+        buf.push(':');
+        for _ in 0..ncols {
+            if let Some((x, nbits)) = it.next() {
+                buf.push(if pos <= marker && marker <= (pos + nbits as usize) { '*' } else { ' ' });
+                write!(buf, "{:02x}", x).unwrap();
+                pos += nbits as usize;
+                let c = std::char::from_u32(x as u32).unwrap();
+                if c.is_ascii_graphic() {
+                    ascii.push(c);
+                } else {
+                    ascii.push('.');
+                }
             } else {
                 hex.push_str("  ");
             }
         }
-        hex.push_str(" | ");
-        // print ascii part
-        for x in chunk {
-            let c = std::char::from_u32(*x as u32).unwrap();
-            if c.is_ascii_graphic() {
-                hex.push(c);
-            } else {
-                hex.push('.');
-            }
-        }
-        hex.push('\n');
-        addr += chunk.len();
-        xs.print(&hex);
+        buf.push_str(&hex);
+        buf.push_str(" | ");
+        buf.push_str(&ascii);
+        buf.push('\n');
+        xs.print(&buf);
+        buf.clear();
         hex.clear();
+        ascii.clear();
     }
     OK
+}
+
+fn write_dump_addr(buf: &mut String, pos: usize) {
+    let n = pos % 8;
+    if n == 0 {
+        // address is aligned to byte boudary
+        write!(buf, "0{:02x}", pos / 8).unwrap();
+    } else {
+        write!(buf, "0{:02x}.{}", pos / 8, n).unwrap();
+    }
 }
 
 fn bitstring_open(xs: &mut Xstate) -> Xresult {
