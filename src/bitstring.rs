@@ -299,8 +299,10 @@ impl Bitstring {
         }
     }
 
-    pub fn detach(&self) -> Bitstring {
-        if self.len() == 0 {
+    pub fn detach(self) -> Bitstring {
+        if Rc::strong_count(&self.data) == 1 {
+            self
+        } else if self.len() == 0 {
             Bitstring::new()
         } else {
             let end = self.len();
@@ -314,9 +316,12 @@ impl Bitstring {
         }
     }
 
+    fn data_mut(&mut self) -> &mut Vec<u8> {
+        Rc::make_mut(&mut self.data).to_mut()
+    }
+
     fn append_bytes_mut(mut self, tail: &Bitstring) -> Bitstring {
-        let data = Rc::make_mut(&mut self.data).to_mut();
-        data.extend_from_slice(tail.slice());
+        self.data_mut().extend_from_slice(tail.slice());
         let start = self.range.start;
         let end = self.range.end + tail.len();
         self.range = BitstringRange::from(start..end);
@@ -329,7 +334,7 @@ impl Bitstring {
         }
         let mut pos = self.range.end; 
         let new_len = upper_bound_index(pos + tail.len());
-        let data = Rc::make_mut(&mut self.data).to_mut();
+        let data = self.data_mut();
         data.resize_with(new_len, || 0);
         for x in tail.bits() {
             let i = pos / 8;
@@ -342,22 +347,18 @@ impl Bitstring {
     }
 
     pub fn append(self, tail: &Bitstring) -> Bitstring {
-        if Rc::strong_count(&self.data) == 1 {
-            self.append_bits_mut(tail)
-        } else {
-            let tmp = self.detach();
-            tmp.append_bits_mut(tail)
-        }
+        self.detach().append_bits_mut(tail)
+    }
+
+    pub fn insert(self, bit_index: usize, s: &Bitstring) -> Option<Bitstring> {
+        let (left, right) = self.split_at(bit_index)?;
+        Some(left.detach().append_bits_mut(&s).append_bits_mut(&right))
     }
 
     pub fn invert(self) -> Bitstring {
-        let mut s = if Rc::strong_count(&self.data) == 1 {
-            self
-        } else {
-            self.detach()
-        };
-        let r = s.range.clone();
-        let data = Rc::make_mut(&mut s.data).to_mut();
+        let r = self.range.clone();
+        let mut s = self.detach();
+        let data = s.data_mut();
         for pos in r {
             let i = pos / 8;
             data[i] ^= 1 << (7 - (pos % 8));
@@ -587,6 +588,19 @@ mod tests {
             scba_bits,
             vec![1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn test_insert() {
+        let f = Bitstring::from_str_bin("1111").unwrap();
+        let res  = Bitstring::from(vec![0xaa, 0xbb])
+                    .insert(4, &f).unwrap()
+                    .insert(16, &f).unwrap();
+        assert_eq!(vec![0xaf, 0xab, 0xfb], res.to_bytes());
+        let z5 = Bitstring::from_str_bin("00000").unwrap();
+        let res = Bitstring::from_str_bin("111111").unwrap()
+            .insert(3, &z5).unwrap();
+        assert_eq!(Bitstring::from_str_bin("11100000111").unwrap(), res);
     }
 
     #[test]
