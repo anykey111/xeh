@@ -164,9 +164,10 @@ impl Lex {
                 Some('x') => radix = 16,
                 Some('b') => radix = 2,
                 Some('s') => {
+                    use crate::bitstring::Byteorder;
                     let mut tmp = Xbitstr::new();
-                    let s0 = Xbitstr::from_u64(0, 1, LITTLE);
-                    let s1 = Xbitstr::from_u64(1, 1, BIG);
+                    let s0 = Xbitstr::from_u64(0, 1, Byteorder::LE);
+                    let s1 = Xbitstr::from_u64(1, 1, Byteorder::BE);
                     while let Some(c) = it.next() {
                         match c {
                             '_' => continue,
