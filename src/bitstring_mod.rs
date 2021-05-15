@@ -4,7 +4,24 @@ use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
 
-pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
+#[derive(Default)]
+pub struct BitstrMod {
+    big_endian: Xref,
+    dump_start: Xref,
+    input: Xref,
+    last_read: Xref,
+    input_deck: Xref,
+}
+
+pub fn load(xs: &mut Xstate) -> Xresult {
+    let mut m = BitstrMod::default();
+    m.big_endian = xs.defvar("big-endian?", ZERO)?;
+    m.dump_start = xs.defvar("bitstr/dump-start", Cell::Int(0))?;
+    m.input = xs.defvar("bitstr/input", Cell::Bitstr(Bitstring::new()))?;
+    m.last_read = xs.defvar("bitstr/last-read", Cell::Bitstr(Bitstring::new()))?;
+    m.input_deck = xs.defvar("bitstr/input-deck", Cell::Vector(Xvec::new()))?;
+    xs.bitstr_mod = m;
+
     xs.defword("bits", bin_read_bitstring)?;
     xs.defword("bytes", bin_read_bytes)?;
     xs.defword("signed", bin_read_signed)?;
@@ -60,11 +77,6 @@ pub fn bitstring_load(xs: &mut Xstate) -> Xresult {
     xs.defword("B*", bit)?;
     xs.defword("K*", kibit)?;
     xs.defword("M*", mibit)?;
-    xs.dump_start = xs.defvar("*dump-start*", Cell::Int(0))?;
-    xs.bs_isbig = xs.defvar("big-endian?", ZERO)?;
-    xs.bs_input = xs.defvar("*bitstr-input*", Cell::Bitstr(Bitstring::new()))?;
-    xs.bs_chunk = xs.defvar("*bitstr-chunk*", Cell::Bitstr(Bitstring::new()))?;
-    xs.bs_flow = xs.defvar("*bitstr-flow*", Cell::Vector(Xvec::new()))?;
     OK
 }
 
@@ -92,12 +104,12 @@ fn seek_bin(xs: &mut Xstate) -> Xresult {
     if s.seek(pos).is_none() {
         Err(Xerr::BitSeekError(Box::new((s, pos))))
     } else {
-        xs.set_var(xs.bs_input, Cell::Bitstr(s)).map(|_| ())
+        xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(s)).map(|_| ())
     }
 }
 
 fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
-    match xs.get_var(xs.bs_input)? {
+    match xs.get_var(xs.bitstr_mod.input)? {
         Cell::Bitstr(bs) => Ok(bs),
         _ => Err(Xerr::TypeError),
     }
@@ -113,22 +125,37 @@ fn remain_bin(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::Int(n))
 }
 
+fn dump_start(xs: &mut Xstate) -> Xresult1<usize> {
+    xs.get_var(xs.bitstr_mod.dump_start)?.to_usize()
+}
+
+fn dump_start_move(xs: &mut Xstate, pos: usize) -> Xresult {
+    xs.set_var(xs.bitstr_mod.dump_start, Cell::from(pos))?;
+    OK
+}
+
 fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
     let start = xs.pop_data()?.into_usize()?;
     let end = start + 16 * 8 * 8;
     bitstr_dump_range(xs, start..end, 8)?;
-    xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
+    dump_start_move(xs, end)
 }
 
 fn bitstr_dump(xs: &mut Xstate) -> Xresult {
-    let start = xs.get_var(xs.dump_start)?.to_usize()?;
+    let start = dump_start(xs)?;
     let end = start + 16 * 8 * 8;
     bitstr_dump_range(xs, start..end, 8)?;
-    xs.set_var(xs.dump_start, Cell::from(end)).map(|_| ())
+    dump_start_move(xs, end)
 }
 
-pub fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
-    let mut input = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+pub fn print_dump(xs: &mut Xstate, rows: usize, ncols: usize) -> Xresult {
+    let start = bitstr_input(xs)?.start();
+    let end = start + (rows * ncols * 8);
+    bitstr_dump_range(xs, start..end, ncols)
+}
+
+fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
+    let mut input = bitstr_input(xs)?.clone();
     let marker = input.start();
     if input.seek(r.start).is_none() {
         return Err(Xerr::BitSeekError(Box::new((input, r.start))));
@@ -181,25 +208,23 @@ fn write_dump_addr(buf: &mut String, pos: usize) {
 
 fn bitstring_open(xs: &mut Xstate) -> Xresult {
     let new_bin = bitstring_from(xs.pop_data()?)?;
-    let old_bin = xs.get_var(xs.bs_input)?.clone();
-    let flow = match xs.get_var(xs.bs_flow)? {
-        Cell::Vector(v) => v.push_back(old_bin),
+    let old_bin = bitstr_input(xs)?.clone();
+    let deck = match xs.get_var(xs.bitstr_mod.input_deck)? {
+        Cell::Vector(v) => v.push_back(Cell::Bitstr(old_bin)),
         _ => return Err(Xerr::TypeError),
     };
-    xs.set_var(xs.bs_flow, Cell::Vector(flow))?;
-    xs.set_var(xs.bs_input, Cell::Bitstr(new_bin))?;
+    xs.set_var(xs.bitstr_mod.input_deck, Cell::Vector(deck))?;
+    xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(new_bin))?;
     OK
 }
 
 fn bitstring_close(xs: &mut Xstate) -> Xresult {
-    let flow = xs.get_var(xs.bs_flow)?.clone().into_vector()?;
-    let old_bin = flow
-        .last()
-        .ok_or(Xerr::ControlFlowError)?
-        .clone()
-        .into_bitstring()?;
-    xs.set_var(xs.bs_flow, Cell::Vector(flow.drop_last().unwrap()))?;
-    xs.set_var(xs.bs_input, Cell::Bitstr(old_bin))?;
+    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.clone().into_vector()?;
+    if let Some(bin) = deck.last().cloned() {
+        deck.drop_last_mut();
+        xs.set_var(xs.bitstr_mod.input_deck, Cell::Vector(deck))?;
+        xs.set_var(xs.bitstr_mod.input, bin)?;
+    }
     OK
 }
 
@@ -296,20 +321,20 @@ fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
 }
 
 fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
-    xs.set_var(xs.bs_input, Cell::Bitstr(rest)).map(|_| ())
+    xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(rest)).map(|_| ())
 }
 
 fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
-    xs.set_var(xs.bs_chunk, Cell::Bitstr(s)).map(|_| ())
+    xs.set_var(xs.bitstr_mod.last_read, Cell::Bitstr(s)).map(|_| ())
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
-    xs.set_var(xs.bs_isbig, if bo == Byteorder::LE { ZERO } else { ONE })
+    xs.set_var(xs.bitstr_mod.big_endian, if bo == Byteorder::LE { ZERO } else { ONE })
         .map(|_| ())
 }
 
 fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
-    if xs.get_var(xs.bs_isbig)? == &ZERO {
+    if xs.get_var(xs.bitstr_mod.big_endian)? == &ZERO {
         Ok(Byteorder::LE)
     } else {
         Ok(Byteorder::BE)
@@ -361,7 +386,7 @@ fn bin_read_unsigned(xs: &mut Xstate) -> Xresult {
 }
 
 fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
-    let mut rest = xs.get_var(xs.bs_input)?.clone().into_bitstring()?;
+    let mut rest = bitstr_input(xs)?.clone();
     if let Some(s) = rest.read(n as usize) {
         Ok((s, rest))
     } else {
@@ -473,7 +498,7 @@ mod tests {
         xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
         xs.interpret("8 unsigned").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-        xs.interpret("*bitstr-chunk*").unwrap();
+        xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(8, s.len());
         assert_eq!(BitstringFormat::Unsigned(Byteorder::LE), s.format());
@@ -488,7 +513,7 @@ mod tests {
         assert_eq!(2, s.len());
         xs.interpret("big-endian 2 signed").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        xs.interpret("*bitstr-chunk*").unwrap();
+        xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
         assert_eq!(BitstringFormat::Signed(Byteorder::BE), s.format());
@@ -508,13 +533,17 @@ mod tests {
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("*bitstr-input*").unwrap();
+        xs.interpret("bitstr/input").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(vec![7], s.to_bytes());
-        xs.interpret("bitstr-close *bitstr-input*").unwrap();
+        xs.interpret("bitstr-close bitstr/input").unwrap();
         let s2 = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(0, s2.len());
-        assert_eq!(Err(Xerr::ControlFlowError), xs.interpret("bitstr-close"));
+        assert_eq!(OK, xs.interpret("bitstr-close"));
+        assert_eq!(OK, xs.interpret("bitstr-close"));
+        xs.interpret("bitstr/input").unwrap();
+        let empty = xs.pop_data().unwrap().into_bitstring().unwrap(); 
+        assert_eq!(0, empty.len());
     }
 
     #[test]

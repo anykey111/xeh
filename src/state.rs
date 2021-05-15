@@ -4,6 +4,7 @@ use crate::debug::*;
 use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
+use crate::bitstring_mod::BitstrMod;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
@@ -141,16 +142,11 @@ pub struct State {
     state_rec: Option<Vec<StateChange>>,
     console: Option<String>,
     pub(crate) about_to_stop: bool,
-    // current input binary
-    pub(crate) bs_input: Xref,
-    pub(crate) bs_isbig: Xref,
-    pub(crate) bs_chunk: Xref,
-    pub(crate) bs_flow: Xref,
+    pub(crate) bitstr_mod: BitstrMod,
     // default base
     pub(crate) fmt_base: Xref,
     pub(crate) fmt_prefix: Xref,
-    // dump state
-    pub(crate) dump_start: Xref,
+    
 }
 
 impl State {
@@ -226,11 +222,8 @@ impl State {
         self.console.as_mut()
     }
 
-    pub fn print_dump(&mut self, rows: usize, cols: usize) -> Xresult {
-        let bs = self.get_var(self.bs_input)?.clone().into_bitstring()?;
-        let start = bs.start() - (bs.start() % (cols * 8));
-        let end = start + rows * cols * 8;
-        crate::bitstring_mod::bitstr_dump_range(self, start..end, cols)
+    pub fn print_dump(&mut self, nrows: usize, ncols: usize) -> Xresult {
+        crate::bitstring_mod::print_dump(self, nrows, ncols)
     }
 
     pub fn current_line(&self) -> String {
@@ -240,7 +233,8 @@ impl State {
     }
 
     pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
-        self.set_var(self.bs_input, Cell::Bitstr(bin)).map(|_| ())
+        self.push_data(Cell::Bitstr(bin))?;
+        self.eval_word("bitstr-open")
     }
 
     pub fn load_source(&mut self, path: &str) -> Xresult {
@@ -440,7 +434,7 @@ impl State {
         xs.fmt_base = xs.defvar("BASE", Cell::Int(10))?;
         xs.fmt_prefix = xs.defvar("*PREFIX*", ONE)?;
         xs.load_core()?;
-        crate::bitstring_mod::bitstring_load(&mut xs)?;
+        crate::bitstring_mod::load(&mut xs)?;
         Ok(xs)
     }
 
@@ -708,6 +702,20 @@ impl State {
             self.next()?;
         }
         OK
+    }
+
+    pub fn eval_word(&mut self, name: &str) -> Xresult {
+        let e = self
+            .dict_find(name)
+            .and_then(|idx| self.dict_at(idx))
+            .cloned()
+            .ok_or(Xerr::UnknownWord)?;
+        match e {
+            Entry::Variable{..} => Err(Xerr::InvalidAddress),
+            Entry::Function { xf, .. } => self.call_fn(xf),
+            Entry::Deferred => Err(Xerr::UnknownWord),
+        }
+
     }
 
     pub fn next(&mut self) -> Xresult {
