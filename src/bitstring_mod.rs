@@ -167,7 +167,7 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
     let mut ascii  = String::new();
     let mut it = part.iter8();
     while pos < part.end() {
-        write_dump_addr(&mut buf, pos);
+        write_dump_position(&mut buf, pos, part.end());
         buf.push(':');
         for _ in 0..ncols {
             if let Some((x, nbits)) = it.next() {
@@ -195,14 +195,21 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
     }
     OK
 }
-
-fn write_dump_addr(buf: &mut String, pos: usize) {
-    let n = pos % 8;
-    if n == 0 {
-        // address is aligned to byte boudary
-        write!(buf, "0{:02x}", pos / 8).unwrap();
+    
+fn write_dump_position(buf: &mut String, start: usize, end: usize) {
+    let pos = start / 8;
+    let max = end / 8;
+    if max <= 0xff {
+        write!(buf, "{:02x}", pos).unwrap();
+    } else if max <= 0xffff {
+        write!(buf, "{:04x}", pos).unwrap();
+    } else if max <= 0xffffff {
+        write!(buf, "{:06x}", pos).unwrap();
     } else {
-        write!(buf, "0{:02x}.{}", pos / 8, n).unwrap();
+        write!(buf, "{:08x}", pos).unwrap();
+    }
+    if start % 8 > 0 {
+        write!(buf, ".{}", start % 8).unwrap();
     }
 }
 
