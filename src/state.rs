@@ -105,9 +105,8 @@ impl Frame {
 }
 
 #[derive(Debug)]
-pub enum ReverseNext {
+pub enum ReverseStep {
     SetIp(usize),
-    DecrementIp,
     PushData(Cell),
     PopData,
     SwapData,
@@ -117,10 +116,6 @@ pub enum ReverseNext {
     PushReturn(Frame),
     PopLoop,
     PushLoop(Loop),
-}
-
-fn log_reverse_next(log: &mut Vec<ReverseNext>, x: ReverseNext) {
-    log.push(x);
 }
 
 #[derive(Default)]
@@ -135,7 +130,7 @@ pub struct State {
     loops: Vec<Loop>,
     ctx: Context,
     nested: Vec<Context>,
-    reverse_log: Option<Vec<ReverseNext>>,
+    reverse_log: Option<Vec<ReverseStep>>,
     console: Option<String>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrMod,
@@ -802,43 +797,51 @@ impl State {
     }
 
     pub fn rnext(&mut self) -> Xresult {
-        while let Some(change) = self.reverse_log.as_mut().and_then(|rec| rec.pop()) {
-            let ready = match &change { 
-                ReverseNext::DecrementIp | ReverseNext::SetIp{..} => 
-                    // apply two changes if we start from end of the program
-                    // last one point to nothing (ip == code.len())
-                    self.ip() < self.code.len(),
-                _ => false
-            };
-            self.reverse_change(change)?;
-            if ready {
-                break;
+        // Every instruction may have arbitrary numer of state changes,
+        // so rollback aleast one. Then stop on first SetIp.
+        let pop = |xs: &mut State| xs.reverse_log.as_mut().and_then(|log| log.pop());
+        if let Some(r) = pop(self) {
+            self.reverse_changes(r)?;
+        }
+        while let Some(step) = pop(self) {
+            match &step {
+                ReverseStep::SetIp{..} => {
+                    // this is anohter instruction, queue back to log
+                    self.add_reverse_step(step);
+                    break;
+                },
+                _ => self.reverse_changes(step)?
             }
         }
         OK
     }
     
-    fn reverse_change(&mut self, change: ReverseNext) -> Xresult {
-        match change {
-            ReverseNext::DecrementIp => {
-                if self.ctx.ip > 0 {
-                    self.ctx.ip -= 1;
-                }
-            }
-            ReverseNext::SetIp(ip) => {
+    fn reverse_debugging(&self) -> bool {
+        self.reverse_log.is_some()
+    }
+
+    fn add_reverse_step(&mut self, step: ReverseStep) {
+        if let Some(log) = self.reverse_log.as_mut() {
+            log.push(step);
+        }
+    }
+
+    fn reverse_changes(&mut self, r: ReverseStep) -> Xresult {
+        match r {
+            ReverseStep::SetIp(ip) => {
                 self.ctx.ip = ip;
             }
-            ReverseNext::PopData => {
+            ReverseStep::PopData => {
                 if self.data_stack.len() > self.ctx.ds_len {
                     self.data_stack.pop();
                 } else {
                     return Err(Xerr::StackUnderflow)
                 }
             }
-            ReverseNext::PushData(val) => {
+            ReverseStep::PushData(val) => {
                 self.data_stack.push(val);
             }
-            ReverseNext::SwapData => {
+            ReverseStep::SwapData => {
                 let len = self.data_stack.len();
                 if (len - self.ctx.ds_len) >= 2 {
                     self.data_stack.swap(len - 1, len - 2);
@@ -846,7 +849,7 @@ impl State {
                     return Err(Xerr::StackUnderflow);
                 }
             }
-            ReverseNext::RotData => {
+            ReverseStep::RotData => {
                 let len = self.data_stack.len();
                 if (len - self.ctx.ds_len) >= 3 {
                     self.data_stack.swap(len - 1, len - 3);
@@ -854,23 +857,23 @@ impl State {
                     return Err(Xerr::StackUnderflow);
                 }
             }
-            ReverseNext::OverData => {
+            ReverseStep::OverData => {
                 self.drop_data()?;
             }
-            ReverseNext::PopReturn => {
+            ReverseStep::PopReturn => {
                 if self.return_stack.len() > self.ctx.rs_len {
                     self.return_stack.pop();
                 } else {
                     return Err(Xerr::ReturnStackUnderflow);
                 }
             }
-            ReverseNext::PushReturn(frame) => {
+            ReverseStep::PushReturn(frame) => {
                 self.return_stack.push(frame);
             }
-            ReverseNext::PushLoop(l) => {
+            ReverseStep::PushLoop(l) => {
                 self.loops.push(l);
             }
-            ReverseNext::PopLoop => {
+            ReverseStep::PopLoop => {
                 if self.loops.len() > self.ctx.ls_len {
                     self.loops.pop();
                 } else {
@@ -899,16 +902,16 @@ impl State {
     }
 
     fn set_ip(&mut self, new_ip: usize) -> Xresult {
-        if let Some(log) = self.reverse_log.as_mut() {
-            log_reverse_next(log, ReverseNext::SetIp(self.ctx.ip));
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip = new_ip;
         OK
     }
 
     fn next_ip(&mut self) -> Xresult {
-        if let Some(log) = self.reverse_log.as_mut() {
-            log_reverse_next(log, ReverseNext::DecrementIp);
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip += 1;
         OK
@@ -948,8 +951,8 @@ impl State {
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
-        if let Some(log) = self.reverse_log.as_mut() {
-            log_reverse_next(log, ReverseNext::PopData);
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::PopData);
         }
         self.data_stack.push(data);
         OK
@@ -958,8 +961,8 @@ impl State {
     pub fn pop_data(&mut self) -> Xresult1<Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
             let val = self.data_stack.pop().ok_or(Xerr::StackUnderflow)?;
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::PushData(val.clone()));
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::PushData(val.clone()));
             }
             Ok(val)
         } else {
@@ -992,8 +995,8 @@ impl State {
     fn swap_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::SwapData);
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::SwapData);
             }
             self.data_stack.swap(len - 1, len - 2);
             OK
@@ -1005,8 +1008,8 @@ impl State {
     fn rot_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 3 {
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::RotData);
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::RotData);
             }
             self.data_stack.swap(len - 1, len - 3);
             OK
@@ -1018,8 +1021,8 @@ impl State {
     fn over_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::OverData);
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::OverData);
             }
             let val = self.data_stack[len - 2].clone();
             self.push_data(val)
@@ -1029,8 +1032,8 @@ impl State {
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
-        if let Some(log) = self.reverse_log.as_mut() {
-            log_reverse_next(log, ReverseNext::PopReturn);
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::PopReturn);
         }
         self.return_stack.push(Frame::from_addr(return_to));
         OK
@@ -1039,8 +1042,8 @@ impl State {
     fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
             let ret = self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)?;
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::PushReturn(ret.clone()));
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::PushReturn(ret.clone()));
             }
             Ok(ret)
         } else {
@@ -1057,8 +1060,8 @@ impl State {
     }
 
     fn push_loop(&mut self, l: Loop) -> Xresult {
-        if let Some(log) = self.reverse_log.as_mut() {
-            log_reverse_next(log, ReverseNext::PopLoop);
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::PopLoop);
         }
         self.loops.push(l);
         OK
@@ -1075,8 +1078,8 @@ impl State {
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
             let l = self.loops.pop().ok_or(Xerr::LoopStackUnderflow)?;
-            if let Some(log) = self.reverse_log.as_mut() {
-                log_reverse_next(log, ReverseNext::PushLoop(l.clone()));
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::PushLoop(l.clone()));
             }
             Ok(l)
         } else {
@@ -2053,21 +2056,11 @@ mod tests {
 
 
     fn collect_ints(xs: &State) -> Vec<isize> {
-        let mut vals = Vec::new();
-        for i in 0.. {
-            if let Some(x) = xs.get_data(i) {
-                let n = x.clone().into_isize().unwrap();
-                vals.push(n);
-            } else {
-                break;
-            }
-        }
-        vals.reverse();
-        vals
+        xs.data_stack.iter().cloned().map(|x| x.into_isize().unwrap()).collect()
     }
 
     #[test]
-    fn test_reverse_step() {
+    fn test_reverse_next() {
         let mut xs = State::new().unwrap();
         assert_eq!(OK, xs.rnext());
         xs.start_reverse_debugging();
@@ -2075,19 +2068,36 @@ mod tests {
         100 4 /
         3 *
         5 +
-        70 -
-        7 rem
         "#).unwrap();
         xs.run().unwrap();
-        assert_eq!(vec![3], collect_ints(&xs));
+        assert_eq!(vec![80], collect_ints(&xs));
         xs.rnext().unwrap();
-        assert_eq!(vec![10, 7], collect_ints(&xs));
+        assert_eq!(vec![75, 5], collect_ints(&xs));
         xs.rnext().unwrap();
-        assert_eq!(vec![10], collect_ints(&xs));
+        assert_eq!(vec![75], collect_ints(&xs));
         xs.rnext().unwrap();
-        assert_eq!(vec![80, 70], collect_ints(&xs));
-        xs.next().unwrap();
-        assert_eq!(vec![10], collect_ints(&xs));
+        assert_eq!(vec![25, 3], collect_ints(&xs));
+        xs.rnext().unwrap();
+        assert_eq!(vec![25], collect_ints(&xs));
+        xs.rnext().unwrap();
+        assert_eq!(vec![100, 4], collect_ints(&xs));
+        xs.rnext().unwrap();
+        assert_eq!(vec![100], collect_ints(&xs));
+        xs.rnext().unwrap();
+        assert_eq!(0, collect_ints(&xs).len());
+        assert_eq!(0, xs.ip());
+        xs.rnext().unwrap();
+        // replay again
+        assert_eq!(0, xs.ip());
+        assert_eq!(OK, xs.next());
+        assert_eq!(OK, xs.next());
+        assert_eq!(vec![100, 4], collect_ints(&xs));
+        assert_eq!(OK, xs.next());
+        // rerun div few times
+        assert_eq!(vec![25], collect_ints(&xs));
+        assert_eq!(OK, xs.rnext());
+        assert_eq!(vec![100, 4], collect_ints(&xs));
+        assert_eq!(OK, xs.next());
+        assert_eq!(vec![25], collect_ints(&xs));
     }
-
 }
