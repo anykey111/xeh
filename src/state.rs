@@ -33,14 +33,14 @@ impl DictEntry {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct FunctionFlow {
     dict_idx: usize,
     start: usize,
     locals: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum Flow {
     If(usize),
     Else(usize),
@@ -55,7 +55,7 @@ enum Flow {
     Do { test_org: usize, jump_org: usize },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Loop {
     VecBuilder { stack_ptr: usize },
     Do { start: Xint, end: Xint },
@@ -940,16 +940,6 @@ impl State {
             })
     }
 
-    fn dropn(&mut self, n: usize) -> Xresult {
-        let ds_len = self.data_stack.len() - self.ctx.ds_len;
-        if ds_len < n {
-            Err(Xerr::StackUnderflow)
-        } else {
-            self.data_stack.truncate(ds_len - n);
-            OK
-        }
-    }
-
     pub fn push_data(&mut self, data: Cell) -> Xresult {
         if self.reverse_debugging() {
             self.add_reverse_step(ReverseStep::PopData);
@@ -1270,7 +1260,9 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
                 for x in &xs.data_stack[stack_ptr..] {
                     v.push_back_mut(x.clone());
                 }
-                xs.dropn(top_ptr - stack_ptr)?;
+                for _ in 0..top_ptr - stack_ptr {
+                    xs.pop_data()?;
+                }
                 xs.push_data(Cell::Vector(v))
             }
         }
@@ -2099,5 +2091,28 @@ mod tests {
         assert_eq!(vec![100, 4], collect_ints(&xs));
         assert_eq!(OK, xs.next());
         assert_eq!(vec![25], collect_ints(&xs));
+    }
+
+    #[test]
+    fn test_reverse_vec() {
+        let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
+        let mut xs = State::new().unwrap();
+        xs.start_reverse_debugging();
+        xs.load("[ 3 0 do I loop ] length").unwrap();
+        let mut log = Vec::new();
+        loop {
+            log.push(snapshot(&xs));
+            if xs.ip() == xs.code.len() {
+                break;
+            }
+            xs.next().unwrap();
+        }
+        assert_eq!(Cell::Int(3), xs.pop_data().unwrap());
+        //println!("{:#?}", xs.reverse_log);
+        while xs.ip() != 0 {
+            xs.rnext().unwrap();
+            let expected_state = log.pop().unwrap();
+            assert_eq!(expected_state, snapshot(&xs));
+        }
     }
 }
