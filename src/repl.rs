@@ -107,11 +107,11 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
 }
 
 pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
-    if args.debug {
-        xs.start_reverse_debugging();
-    }
     if let Some(ref path) = args.binary_path {
         crate::file::load_binary(xs, path)?;
+    }
+    if args.debug {
+        xs.start_reverse_debugging();
     }
     for filename in args.sources.iter() {
         xs.load_source(filename)?;
