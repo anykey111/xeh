@@ -46,7 +46,7 @@ enum Flow {
     Else(usize),
     Begin(usize),
     While(usize),
-    Leave(usize),
+    Break(usize),
     Case,
     CaseOf(usize),
     CaseEndOf(usize),
@@ -511,7 +511,7 @@ impl State {
             Def("while", core_word_while),
             Def("repeat", core_word_repeat),
             Def("until", core_word_until),
-            Def("leave", core_word_leave),
+            Def("break", core_word_break),
             Def("again", core_word_again),
             Def("[", core_word_vec_begin),
             Def("]", core_word_vec_end),
@@ -1086,7 +1086,7 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
             Flow::Case => true,
             Flow::CaseOf(_) => true,
             Flow::CaseEndOf(_) => true,
-            Flow::Leave(_) => continue,
+            Flow::Break(_) => continue,
             _ => break,
         };
         if t {
@@ -1184,9 +1184,9 @@ fn core_word_while(xs: &mut State) -> Xresult {
 fn core_word_again(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow()? {
-            Flow::Leave(leave_org) => {
-                let offs = jump_offset(leave_org, xs.code_origin() + 1);
-                xs.patch_jump(leave_org, offs)?;
+            Flow::Break(org) => {
+                let offs = jump_offset(org, xs.code_origin() + 1);
+                xs.patch_jump(org, offs)?;
             }
             Flow::Begin(begin_org) => {
                 let offs = jump_offset(xs.code_origin(), begin_org);
@@ -1200,9 +1200,9 @@ fn core_word_again(xs: &mut State) -> Xresult {
 fn core_word_repeat(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow()? {
-            Flow::Leave(leave_org) => {
-                let offs = jump_offset(leave_org, xs.code_origin() + 1);
-                xs.patch_jump(leave_org, offs)?;
+            Flow::Break(org) => {
+                let offs = jump_offset(org, xs.code_origin() + 1);
+                xs.patch_jump(org, offs)?;
             }
             Flow::While(cond_org) => match xs.pop_flow()? {
                 Flow::Begin(begin_org) => {
@@ -1218,10 +1218,10 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_leave(xs: &mut State) -> Xresult {
-    let leave = Flow::Leave(xs.code_origin());
+fn core_word_break(xs: &mut State) -> Xresult {
+    let org = xs.code_origin();
     xs.code_emit(Opcode::Jump(0))?;
-    xs.push_flow(leave)
+    xs.push_flow(Flow::Break(org))
 }
 
 fn jump_offset(origin: usize, dest: usize) -> isize {
@@ -1476,7 +1476,7 @@ fn core_word_loop_inc(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_loop_leave(xs: &mut State) -> Xresult {
+fn core_word_loop_break(xs: &mut State) -> Xresult {
     match xs.pop_loop()? {
         Loop::Do { .. } => OK,
         _ => Err(Xerr::ControlFlowError),
@@ -1487,13 +1487,13 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_loop_inc)))?;
     let next_org = xs.code_origin();
     xs.code_emit(Opcode::Jump(0))?;
-    let break_org = xs.code_origin();
-    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_loop_leave)))?;
+    let stop_org = xs.code_origin();
+    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_loop_break)))?;
     loop {
         match xs.pop_flow()? {
-            Flow::Leave(leave_org) => {
-                let offs = jump_offset(leave_org, break_org);
-                xs.patch_jump(leave_org, offs)?;
+            Flow::Break(org) => {
+                let offs = jump_offset(org, stop_org);
+                xs.patch_jump(org, offs)?;
             }
             Flow::Do { test_org, jump_org } => {
                 let offs = jump_offset(test_org, next_org);
@@ -1826,7 +1826,7 @@ mod tests {
         it.next().unwrap();
         assert_eq!(&Opcode::Jump(-4), it.next().unwrap());
         let mut xs = State::new().unwrap();
-        xs.load("begin leave again").unwrap();
+        xs.load("begin break again").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
@@ -1861,17 +1861,17 @@ mod tests {
     }
 
     #[test]
-    fn test_loop_leave() {
+    fn test_loop_break() {
         let mut xs = State::new().unwrap();
-        xs.interpret("begin 1 leave again").unwrap();
+        xs.interpret("begin 1 break again").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.into_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::new().unwrap();
-        let res = xs.load("begin 1 again leave");
+        let res = xs.load("begin 1 again break");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let mut xs = State::new().unwrap();
-        xs.load("begin 1 if leave else leave then again").unwrap();
+        xs.load("begin 1 if break else break then again").unwrap();
     }
 
     #[test]
@@ -2006,7 +2006,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
         xs.interpret("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.interpret("10 0 do I I case 5 of leave endof drop endcase loop").unwrap();
+        xs.interpret("10 0 do I I case 5 of break endof drop endcase loop").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 
