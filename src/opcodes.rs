@@ -2,7 +2,6 @@ use crate::cell::*;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Opcode {
-    Break,
     Call(usize),
     Deferred(usize),
     NativeCall(XfnPtr),

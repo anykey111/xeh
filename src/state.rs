@@ -528,7 +528,6 @@ impl State {
             Def("defer", core_word_defer),
             Def("do", core_word_do),
             Def("loop", core_word_loop),
-            Def("breakpoint", core_word_breakpoint),
         ]
         .iter()
         {
@@ -579,7 +578,7 @@ impl State {
             Def("round", core_word_round),
             Def("assert", core_word_assert),
             Def("assert-eq", core_word_assert_eq),
-            Def("bye", core_word_bye),
+            Def("exit", core_word_exit),
             Def("println", core_word_println),
             Def("print", core_word_print),
             Def("newline", core_word_newline),
@@ -701,10 +700,6 @@ impl State {
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
         match self.code.get(ip).cloned().ok_or(Xerr::InternalError)? {
-            Opcode::Break => {
-                self.next_ip()?;
-                Err(Xerr::DebugBreak)
-            }
             Opcode::Jump(offs) => self.jump_to(offs),
             Opcode::JumpIf(offs) => {
                 let t = self.pop_data()?;
@@ -1406,7 +1401,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         at,
         if xs.ip() == at { " * " } else { "   " },
         match &xs.code[at] {
-            Opcode::Break => format!("break"),
             Opcode::Call(a) => format!("call       {:#x}", a),
             Opcode::Deferred(a) => format!("defer      {:#x}", a),
             Opcode::NativeCall(x) => format!("callx      {:#x}", x.0 as usize),
@@ -1674,9 +1668,10 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_bye(xs: &mut State) -> Xresult {
+fn core_word_exit(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
-    core_word_breakpoint(xs)
+    let code = xs.pop_data()?.into_isize()?;
+    Err(Xerr::Exit(code))
 }
 
 fn core_word_println(xs: &mut State) -> Xresult {
@@ -1729,14 +1724,6 @@ fn core_word_prefix(xs: &mut State) -> Xresult {
 }
 fn core_word_no_prefix(xs: &mut State) -> Xresult {
     xs.set_var(xs.fmt_prefix, ZERO).map(|_| ())
-}
-
-fn core_word_breakpoint(xs: &mut State) -> Xresult {
-    if xs.ctx.mode == ContextMode::Load {
-        xs.code_emit(Opcode::Break)
-    } else {
-        Err(Xerr::DebugBreak)
-    }
 }
 
 fn core_word_load(xs: &mut State) -> Xresult {
@@ -2114,5 +2101,14 @@ mod tests {
             let expected_state = log.pop().unwrap();
             assert_eq!(expected_state, snapshot(&xs));
         }
+    }
+
+    #[test]
+    fn test_exit_err() {
+        let mut xs = State::new().unwrap();
+        assert_eq!(Err(Xerr::Exit(-1)), xs.interpret("-1 exit drop"));
+        let mut xs = State::new().unwrap();
+        xs.load("0 exit +").unwrap();
+        assert_eq!(Err(Xerr::Exit(0)), xs.run());
     }
 }
