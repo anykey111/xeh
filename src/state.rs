@@ -57,8 +57,13 @@ enum Flow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Loop {
-    VecBuilder { stack_ptr: usize },
     Do { start: Xint, end: Xint },
+}
+
+// hold runtime things that flow stack don't know
+#[derive(Debug, Clone, PartialEq)]
+pub enum Special {
+    VecStackStart(usize),
 }
 
 #[derive(Clone, PartialEq)]
@@ -84,6 +89,7 @@ struct Context {
     rs_len: usize,
     fs_len: usize,
     ls_len: usize,
+    ss_ptr: usize,
     ip: usize,
     mode: ContextMode,
     source: Option<Lex>,
@@ -116,6 +122,8 @@ pub enum ReverseStep {
     PushReturn(Frame),
     PopLoop,
     PushLoop(Loop),
+    PopSpecial,
+    PushSpecial(Special),
 }
 
 #[derive(Default)]
@@ -128,6 +136,7 @@ pub struct State {
     return_stack: Vec<Frame>,
     flow_stack: Vec<Flow>,
     loops: Vec<Loop>,
+    special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
     reverse_log: Option<Vec<ReverseStep>>,
@@ -233,20 +242,20 @@ impl State {
             Xerr::IOError
         })?;
         let src = self.debug_map.add_source(&buf, Some(path.to_string()));
-        self.context_new(src, ContextMode::Load)
+        self.build_source(src, ContextMode::Load)
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
         let src = self.debug_map.add_source(source, None);
-        self.context_new(src, ContextMode::Load)
+        self.build_source(src, ContextMode::Load)
     }
 
     pub fn interpret(&mut self, buffer: &str) -> Xresult {
         let src = self.debug_map.add_source(buffer, None);
-        self.context_new(src, ContextMode::Eval)
+        self.build_source(src, ContextMode::Eval)
     }
 
-    fn context_new(&mut self, src: Lex, mode: ContextMode) -> Xresult {
+    fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
         self.context_open(mode, Some(src));
         let depth = self.nested.len();
         let result = self.build();
@@ -360,6 +369,7 @@ impl State {
             rs_len: self.return_stack.len(),
             fs_len: self.flow_stack.len(),
             ls_len: self.loops.len(),
+            ss_ptr: self.special.len(),
             ip: self.code_origin(),
             mode,
             source,
@@ -393,7 +403,10 @@ impl State {
                 }
             }
         }
+        assert_eq!(prev_ctx.ls_len, self.loops.len());
+        assert_eq!(prev_ctx.ss_ptr, self.special.len());
         self.ctx = prev_ctx;
+        
         OK
     }
 
@@ -875,6 +888,16 @@ impl State {
                     return Err(Xerr::LoopStackUnderflow);
                 }
             }
+            ReverseStep::PushSpecial(x) => {
+                self.special.push(x);
+            }
+            ReverseStep::PopSpecial => {
+                if self.special.len() > self.ctx.ss_ptr {
+                    self.special.pop();
+                } else {
+                    return Err(Xerr::SpecialStackUnderflow);
+                }
+            }
         }
         OK
     }
@@ -1062,13 +1085,33 @@ impl State {
 
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
-            let l = self.loops.pop().ok_or(Xerr::LoopStackUnderflow)?;
+            let l = self.loops.pop().ok_or(Xerr::InternalError)?;
             if self.reverse_debugging() {
                 self.add_reverse_step(ReverseStep::PushLoop(l.clone()));
             }
             Ok(l)
         } else {
             Err(Xerr::LoopStackUnderflow)
+        }
+    }
+
+    fn push_special(&mut self, s: Special) -> Xresult {
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::PopSpecial);
+        }
+        self.special.push(s);
+        OK
+    }
+
+    fn pop_special(&mut self) -> Xresult1<Special> {
+        if self.special.len() > self.ctx.ss_ptr {
+            let s = self.special.pop().ok_or(Xerr::InternalError)?;
+            if self.reverse_debugging() {
+                self.add_reverse_step(ReverseStep::PushSpecial(s.clone()));
+            }
+            Ok(s)
+        } else {
+            Err(Xerr::SpecialStackUnderflow)
         }
     }
 }
@@ -1240,13 +1283,13 @@ fn core_word_vec_end(xs: &mut State) -> Xresult {
 }
 
 fn vec_builder_begin(xs: &mut State) -> Xresult {
-    let stack_ptr = xs.data_stack.len();
-    xs.push_loop(Loop::VecBuilder { stack_ptr })
+    let ptr = xs.data_stack.len();
+    xs.push_special(Special::VecStackStart(ptr))
 }
 
 fn vec_builder_end(xs: &mut State) -> Xresult {
-    match xs.pop_loop()? {
-        Loop::VecBuilder { stack_ptr } => {
+    match xs.pop_special()? {
+        Special::VecStackStart(stack_ptr) => {
             let top_ptr = xs.data_stack.len();
             if top_ptr < stack_ptr {
                 Err(Xerr::StackNotBalanced)
@@ -1261,7 +1304,6 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
                 xs.push_data(Cell::Vector(v))
             }
         }
-        _ => Err(Xerr::ControlFlowError),
     }
 }
 
@@ -1466,14 +1508,12 @@ fn core_word_loop_inc(xs: &mut State) -> Xresult {
             start: start + 1,
             end,
         }),
-        _ => Err(Xerr::ControlFlowError),
     }
 }
 
 fn core_word_loop_break(xs: &mut State) -> Xresult {
     match xs.pop_loop()? {
         Loop::Do { .. } => OK,
-        _ => Err(Xerr::ControlFlowError),
     }
 }
 
@@ -1500,17 +1540,17 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
-fn counter_value(xs: &mut State, mut n: usize) -> Xresult {
-    for x in xs.loops[xs.ctx.ls_len..].iter().rev() {
-        if let Loop::Do { start, .. } = x {
-            if n == 0 {
-                let val = *start;
-                return xs.push_data(Cell::Int(val));
-            }
-            n -= 1;
+fn counter_value(xs: &mut State, n: usize) -> Xresult {
+    let x = xs.loops[xs.ctx.ls_len..]
+        .iter()
+        .nth_back(n)
+        .ok_or_else(|| Xerr::LoopStackUnderflow)?;
+    match x {
+        Loop::Do { start, .. } => {
+            let val = *start;
+            return xs.push_data(Cell::Int(val))
         }
     }
-    Err(Xerr::LoopStackUnderflow)
 }
 
 fn core_word_counter_i(xs: &mut State) -> Xresult {
