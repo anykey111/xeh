@@ -525,7 +525,6 @@ impl State {
             Def("endcase", endcase_word),
             Def("begin", core_word_begin),
             Def("while", core_word_while),
-            Def("repeat", core_word_repeat),
             Def("until", core_word_until),
             Def("break", core_word_break),
             Def("again", core_word_again),
@@ -1268,18 +1267,6 @@ fn core_word_again(xs: &mut State) -> Xresult {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
-            _ => break Err(Xerr::ControlFlowError),
-        }
-    }
-}
-
-fn core_word_repeat(xs: &mut State) -> Xresult {
-    loop {
-        match xs.pop_flow()? {
-            Flow::Break(org) => {
-                let offs = jump_offset(org, xs.code_origin() + 1);
-                xs.backpatch_jump(org, offs)?;
-            }
             Flow::While(cond_org) => match xs.pop_flow()? {
                 Flow::Begin(begin_org) => {
                     let offs = jump_offset(cond_org, xs.code_origin() + 1);
@@ -1858,34 +1845,25 @@ mod tests {
     }
 
     #[test]
-    fn test_begin_repeat() {
+    fn test_begin_again() {
         let mut xs = State::new().unwrap();
-        xs.load("begin 5 while 1 2 repeat").unwrap();
-        let mut it = xs.code.iter();
-        it.next().unwrap();
-        assert_eq!(&Opcode::JumpIfNot(4), it.next().unwrap());
-        it.next().unwrap();
-        it.next().unwrap();
-        assert_eq!(&Opcode::Jump(-4), it.next().unwrap());
+        xs.interpret("0 begin dup 5 < while inc again").unwrap();
+        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::new().unwrap();
         xs.load("begin break again").unwrap();
         let mut it = xs.code.iter();
-        it.next().unwrap();
+        assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
         let mut xs = State::new().unwrap();
-        xs.load("0 begin 1 2 until").unwrap();
-        let mut it = xs.code.iter();
-        it.next().unwrap();
-        it.next().unwrap();
-        it.next().unwrap();
-        assert_eq!(&Opcode::JumpIf(-2), it.next().unwrap());
-        xs.interpret("1 var x begin x while 0 -> x repeat").unwrap();
+        xs.interpret("begin 1 0 until").unwrap();
+        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        xs.interpret("1 var x begin x while 0 -> x again").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("repeat begin"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("until begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin repeat until"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin until repeat"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin again until"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin until again"));
     }
 
     #[test]
