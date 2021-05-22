@@ -182,6 +182,13 @@ impl Cell {
         }
     }
 
+    pub fn to_isize(&self) -> Xresult1<isize> {
+        match self {
+            Cell::Int(i) => Ok(*i as isize),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn to_usize(&self) -> Xresult1<usize> {
         match self {
             Cell::Int(i) => Ok(*i as usize),
