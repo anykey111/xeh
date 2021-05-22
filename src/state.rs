@@ -561,7 +561,7 @@ impl State {
             Def("len", core_word_len),
             Def("set", core_word_set),
             Def("nth", core_word_nth),
-            Def("lookup", core_word_lookup),
+            Def("get", core_word_get),
             Def("assoc", core_word_assoc),
             Def("sort", core_word_sort),
             Def("sort-by-key", core_word_sort_by_key),
@@ -1618,13 +1618,13 @@ fn core_word_set(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_lookup(xs: &mut State) -> Xresult {
+fn core_word_get(xs: &mut State) -> Xresult {
     let key = xs.pop_data()?;
     if !key.is_key() {
         return Err(Xerr::ExpectingKey);
     }
     if xs.top_data().ok_or(Xerr::StackUnderflow)?.is_key() {
-        core_word_lookup(xs)?;
+        core_word_get(xs)?;
     }
     let v = xs.pop_data()?.into_vector()?;
     xs.push_data(vector_get_by_key(&v, &key)?.clone())
@@ -1951,11 +1951,11 @@ mod tests {
     #[test]
     fn test_lookup() {
         let mut xs = State::new().unwrap();
-        xs.interpret("[x: 1] x: lookup").unwrap();
+        xs.interpret("[x: 1] x: get").unwrap();
         assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
-        xs.interpret("[x: [y: [z: 10]]] x: y: z: lookup").unwrap();
+        xs.interpret("[x: [y: [z: 10]]] x: y: z: get").unwrap();
         assert_eq!(Cell::from(10isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::NotFound), xs.interpret("[x: [y: [1 2 3]]] f: y: x: lookup"));
+        assert_eq!(Err(Xerr::NotFound), xs.interpret("[x: [y: [1 2 3]]] f: y: x: get"));
     }
 
     #[test]
@@ -1963,9 +1963,9 @@ mod tests {
         let mut xs = State::new().unwrap();
         xs.interpret("[] x: 1 assoc y: 2 assoc").unwrap();
         assert_eq!(xvec![xkey![x], 1u32, xkey![y], 2u32], xs.pop_data().unwrap());
-        xs.interpret("[x: 1] x: 2 assoc x: lookup").unwrap();
+        xs.interpret("[x: 1] x: 2 assoc x: get").unwrap();
         assert_eq!(Xcell::from(2usize), xs.pop_data().unwrap());
-        xs.interpret("[x: 1 y: 3] x: 5 assoc x: lookup").unwrap();
+        xs.interpret("[x: 1 y: 3] x: 5 assoc x: get").unwrap();
     }
 
     #[test]
@@ -2077,7 +2077,7 @@ mod tests {
     fn test_sort_by_key() {
         let mut xs = State::new().unwrap();
         xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
-        xs.interpret("[ 3 for x I nth k: lookup loop ]").unwrap();
+        xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
         assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
     }
 
