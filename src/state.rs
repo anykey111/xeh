@@ -560,7 +560,7 @@ impl State {
             Def("K", core_word_counter_k),
             Def("len", core_word_len),
             Def("set", core_word_set),
-            Def("get", core_word_get),
+            Def("nth", core_word_nth),
             Def("lookup", core_word_lookup),
             Def("assoc", core_word_assoc),
             Def("sort", core_word_sort),
@@ -1600,7 +1600,7 @@ fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
     val.ok_or(Xerr::NotFound)
 }
 
-fn core_word_get(xs: &mut State) -> Xresult {
+fn core_word_nth(xs: &mut State) -> Xresult {
     let index = xs.pop_data()?.into_isize()?;
     let v = xs.pop_data()?.into_vector()?;
     xs.push_data(vector_get(&v, index)?.clone())
@@ -1937,15 +1937,15 @@ mod tests {
     #[test]
     fn test_get_set() {
         let mut xs = State::new().unwrap();
-        xs.interpret("[11 22 33] 2 get").unwrap();
+        xs.interpret("[11 22 33] 2 nth").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
-        xs.interpret("[11 22 33] -2 get").unwrap();
+        xs.interpret("[11 22 33] -2 nth").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        xs.interpret("[1 2 3] 0 5 set 0 get").unwrap();
+        xs.interpret("[1 2 3] 0 5 set 0 nth").unwrap();
         assert_eq!(Cell::from(5isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] 100 get"));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] -100 get"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] key: get"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] 100 nth"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] -100 nth"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] key: nth"));
     }
 
     #[test]
@@ -1991,7 +1991,7 @@ mod tests {
     #[test]
     fn test_immediate() {
         let mut xs = State::new().unwrap();
-        let res = xs.load(": f [] 0 get immediate ; f");
+        let res = xs.load(": f [] 0 nth immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 
@@ -2077,7 +2077,7 @@ mod tests {
     fn test_sort_by_key() {
         let mut xs = State::new().unwrap();
         xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
-        xs.interpret("[ 3 for x I get k: lookup loop ]").unwrap();
+        xs.interpret("[ 3 for x I nth k: lookup loop ]").unwrap();
         assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
     }
 
