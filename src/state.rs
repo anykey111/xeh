@@ -540,7 +540,6 @@ impl State {
             Def("nil", core_word_nil),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
-            Def("execute", core_word_execute),
             Def("defer", core_word_defer),
             Def("for", core_word_for),
             Def("loop", core_word_loop),
@@ -1502,13 +1501,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         },
         debug_comment,
     )
-}
-
-fn core_word_execute(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
-        Cell::Fun(x) => xs.call_fn(x),
-        _ => Err(Xerr::TypeError),
-    }
 }
 
 fn core_word_defer(xs: &mut State) -> Xresult {
