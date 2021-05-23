@@ -474,14 +474,21 @@ mod tests {
         xs.interpret("u8").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         xs.interpret("i8").unwrap();
-        assert_eq!(Cell::Int(-128), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         xs.interpret("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstr"));
         xs.interpret("[\"1\" 0x32 0s0011_0011] >bitstr").unwrap();
         assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().into_bitstring().unwrap().to_bytes());
+    }
 
+    #[test]
+    fn test_int_uint() {
+        let mut xs = Xstate::new().unwrap();
+        xs.interpret("[0xff 0xff] bitstr-open 8 uint 8 int").unwrap();
+        assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
+        assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
 
     #[test]

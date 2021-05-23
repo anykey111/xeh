@@ -63,9 +63,11 @@ macro_rules! to_unsigned {
 macro_rules! to_signed {
     ($range:expr, $data:expr, $order:expr, $u_t:ty, $i_t:ty) => {{
         let val = to_unsigned!($range, $data, $order, $u_t);
-        let mask = 1 << (($range.end - $range.start) - 1);
-        if (val & mask) > 0 {
-            (((val ^ mask) + 1) as $i_t).wrapping_neg()
+        let len = $range.len() as u32;
+        let sign_bit = 1 << (len - 1);
+        if (val & sign_bit) > 0 {
+            let mask = !<$u_t>::MAX.overflowing_shl(len as u32).0;
+            -(((!val & mask) + 1) as $i_t)
         } else {
             val as $i_t
         }
@@ -241,12 +243,12 @@ impl Bitstring {
         to_unsigned!(self.range, src, order, u64)
     }
 
-    pub fn to_i128(&self, order: Byteorder) -> i128 {
+    pub fn to_int(&self, order: Byteorder) -> i128 {
         let src = self.slice();
         to_signed!(self.range, src, order, u128, i128)
     }
 
-    pub fn to_u128(&self, order: Byteorder) -> u128 {
+    pub fn to_uint(&self, order: Byteorder) -> u128 {
         let src = self.slice();
         to_unsigned!(self.range, src, order, u128)
     }
@@ -476,7 +478,7 @@ mod tests {
         let bs = Bitstring::from(vec![0x7f]);
         let (a, b) = bs.split_at(4).unwrap();
         assert_eq!(a.to_u64(BE), 7);
-        assert_eq!(b.to_i64(LE), -8);
+        assert_eq!(b.to_i64(LE), -1);
         let (a, b) = bs.split_at(1).unwrap();
         assert_eq!(a.to_u64(LE), 0);
         assert_eq!(b.to_u64(LE), 0x7f);
@@ -624,10 +626,14 @@ mod tests {
 
         let bs = Bitstring::from(vec![0xff]);
         assert_eq!(bs.to_u64(LE), 255);
-        assert_eq!(bs.to_i64(LE), -128);
+        assert_eq!(bs.to_i64(LE), -1);
+
+        let bs = Bitstring::from(vec![0xfe]);
+        assert_eq!(bs.to_u64(LE), 254);
+        assert_eq!(bs.to_i64(LE), -2);
 
         let bs = Bitstring::from(vec![0xff, 0xff]);
-        assert_eq!(bs.to_i64(LE), i16::min_value() as i64);
+        assert_eq!(bs.to_i64(LE), -1);
 
         let bs = Bitstring::from(vec![0xff, 0x7f]);
         assert_eq!(bs.to_i64(LE), i16::max_value() as i64);
@@ -636,7 +642,7 @@ mod tests {
         assert_eq!(bs.to_i64(LE), i64::max_value());
 
         let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(bs.to_i64(LE), i64::min_value());
+        assert_eq!(bs.to_i64(LE), -1);
         assert_eq!(bs.to_u64(LE), u64::max_value());
     }
 
@@ -649,29 +655,30 @@ mod tests {
         let ls = Bitstring::from_u64(1, 3, LE);
         assert_eq!(ls.to_i64(LE), 1);
         assert_eq!(ls.to_bytes(), vec![1]);
+
         assert_eq!(
-            Bitstring::from_u64(0x12345678, 32, LE).to_bytes(),
-            vec![0x78, 0x56, 0x34, 0x12]
+            &Bitstring::from_u64(0x12345678, 32, LE).to_bytes(),
+            &0x12345678u32.to_le_bytes()
         );
         assert_eq!(
-            Bitstring::from_u64(0x12345678, 32, BE).to_bytes(),
-            vec![0x12, 0x34, 0x56, 0x78]
+            &Bitstring::from_u64(0x12345678, 32, BE).to_bytes(),
+            &0x12345678u32.to_be_bytes()
         );
         assert_eq!(
-            Bitstring::from_u64(0x7FFFFFFF, 32, LE).to_bytes(),
-            vec![0xff, 0xff, 0xff, 0x7f]
+            &Bitstring::from_u64(0x7FFFFFFF, 32, LE).to_bytes(),
+            &0x7FFFFFFFu32.to_le_bytes()
         );
         assert_eq!(
             Bitstring::from_i64(0xFFFF_FFFF, 32, LE).to_i64(LE),
-            i32::min_value() as i64
+            -1
         );
         assert_eq!(
             Bitstring::from_i64(0x7FFF_FFFF, 32, LE).to_i64(LE),
             i32::max_value() as i64
         );
         assert_eq!(
-            Bitstring::from_i64(0xFFFF_FFFF, 32, BE).to_i64(LE),
-            i32::min_value() as i64
+            Bitstring::from_i64(0xFFFF_FFFF, 32, BE).to_i64(BE),
+            -1
         );
         assert_eq!(
             Bitstring::from_i64(0x7FFF_FFFF, 32, BE).to_i64(BE),
