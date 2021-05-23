@@ -97,7 +97,7 @@ struct Context {
     source: Option<Lex>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Frame {
     return_to: usize,
     locals: Vec<Cell>,
@@ -127,6 +127,7 @@ pub enum ReverseStep {
     LoopNextBack(Loop),
     PopSpecial,
     PushSpecial(Special),
+    DropLocal(usize),
 }
 
 #[derive(Default)]
@@ -408,6 +409,7 @@ impl State {
         }
         assert_eq!(prev_ctx.ls_len, self.loops.len());
         assert_eq!(prev_ctx.ss_ptr, self.special.len());
+        assert_eq!(prev_ctx.rs_len, self.return_stack.len());
         self.ctx = prev_ctx;
         
         OK
@@ -787,6 +789,9 @@ impl State {
                 let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
                 assert_eq!(i, frame.locals.len());
                 frame.locals.push(val);
+                if self.reverse_debugging() {
+                    self.add_reverse_step(ReverseStep::DropLocal(i));
+                }
                 self.next_ip()
             }
             Opcode::LoadLocal(i) => {
@@ -927,6 +932,10 @@ impl State {
                 } else {
                     return Err(Xerr::SpecialStackUnderflow);
                 }
+            }
+            ReverseStep::DropLocal(_) => {
+                let f = self.top_frame().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
+                f.locals.pop();
             }
         }
         OK
@@ -2135,19 +2144,54 @@ mod tests {
         xs.start_reverse_debugging();
         xs.load("[ 3 for I loop ] len").unwrap();
         let mut log = Vec::new();
-        loop {
-            log.push(snapshot(&xs));
-            if xs.ip() == xs.code.len() {
-                break;
+        for _ in 0..3 {
+            while xs.ip() != xs.code.len() {
+                log.push(snapshot(&xs));
+                xs.next().unwrap();
             }
-            xs.next().unwrap();
+            while xs.ip() != 0 {
+                xs.rnext().unwrap();
+                let expected_state = log.pop().unwrap();
+                assert_eq!(expected_state, snapshot(&xs));
+            }
         }
-        assert_eq!(Cell::Int(3), xs.pop_data().unwrap());
-        println!("{:#?}", xs.reverse_log);
-        while xs.ip() != 0 {
-            xs.rnext().unwrap();
-            let expected_state = log.pop().unwrap();
-            assert_eq!(expected_state, snapshot(&xs));
+    }
+
+    #[test]
+    fn test_reverse_recur() {
+        let snapshot = |xs: &State| (
+             xs.data_stack.clone(),
+             xs.return_stack.clone());
+        let mut xs = State::new().unwrap();
+        xs.start_reverse_debugging();
+        xs.load(r#"
+       : tower-of-hanoi
+            local aux
+            local to
+            local from
+            local n
+            n 1 = if
+                [ n from to]
+            else
+                n dec from aux to tower-of-hanoi
+                [n from to]
+                n dec aux to from tower-of-hanoi
+            then
+        ;        
+        4 "a" "c" "b" tower-of-hanoi
+        "#).unwrap();
+        
+        let mut log = Vec::new();
+        for _ in 0..3 {
+            while xs.ip() != xs.code.len() {
+                log.push(snapshot(&xs));
+                xs.next().unwrap();
+            }
+            while xs.ip() != 0 {
+                xs.rnext().unwrap();
+                let expected_state = log.pop().unwrap();
+                assert_eq!(expected_state, snapshot(&xs));
+            }
         }
     }
 
