@@ -24,13 +24,13 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 
     xs.defword("bits", bin_read_bitstring)?;
     xs.defword("bytes", bin_read_bytes)?;
-    xs.defword("signed", bin_read_signed)?;
-    xs.defword("unsigned", bin_read_unsigned)?;
+    xs.defword("int", bin_read_signed)?;
+    xs.defword("uint", bin_read_unsigned)?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-invert", bitstring_invert)?;
     xs.defword(">bitstr", to_bitstring)?;
-    xs.defword("bitstr>signed", bitstring_to_signed)?;
-    xs.defword("bitstr>unsigned", bitstring_to_unsigned)?;
+    xs.defword("bitstr>int", bitstring_to_signed)?;
+    xs.defword("bitstr>uint", bitstring_to_unsigned)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
     xs.defword("?", bin_match)?;
@@ -254,7 +254,7 @@ fn bitstring_to_signed(xs: &mut Xstate) -> Xresult {
     if s.len() > 128 {
         return Err(Xerr::IntegerOverflow);
     }
-    let x = s.to_i128(bo);
+    let x = s.to_int(bo);
     xs.push_data(Cell::Int(x))
 }
 
@@ -264,7 +264,7 @@ fn bitstring_to_unsigned(xs: &mut Xstate) -> Xresult {
     if s.len() > 128 {
         return Err(Xerr::IntegerOverflow);
     }
-    let x = s.to_u128(bo) as Xint;
+    let x = s.to_uint(bo) as Xint;
     xs.push_data(Cell::Int(x))
 }
 
@@ -406,7 +406,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xb
     if s.len() > 127 {
         return Err(Xerr::IntegerOverflow);
     }
-    let x = s.to_u128(bo) as Xint;
+    let x = s.to_uint(bo) as Xint;
     s.set_format(BitstringFormat::Unsigned(bo));
     set_last_chunk(xs, s)?;
     Ok((x, rest))
@@ -417,7 +417,7 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xbit
     if s.len() > 128 {
         return Err(Xerr::IntegerOverflow);
     }
-    let x = s.to_i128(bo);
+    let x = s.to_int(bo);
     s.set_format(BitstringFormat::Signed(bo));
     set_last_chunk(xs, s)?;
     Ok((x, rest))
@@ -510,7 +510,7 @@ mod tests {
     fn test_bitstring_chunk() {
         let mut xs = Xstate::new().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
-        xs.interpret("8 unsigned").unwrap();
+        xs.interpret("u8").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
@@ -525,7 +525,7 @@ mod tests {
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(BitstringFormat::Raw, s.format());
         assert_eq!(2, s.len());
-        xs.interpret("big-endian 2 signed").unwrap();
+        xs.interpret("big-endian 2 int").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
@@ -581,9 +581,9 @@ mod tests {
             other => panic!("{:?}", other),
         }
         assert_eq!(Err(Xerr::TypeError), xs.interpret("[] seek"));
-        xs.interpret("8 seek 8 unsigned").unwrap();
+        xs.interpret("8 seek u8").unwrap();
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
-        xs.interpret("0 seek 8 unsigned").unwrap();
+        xs.interpret("0 seek u8").unwrap();
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
     }
 
