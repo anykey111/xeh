@@ -102,7 +102,7 @@ pub fn load(xs: &mut Xstate) -> Xresult1<Xcell> {
     xs.defwordself("d2-color!", color_set, d2.clone())?;
     xs.defwordself("d2-data!", data_set, d2.clone())?;
     xs.defwordself("d2-data", data_get, d2.clone())?;
-    xs.defwordself("d2-buffer-u8", buffer_u8_get, d2.clone())?;
+    xs.defwordself("d2-capture-rgba", buffer_u8_get, d2.clone())?;
     Ok(d2)
 }
 
@@ -112,7 +112,7 @@ fn buffer_u8_get(xs: &mut Xstate) -> Xresult {
     copy_rgba_data(ctx, &mut buf)?;
     let mut v = Xvec::new();
     v.extend(buf.iter().map(|x| Xcell::from(*x)));
-    xs.push_data(Xcell::Vector(v))
+    xs.push_data(Xcell::Bitstr(Xbitstr::from(buf)))
 }
 
 pub fn copy_rgba_data(d2ctx: Xcell, buf: &mut Vec<u8>) -> Xresult1<(usize, usize)> {
@@ -129,4 +129,35 @@ pub fn copy_rgba_data(d2ctx: Xcell, buf: &mut Vec<u8>) -> Xresult1<(usize, usize
         buf.push(c as u8);
     }
     Ok((d2.width, d2.height))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_d2_rgba() {
+        let mut xs = Xstate::new().unwrap();
+        self::load(&mut xs).unwrap();
+        xs.interpret("
+        3 var W
+        2 var H
+        W H d2-resize
+        H for
+            W for 
+                J W * I + d2-color!
+                I J d2-data!
+            loop
+        loop
+        d2-capture-rgba
+        ").unwrap();
+        let mut bs = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(3 * 2 * 32, bs.len());
+        for y in 0..2 {
+            for x in 0..3 {
+                let c = bs.read(32).unwrap().to_bytes();
+                assert_eq!(c[3], y * 3 + x);
+            }
+        }
+    }
 }
