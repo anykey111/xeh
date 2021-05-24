@@ -31,33 +31,33 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword(">bitstr", to_bitstring)?;
     xs.defword("bitstr>int", bitstring_to_signed)?;
     xs.defword("bitstr>uint", bitstring_to_unsigned)?;
-    xs.defword("big-endian", |xs| set_byteorder(xs, Byteorder::BE))?;
-    xs.defword("little-endian", |xs| set_byteorder(xs, Byteorder::LE))?;
+    xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
+    xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("?", bin_match)?;
     xs.defword("u8", |xs| read_unsigned_n(xs, 8))?;
     xs.defword("u16", |xs| read_unsigned_n(xs, 16))?;
     xs.defword("u32", |xs| read_unsigned_n(xs, 32))?;
     xs.defword("u64", |xs| read_unsigned_n(xs, 64))?;
-    xs.defword("u8be", |xs| read_unsigned_nb(xs, 8, Byteorder::BE))?;
-    xs.defword("u16be", |xs| read_unsigned_nb(xs, 16, Byteorder::BE))?;
-    xs.defword("u32be", |xs| read_unsigned_nb(xs, 32, Byteorder::BE))?;
-    xs.defword("u64be", |xs| read_unsigned_nb(xs, 64, Byteorder::BE))?;
-    xs.defword("u8le", |xs| read_unsigned_nb(xs, 8, Byteorder::LE))?;
-    xs.defword("u16le", |xs| read_unsigned_nb(xs, 16, Byteorder::LE))?;
-    xs.defword("u32le", |xs| read_unsigned_nb(xs, 32, Byteorder::LE))?;
-    xs.defword("u64le", |xs| read_unsigned_nb(xs, 64, Byteorder::LE))?;
+    xs.defword("u8be", |xs| read_unsigned_nb(xs, 8, BIG))?;
+    xs.defword("u16be", |xs| read_unsigned_nb(xs, 16, BIG))?;
+    xs.defword("u32be", |xs| read_unsigned_nb(xs, 32, BIG))?;
+    xs.defword("u64be", |xs| read_unsigned_nb(xs, 64, BIG))?;
+    xs.defword("u8le", |xs| read_unsigned_nb(xs, 8, LITTLE))?;
+    xs.defword("u16le", |xs| read_unsigned_nb(xs, 16, LITTLE))?;
+    xs.defword("u32le", |xs| read_unsigned_nb(xs, 32, LITTLE))?;
+    xs.defword("u64le", |xs| read_unsigned_nb(xs, 64, LITTLE))?;
     xs.defword("i8", |xs| read_signed_n(xs, 8))?;
     xs.defword("i16", |xs| read_signed_n(xs, 16))?;
     xs.defword("i32", |xs| read_signed_n(xs, 32))?;
     xs.defword("i64", |xs| read_signed_n(xs, 64))?;
-    xs.defword("i8be", |xs| read_signed_nb(xs, 8, Byteorder::BE))?;
-    xs.defword("i16be", |xs| read_signed_nb(xs, 16, Byteorder::BE))?;
-    xs.defword("i32be", |xs| read_signed_nb(xs, 32, Byteorder::BE))?;
-    xs.defword("i64be", |xs| read_signed_nb(xs, 64, Byteorder::BE))?;
-    xs.defword("i8le", |xs| read_signed_nb(xs, 8, Byteorder::LE))?;
-    xs.defword("i16le", |xs| read_signed_nb(xs, 16, Byteorder::LE))?;
-    xs.defword("i32le", |xs| read_signed_nb(xs, 32, Byteorder::LE))?;
-    xs.defword("i64le", |xs| read_signed_nb(xs, 64, Byteorder::LE))?;
+    xs.defword("i8be", |xs| read_signed_nb(xs, 8, BIG))?;
+    xs.defword("i16be", |xs| read_signed_nb(xs, 16, BIG))?;
+    xs.defword("i32be", |xs| read_signed_nb(xs, 32, BIG))?;
+    xs.defword("i64be", |xs| read_signed_nb(xs, 64, BIG))?;
+    xs.defword("i8le", |xs| read_signed_nb(xs, 8, LITTLE))?;
+    xs.defword("i16le", |xs| read_signed_nb(xs, 16, LITTLE))?;
+    xs.defword("i32le", |xs| read_signed_nb(xs, 32, LITTLE))?;
+    xs.defword("i64le", |xs| read_signed_nb(xs, 64, LITTLE))?;
     xs.defword("i8>bitstr", |xs| num_to_bitstr(xs, 8, i8::MIN.into(), i8::MAX.into()))?;
     xs.defword("u8>bitstr", |xs| num_to_bitstr(xs, 8, u8::MIN.into(), u8::MAX.into()))?;
     xs.defword("i16>bitstr", |xs| num_to_bitstr(xs, 16, i16::MIN.into(), i16::MAX.into()))?;
@@ -335,16 +335,16 @@ fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
     xs.set_var(xs.bitstr_mod.last_read, Cell::Bitstr(s)).map(|_| ())
 }
 
-fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
-    xs.set_var(xs.bitstr_mod.big_endian, if bo == Byteorder::LE { ZERO } else { ONE })
+fn set_byteorder(xs: &mut Xstate, bo: Xbyteorder) -> Xresult {
+    xs.set_var(xs.bitstr_mod.big_endian, if bo == LITTLE { ZERO } else { ONE })
         .map(|_| ())
 }
 
-fn default_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
+fn default_byteorder(xs: &mut Xstate) -> Xresult1<Xbyteorder> {
     if xs.get_var(xs.bitstr_mod.big_endian)? == &ZERO {
-        Ok(Byteorder::LE)
+        Ok(LITTLE)
     } else {
-        Ok(Byteorder::BE)
+        Ok(BIG)
     }
 }
 
@@ -401,7 +401,7 @@ fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
     }
 }
 
-fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xbitstr)> {
+fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbitstr)> {
     let (mut s, rest) = read_bitstring(xs, n)?;
     if s.len() > 127 {
         return Err(Xerr::IntegerOverflow);
@@ -412,7 +412,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xb
     Ok((x, rest))
 }
 
-fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult1<(Xint, Xbitstr)> {
+fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbitstr)> {
     let (mut s, rest) = read_bitstring(xs, n)?;
     if s.len() > 128 {
         return Err(Xerr::IntegerOverflow);
@@ -428,7 +428,7 @@ fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
     read_signed_nb(xs, n, bo)
 }
 
-fn read_signed_nb(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
+fn read_signed_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     let (x, rest) = read_signed(xs, n, bo)?;
     xs.push_data(Cell::Int(x))?;
     set_rest(xs, rest)
@@ -439,7 +439,7 @@ fn read_unsigned_n(xs: &mut Xstate, n: usize) -> Xresult {
     read_unsigned_nb(xs, n, bo)
 }
 
-fn read_unsigned_nb(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
+fn read_unsigned_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     let (x, rest) = read_unsigned(xs, n, bo)?;
     xs.push_data(Cell::Int(x))?;
     set_rest(xs, rest)
@@ -515,7 +515,7 @@ mod tests {
         xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(8, s.len());
-        assert_eq!(BitstringFormat::Unsigned(Byteorder::LE), s.format());
+        assert_eq!(BitstringFormat::Unsigned(LITTLE), s.format());
         xs.interpret("2 bytes").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(BitstringFormat::Raw, s.format());
@@ -530,7 +530,7 @@ mod tests {
         xs.interpret("bitstr/last-read").unwrap();
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
-        assert_eq!(BitstringFormat::Signed(Byteorder::BE), s.format());
+        assert_eq!(BitstringFormat::Signed(BIG), s.format());
     }
 
     #[test]
