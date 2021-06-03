@@ -58,6 +58,12 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("i16le", |xs| read_signed_nb(xs, 16, LITTLE))?;
     xs.defword("i32le", |xs| read_signed_nb(xs, 32, LITTLE))?;
     xs.defword("i64le", |xs| read_signed_nb(xs, 64, LITTLE))?;
+    xs.defword("f32", |xs| read_float_n(xs, 32))?;
+    xs.defword("f32le", |xs| read_float_nb(xs, 32, LITTLE))?;
+    xs.defword("f32be", |xs| read_float_nb(xs, 32, BIG))?;
+    xs.defword("f64", |xs| read_float_n(xs, 64))?;
+    xs.defword("f64le", |xs| read_float_nb(xs, 64, LITTLE))?;
+    xs.defword("f64be", |xs| read_float_nb(xs, 64, BIG))?;
     xs.defword("i8>bitstr", |xs| num_to_bitstr(xs, 8, i8::MIN.into(), i8::MAX.into()))?;
     xs.defword("u8>bitstr", |xs| num_to_bitstr(xs, 8, u8::MIN.into(), u8::MAX.into()))?;
     xs.defword("i16>bitstr", |xs| num_to_bitstr(xs, 16, i16::MIN.into(), i16::MAX.into()))?;
@@ -445,6 +451,24 @@ fn read_unsigned_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     set_rest(xs, rest)
 }
 
+fn read_float_n(xs: &mut Xstate, n: usize) -> Xresult {
+    let bo = default_byteorder(xs)?;
+    read_float_nb(xs, n, bo)
+}
+
+fn read_float_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+    let (mut s, rest) = read_bitstring(xs, n)?;
+    let val = match n {
+        32 => s.to_f32(bo) as Xreal,
+        64 => s.to_f64(bo) as Xreal,
+        _ => return Err(Xerr::TypeError),
+    };
+    xs.push_data(Cell::Real(val))?;
+    s.set_format(BitstringFormat::Real(bo));
+    set_last_chunk(xs, s)?;
+    set_rest(xs, rest)
+}
+
 fn bit(xs: &mut Xstate) -> Xresult {
     let n = xs.pop_data()?.into_int()?;
     xs.push_data(Cell::Int(n * 8))
@@ -531,6 +555,16 @@ mod tests {
         let s = xs.pop_data().unwrap().into_bitstring().unwrap();
         assert_eq!(2, s.len());
         assert_eq!(BitstringFormat::Signed(BIG), s.format());
+
+        let f: f64 = 1.0;
+        xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec())).unwrap();
+        xs.interpret("f64be").unwrap();
+        let f2 = xs.pop_data().unwrap().into_real().unwrap();
+        assert_eq!(f,  f2);
+        xs.interpret("bitstr/last-read").unwrap();
+        let s = xs.pop_data().unwrap().into_bitstring().unwrap();
+        assert_eq!(64, s.len());
+        assert_eq!(BitstringFormat::Real(BIG), s.format());
     }
 
     #[test]

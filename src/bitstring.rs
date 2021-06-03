@@ -277,6 +277,51 @@ impl Bitstring {
         }
     }
 
+    pub fn to_f32(&self, order: Xbyteorder) -> f32 {
+        let mut it = self.iter8();
+        let mut buf = [0u8; 4];
+        for x in buf.iter_mut() {
+            *x = it.next().map(|x| x.0).unwrap_or_default();
+        }                
+        if order == BIG {
+            f32::from_be_bytes(buf)
+        } else {
+            f32::from_le_bytes(buf)
+        }
+    }
+
+    pub fn to_f64(&self, order: Xbyteorder) -> f64 {
+        let mut it = self.iter8();
+        let mut buf = [0u8; 8];
+        for x in buf.iter_mut() {
+            *x = it.next().map(|x| x.0).unwrap_or_default();
+        }                
+        if order == BIG {
+            f64::from_be_bytes(buf)
+        } else {
+            f64::from_le_bytes(buf)
+        }
+    }
+
+    pub fn from_f32(val: f32, order: Xbyteorder) -> Bitstring {
+        let bytes = if order == BIG {
+            val.to_be_bytes()
+        } else {
+            val.to_le_bytes()
+        };
+        Bitstring::from(bytes.to_vec())
+    }
+
+    pub fn from_f64(val: f64, order: Xbyteorder) -> Bitstring {
+        let bytes = if order == BIG {
+            val.to_be_bytes()
+        } else {
+            val.to_le_bytes()
+        };
+        Bitstring::from(bytes.to_vec())
+    }
+
+
     pub fn to_bytes(&self) -> Vec<u8> {
         if self.is_bytestring() {
             return self.slice().to_vec();
@@ -652,6 +697,17 @@ mod tests {
         let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
         assert_eq!(bs.to_i64(LITTLE), -1);
         assert_eq!(bs.to_u64(LITTLE), u64::max_value());
+
+        let f = f32::MAX;
+        let le = f.to_le_bytes().to_vec();
+        assert_eq!(Bitstring::from(le).to_f32(LITTLE), f);
+        let be = f.to_be_bytes().to_vec();
+        assert_eq!(Bitstring::from(be).to_f32(BIG), f);
+
+        let f: f32 = 1.234;
+        assert_eq!(f.to_le_bytes().to_vec(), Bitstring::from_f32(f, LITTLE).to_bytes());
+        assert_eq!(f.to_be_bytes().to_vec(), Bitstring::from_f32(f, BIG).to_bytes());
+
     }
 
     #[test]
