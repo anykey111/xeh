@@ -72,10 +72,13 @@ impl DebugMap {
     pub fn format_location(&self, at: usize) -> Option<String> {
         let item = self.code_map.get(at)?;
         let dloc = item.as_ref()?;
-        let src = &self.sources[dloc.source_id as usize].text;
+        let src = &self.sources[dloc.source_id as usize];
         let mut buf = String::new();
-        writeln!(buf, "{}:{}:", dloc.line, dloc.col).unwrap();
-        writeln!(buf, "{}", src.lines().nth(dloc.line as usize - 1).unwrap()).unwrap();
+        if let Some(path) = &src.path {
+            write!(buf, "{}", path).unwrap();
+        }
+        writeln!(buf, ":{}:{}:", dloc.line, dloc.col).unwrap();
+        writeln!(buf, "{}", src.text.lines().nth(dloc.line as usize - 1).unwrap()).unwrap();
         writeln!(buf, "{:->1$}", '^', dloc.col as usize).unwrap();
         Some(buf)
     }
