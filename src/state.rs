@@ -715,7 +715,7 @@ impl State {
 
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
-        match self.code.get(ip).cloned().ok_or(Xerr::InternalError)? {
+        match self.code[ip] {
             Opcode::Jump(offs) => self.jump_to(offs),
             Opcode::JumpIf(offs) => {
                 let t = self.pop_data()?;
