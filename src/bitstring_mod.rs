@@ -71,7 +71,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("i32>bitstr", |xs| num_to_bitstr(xs, 32, i32::MIN.into(), i32::MAX.into()))?;
     xs.defword("u32>bitstr", |xs| num_to_bitstr(xs, 32, u32::MIN.into(), u32::MAX.into()))?;
     xs.defword("i64>bitstr", |xs| num_to_bitstr(xs, 64, i64::MIN.into(), i64::MAX.into()))?;
-    xs.defword("u64>bitstr", |xs| num_to_bitstr(xs, 64, u64::MIN.into(), u64::MAX.into()))?;
+    xs.defword("u64>bitstr", |xs| num_to_bitstr(xs, 64, u64::MIN as Xint, u64::MAX as Xint))?;
     xs.defword("seek", seek_bin)?;
     xs.defword("offset", offset_bin)?;
     xs.defword("remain", remain_bin)?;
@@ -261,7 +261,8 @@ fn bitstring_to_signed(xs: &mut Xstate) -> Xresult {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_int(bo);
-    xs.push_data(Cell::Int(x))
+    //NOTE: result truncated!
+    xs.push_data(Cell::Int(x as Xint))
 }
 
 fn bitstring_to_unsigned(xs: &mut Xstate) -> Xresult {
@@ -326,11 +327,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
 
 fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
     let n = xs.pop_data()?.into_int()?;
-    if n < 0 || n > (usize::MAX as i128) {
-        Err(Xerr::TypeError)
-    } else {
-        Ok(n as usize)
-    }
+    Ok(n as usize)
 }
 
 fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
@@ -415,7 +412,8 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, X
     let x = s.to_uint(bo) as Xint;
     s.set_format(BitstringFormat::Unsigned(bo));
     set_last_chunk(xs, s)?;
-    Ok((x, rest))
+    //NOTE: result truncated!
+    Ok((x as Xint, rest))
 }
 
 fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbitstr)> {
@@ -426,7 +424,8 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbi
     let x = s.to_int(bo);
     s.set_format(BitstringFormat::Signed(bo));
     set_last_chunk(xs, s)?;
-    Ok((x, rest))
+    //NOTE: result truncated!
+    Ok((x as Xint, rest))
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
