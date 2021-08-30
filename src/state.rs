@@ -1007,7 +1007,7 @@ impl State {
 
     pub fn pop_data(&mut self) -> Xresult1<Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
-            let val = self.data_stack.pop().ok_or(Xerr::StackUnderflow)?;
+            let val = self.data_stack.pop().unwrap();
             if self.reverse_debugging() {
                 self.add_reverse_step(ReverseStep::PushData(val.clone()));
             }
@@ -1035,8 +1035,12 @@ impl State {
     }
 
     fn dup_data(&mut self) -> Xresult {
-        let val = self.top_data().ok_or(Xerr::StackUnderflow)?.clone();
-        self.push_data(val)
+        if self.data_stack.len() > self.ctx.ds_len {
+            let val = self.data_stack.last().unwrap().clone();
+            self.push_data(val)
+        } else {
+            Err(Xerr::StackUnderflow)
+        }
     }
 
     fn swap_data(&mut self) -> Xresult {
