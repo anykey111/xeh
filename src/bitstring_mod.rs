@@ -24,6 +24,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 
     xs.defword("bits", bin_read_bitstring)?;
     xs.defword("bytes", bin_read_bytes)?;
+    xs.defword("kbytes", bin_read_kbytes)?;
+    xs.defword("mbytes", bin_read_mbytes)?;
     xs.defword("int", bin_read_signed)?;
     xs.defword("uint", bin_read_unsigned)?;
     xs.defword("bitstr-append", bitstring_append)?;
@@ -80,9 +82,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", bitstr_dump_at)?;
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
-    xs.defword("B*", bit)?;
-    xs.defword("K*", kibit)?;
-    xs.defword("M*", mibit)?;
     OK
 }
 
@@ -363,20 +362,31 @@ fn bin_match(xs: &mut Xstate) -> Xresult {
     set_rest(xs, rest)
 }
 
-fn bin_read_bytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    let (s, rest) = read_bitstring(xs, n * 8)?;
+fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
+    let (s, rest) = read_bitstring(xs, n)?;
     set_last_chunk(xs, s.clone())?;
     xs.push_data(Cell::Bitstr(s))?;
     set_rest(xs, rest)
 }
 
+fn bin_read_bytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    read_bits(xs, n * 8)
+}
+
+fn bin_read_kbytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    read_bits(xs, n * 8 * 1024)
+}
+
+fn bin_read_mbytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    read_bits(xs, n * 8 * 1024 * 1024)
+}
+
 fn bin_read_bitstring(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
-    let (s, rest) = read_bitstring(xs, n)?;
-    set_last_chunk(xs, s.clone())?;
-    xs.push_data(Cell::Bitstr(s))?;
-    set_rest(xs, rest)
+    read_bits(xs, n)
 }
 
 fn bin_read_signed(xs: &mut Xstate) -> Xresult {
@@ -468,21 +478,6 @@ fn read_float_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     set_rest(xs, rest)
 }
 
-fn bit(xs: &mut Xstate) -> Xresult {
-    let n = xs.pop_data()?.into_int()?;
-    xs.push_data(Cell::Int(n * 8))
-}
-
-fn kibit(xs: &mut Xstate) -> Xresult {
-    let n = xs.pop_data()?.into_int()?;
-    xs.push_data(Cell::Int(n * 8 * 1024))
-}
-
-fn mibit(xs: &mut Xstate) -> Xresult {
-    let n = xs.pop_data()?.into_int()?;
-    xs.push_data(Cell::Int(n * 8 * 1024 * 1024))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,6 +562,15 @@ mod tests {
     }
 
     #[test]
+    fn test_xbytes() {
+        let mut xs = Xstate::new().unwrap();
+        let s: Vec<u8> = (0..1024*1024+1024).map(|_| 1).collect();
+        xs.set_binary_input(Xbitstr::from(s)).unwrap();
+        xs.interpret("1 kbytes 1 mbytes remain").unwrap();
+        assert_eq!(0, xs.pop_data().unwrap().into_int().unwrap());
+    }
+
+    #[test]
     fn test_bitstr_open() {
         let mut xs = Xstate::new().unwrap();
         xs.interpret(
@@ -630,18 +634,6 @@ mod tests {
         assert_eq!(Cell::Int(11), xs.pop_data().unwrap());
         xs.interpret("11 bits drop remain").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-    }
-
-    #[test]
-    fn test_bitstr_num_bytes() {
-        let mut xs = Xstate::new().unwrap();
-        xs.interpret("1 B*").unwrap();
-        assert_eq!(Cell::Int(8), xs.pop_data().unwrap());
-        xs.interpret("1 K*").unwrap();
-        assert_eq!(Cell::Int(1024 * 8), xs.pop_data().unwrap());
-        xs.interpret("1 M*").unwrap();
-        assert_eq!(Cell::Int(1024 * 1024 * 8), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"1\" B*"));
     }
 
     #[test]
