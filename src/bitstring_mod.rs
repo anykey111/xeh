@@ -26,6 +26,9 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bytes", bin_read_bytes)?;
     xs.defword("kbytes", bin_read_kbytes)?;
     xs.defword("mbytes", bin_read_mbytes)?;
+    xs.defword("b>", to_num_bytes)?;
+    xs.defword("kb>", to_num_kbytes)?;
+    xs.defword("mb>", to_num_mbytes)?;
     xs.defword("int", bin_read_signed)?;
     xs.defword("uint", bin_read_unsigned)?;
     xs.defword("bitstr-append", bitstring_append)?;
@@ -384,6 +387,21 @@ fn bin_read_mbytes(xs: &mut Xstate) -> Xresult {
     read_bits(xs, n * 8 * 1024 * 1024)
 }
 
+fn to_num_bytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    xs.push_data(Cell::from(n * 8))
+}
+
+fn to_num_kbytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    xs.push_data(Cell::from(n * 8 * 1024))
+}
+
+fn to_num_mbytes(xs: &mut Xstate) -> Xresult {
+    let n = take_length(xs)?;
+    xs.push_data(Cell::from(n * 8 * 1024 * 1024))
+}
+
 fn bin_read_bitstring(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n)
@@ -568,6 +586,17 @@ mod tests {
         xs.set_binary_input(Xbitstr::from(s)).unwrap();
         xs.interpret("1 kbytes 1 mbytes remain").unwrap();
         assert_eq!(0, xs.pop_data().unwrap().into_int().unwrap());
+    }
+
+    #[test]
+    fn test_to_num_bytes() {
+        let mut xs = Xstate::new().unwrap();
+        xs.interpret("2 b>").unwrap();
+        assert_eq!(16, xs.pop_data().unwrap().into_int().unwrap());
+        xs.interpret("4 kb>").unwrap();
+        assert_eq!(32768, xs.pop_data().unwrap().into_int().unwrap());
+        xs.interpret("3 mb>").unwrap();
+        assert_eq!(25165824, xs.pop_data().unwrap().into_int().unwrap());
     }
 
     #[test]
