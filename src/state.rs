@@ -419,7 +419,7 @@ impl State {
         (self.flow_stack.len() - self.ctx.fs_len) > 0
     }
 
-    pub fn new() -> Xresult1<State> {
+    pub fn boot() -> Xresult1<State> {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
         {
@@ -1799,7 +1799,7 @@ mod tests {
 
     #[test]
     fn test_data_stack() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("1 \"s\" 2").unwrap();
         xs.interpret("dup").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
@@ -1814,16 +1814,16 @@ mod tests {
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 swap)"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("1 2 3 rot").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("1 2 over").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
@@ -1833,12 +1833,12 @@ mod tests {
 
     #[test]
     fn test_if_flow() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("1 if 222 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("1 if 222 else 333 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
@@ -1846,28 +1846,28 @@ mod tests {
         it.next().unwrap();
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         // test errors
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else 333"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 else 222 then"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("else 222 if"));
     }
 
     #[test]
     fn test_begin_again() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("0 begin dup 5 < while inc again").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("begin break again").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.interpret("1 var x begin x while 0 -> x again").unwrap();
@@ -1881,12 +1881,12 @@ mod tests {
 
     #[test]
     fn test_length() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[1 2 3] len").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         xs.interpret("\"12345\" len").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         let res = xs.interpret("len");
         assert_eq!(Err(Xerr::StackUnderflow), res);
         let res = xs.interpret("1 len");
@@ -1895,47 +1895,47 @@ mod tests {
 
     #[test]
     fn test_loop_break() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("begin 1 break again").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.into_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         let res = xs.load("begin 1 again break");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("begin 1 if break else break then again").unwrap();
     }
 
     
     #[test]
     fn test_for_loop() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         // short form for [0 3]
         xs.interpret("3 for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // start with negative
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[-1 1] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         // start from zero
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[0 3] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // counters
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[5 6] for [2 3] for 1 for I J K loop loop loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // empty range
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[3 0] for I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         xs.interpret("[0 0] for I loop").unwrap();
@@ -1949,7 +1949,7 @@ mod tests {
 
     #[test]
     fn test_get_set() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[11 22 33] 2 nth").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
         xs.interpret("[11 22 33] -2 nth").unwrap();
@@ -1963,7 +1963,7 @@ mod tests {
 
     #[test]
     fn test_lookup() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[x: 1] x: get").unwrap();
         assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
         xs.interpret("[x: [y: [z: 10]]] x: y: z: get").unwrap();
@@ -1973,7 +1973,7 @@ mod tests {
 
     #[test]
     fn test_assoc() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[] x: 1 assoc y: 2 assoc").unwrap();
         assert_eq!(xvec![xkey![x], 1u32, xkey![y], 2u32], xs.pop_data().unwrap());
         xs.interpret("[x: 1] x: 2 assoc x: get").unwrap();
@@ -1983,7 +1983,7 @@ mod tests {
 
     #[test]
     fn test_locals() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret(": f local x local y x y y x ; 1 2 f").unwrap();
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
@@ -1994,7 +1994,7 @@ mod tests {
 
     #[test]
     fn test_base() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("HEX 16 BASE assert-eq").unwrap();
         xs.interpret("DEC 10 BASE assert-eq").unwrap();
         xs.interpret("OCT 8 BASE assert-eq").unwrap();
@@ -2003,14 +2003,14 @@ mod tests {
 
     #[test]
     fn test_immediate() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         let res = xs.load(": f [] 0 nth immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 
     #[test]
     fn test_nested_interpreter() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("(3 5 *)").unwrap();
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
@@ -2025,7 +2025,7 @@ mod tests {
 
     #[test]
     fn test_defvar() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         let x = xs.defvar("X", Cell::Int(1)).unwrap();
         assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x));
         let x2 = xs.defvar("X", Cell::Int(2)).unwrap();
@@ -2038,7 +2038,7 @@ mod tests {
 
     #[test]
     fn test_defwordself() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.defwordself( "self1", |xs| {
             assert_eq!(Ok(ONE), xs.pop_data());
             xs.push_data(ZERO)
@@ -2049,7 +2049,7 @@ mod tests {
 
     #[test]
     fn test_caseof() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("2 case 1 of 100 endof 2 of 200 endof endcase").unwrap();
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
         xs.interpret("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
@@ -2060,7 +2060,7 @@ mod tests {
 
     #[test]
     fn test_fmt_prefix() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
         xs.interpret("255 HEX print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.console);
@@ -2074,21 +2074,21 @@ mod tests {
 
     #[test]
     fn test_rev() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[1 2 3] rev").unwrap();
         assert_eq!(xvec![3isize, 2isize, 1isize], xs.pop_data().unwrap());
     }
 
     #[test]
     fn test_sort() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[2 3 1] sort").unwrap();
         assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
     }
 
     #[test]
     fn test_sort_by_key() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
         xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
         assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
@@ -2101,7 +2101,7 @@ mod tests {
 
     #[test]
     fn test_reverse_next() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.rnext());
         xs.start_reverse_debugging();
         xs.load(r#"
@@ -2144,7 +2144,7 @@ mod tests {
     #[test]
     fn test_reverse_vec() {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.start_reverse_debugging();
         xs.load("[ 3 for I loop ] len").unwrap();
         let mut log = Vec::new();
@@ -2166,7 +2166,7 @@ mod tests {
         let snapshot = |xs: &State| (
              xs.data_stack.clone(),
              xs.return_stack.clone());
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.start_reverse_debugging();
         xs.load(r#"
        : tower-of-hanoi
@@ -2201,9 +2201,9 @@ mod tests {
 
     #[test]
     fn test_exit_err() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::Exit(-1)), xs.interpret("-1 exit drop"));
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.load("0 exit +").unwrap();
         assert_eq!(Err(Xerr::Exit(0)), xs.run());
     }

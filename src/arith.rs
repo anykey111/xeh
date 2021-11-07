@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_arith() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("5 4 -").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.interpret("4 5 -").unwrap();
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_random_round() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("random").unwrap();
         let r = xs.pop_data().unwrap().into_real().unwrap();
         assert!(0.0 <= r && r <= 1.0);
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_cmp() {
-        let mut xs = State::new().unwrap();
+        let mut xs = State::boot().unwrap();
         xs.interpret("-1 0 <").unwrap();
         assert_eq!(Ok(ONE), xs.pop_data());
         xs.interpret("10 5 <").unwrap();

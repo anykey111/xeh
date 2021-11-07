@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_d2_rgba() {
-        let mut xs = Xstate::new().unwrap();
+        let mut xs = Xstate::boot().unwrap();
         self::load(&mut xs).unwrap();
         xs.interpret("
         3 var W
