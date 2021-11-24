@@ -510,6 +510,12 @@ impl State {
         Ok(Xref::Word(word_addr))
     }
 
+    pub fn set_doc(&mut self, name: &str, help: String) -> Xresult {
+        let a = self.dict_find(name).ok_or(Xerr::UnknownWord)?;
+        self.dict[a].help = Some(help);
+        OK
+    }
+
     pub fn help(&self, name: &str) -> Option<&String> {
         let a = self.dict_find(name)?;
         self.dict.get(a).and_then(|x| x.help.as_ref())
