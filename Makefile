@@ -15,3 +15,5 @@ fibench:
 	# measure-command { target/release/xeh benches/fib.xs }
 	time target/release/xeh benches/fib.xs
 
+universal-debug:
+	cargo-lipo build
