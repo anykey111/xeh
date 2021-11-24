@@ -19,6 +19,7 @@ enum Entry {
     },
 }
 
+#[derive(Clone)]
 struct DictEntry {
     name: String,
     entry: Entry,
@@ -112,7 +113,7 @@ impl Frame {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ReverseStep {
     SetIp(usize),
     PushData(Cell),
@@ -130,7 +131,7 @@ pub enum ReverseStep {
     DropLocal(usize),
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct State {
     dict: Vec<DictEntry>,
     heap: Vec<Cell>,

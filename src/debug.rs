@@ -1,17 +1,19 @@
 use crate::{lex::*};
 use std::fmt::Write;
 
+#[derive(Clone)]
 struct SourceBuf {
     path: Option<String>,
     text: String,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DebugMap {
     code_map: Vec<Option<DebugLoc>>,
     sources: Vec<SourceBuf>,
 }
 
+#[derive(Clone)]
 pub struct DebugLoc {
     pub source_id: u32,
     pub line: u32,

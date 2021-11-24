@@ -4,7 +4,7 @@ use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BitstrMod {
     big_endian: Xref,
     dump_start: Xref,

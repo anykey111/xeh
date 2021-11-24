@@ -27,7 +27,7 @@ pub mod c_api {
     use crate::prelude::{Xcell, Xstate};
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_boot() -> *mut Xstate {
+    pub unsafe extern "C" fn xeh_open() -> *mut Xstate {
         match Xstate::boot() {
             Ok(xs) => Box::into_raw(Box::new(xs)),
             Err(err) => {
@@ -38,8 +38,26 @@ pub mod c_api {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_halt(xs: *mut Xstate)  {
-        Box::from_raw(xs);
+    pub unsafe extern "C" fn xeh_close(xs: *mut Xstate)  {
+        if xs != null_mut() {
+            Box::from_raw(xs);
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_snapshot(xs: *mut Xstate) -> *mut Xstate {
+        let xs = Box::from_raw(xs);
+        let xs2 = xs.clone();
+        Box::into_raw(xs);
+        Box::into_raw(xs2)
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_top_len(xs: *mut Xstate) -> usize {
+        let xs = Box::from_raw(xs);
+        let n = 1;
+        Box::into_raw(xs);
+        n
     }
 
     #[no_mangle]
@@ -122,14 +140,6 @@ pub mod c_api {
     #[no_mangle]
     pub unsafe extern "C" fn xeh_release(x: *mut Xcell) {
         Box::from_raw(x);
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn xeh_top_len(xs: *mut Xstate) -> usize {
-        let xs = Box::from_raw(xs);
-        let n = 1;
-        Box::into_raw(xs);
-        n
     }
 
 }
