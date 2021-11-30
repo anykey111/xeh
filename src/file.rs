@@ -48,7 +48,7 @@ pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&path)
+            .open(path.as_str())
     };
     let mut file = open().map_err(|e| {
         xs.log_error(format!("{}: {}", path, e));

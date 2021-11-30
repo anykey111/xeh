@@ -17,6 +17,7 @@ rustyline = { version = "6.1.2", optional = true }
 getopts = "0.2"
 getrandom = { version = "0.2.2", features = ["js"] }
 twoway = "0.2.1"
+arcstr = "1.1.1"
 
 mapr = { version = "0.8", optional = true }
 

@@ -301,13 +301,13 @@ impl State {
                     self.code_emit_value(Cell::Real(r))?;
                 }
                 Tok::Str(s) => {
-                    self.code_emit_value(Cell::Str(s))?;
+                    self.code_emit_value(Cell::Str(s.into()))?;
                 }
                 Tok::Bstr(s) => {
                     self.code_emit_value(Cell::Bitstr(s))?;
                 }
                 Tok::Key(key) => {
-                    self.code_emit_value(Cell::Key(key))?;
+                    self.code_emit_value(Cell::Key(key.into()))?;
                 }
                 Tok::Word(name) => {
                     let idx = match self.dict_find(&name) {

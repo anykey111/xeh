@@ -2,6 +2,7 @@ use crate::error::{Xerr, Xresult, Xresult1};
 use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
+pub type Xstr = arcstr::ArcStr;
 pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i64;
 pub type Xreal = f64;
@@ -42,8 +43,8 @@ pub enum Cell {
     Nil,
     Int(Xint),
     Real(Xreal),
-    Str(String),
-    Key(String),
+    Str(Xstr),
+    Key(Xstr),
     Vector(Xvec),
     Fun(Xfn),
     Bitstr(Xbitstr),
@@ -154,7 +155,7 @@ impl Cell {
         }
     }
 
-    pub fn into_string(self) -> Xresult1<String> {
+    pub fn into_string(self) -> Xresult1<Xstr> {
         match self {
             Cell::Str(s) => Ok(s),
             _ => Err(Xerr::TypeError),
@@ -339,7 +340,7 @@ pub const NIL: Cell = Cell::Nil;
 #[macro_export]
 macro_rules! xkey {
     ($k:ident) => {{
-        Xcell::Key(stringify!($k).to_string())
+        Xcell::Key(stringify!($k).into())
     }};
 }
 

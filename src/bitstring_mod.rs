@@ -299,7 +299,7 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
 
 pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
     match val {
-        Cell::Str(s) => Ok(Bitstring::from(s.into_bytes())),
+        Cell::Str(s) => Ok(Bitstring::from(s.to_string().into_bytes())),
         Cell::Vector(v) => {
             let mut tmp = Xbitstr::new();
             for x in v.iter() {
