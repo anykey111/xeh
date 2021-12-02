@@ -1045,7 +1045,11 @@ impl State {
         self.data_stack.iter().rev().nth(idx)
     }
 
-    pub fn top_data(&self) -> Option<&Cell> {
+    pub fn data_depth(&self) -> usize {
+        self.data_stack.len() - self.ctx.ds_len
+    }
+
+    fn top_data(&self) -> Option<&Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
             self.data_stack.last()
         } else {
