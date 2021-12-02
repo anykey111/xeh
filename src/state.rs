@@ -190,6 +190,23 @@ impl State {
         msg
     }
 
+    pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
+        let prefix = self
+            .get_var(self.fmt_prefix)
+            .map(|val| val.is_true())
+            .unwrap_or(false);
+        let s= match self.get_var(self.fmt_base)? {
+            Cell::Int(2) if prefix => format!("{:#2?}", val),
+            Cell::Int(2)  => format!("{:2?}", val),
+            Cell::Int(8) if prefix => format!("{:#8?}", val),
+            Cell::Int(8)  => format!("{:8?}", val),
+            Cell::Int(16) if prefix => format!("{:#16?}", val),
+            Cell::Int(16) => format!("{:16?}", val),
+            _ => format!("{:10?}", val),
+        };
+        Ok(s)
+    }
+    
     pub fn pretty_error(&mut self, err: &Xerr) -> String {
         let mut error_text = self.format_error(err);
         if self.ctx.mode == ContextMode::Load {
@@ -1743,19 +1760,7 @@ fn core_word_println(xs: &mut State) -> Xresult {
 
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    let prefix = xs
-        .get_var(xs.fmt_prefix)
-        .map(|val| val.is_true())
-        .unwrap_or(false);
-    let s= match xs.get_var(xs.fmt_base)? {
-        Cell::Int(2) if prefix => format!("{:#2?}", val),
-        Cell::Int(2)  => format!("{:2?}", val),
-        Cell::Int(8) if prefix => format!("{:#8?}", val),
-        Cell::Int(8)  => format!("{:8?}", val),
-        Cell::Int(16) if prefix => format!("{:#16?}", val),
-        Cell::Int(16) => format!("{:16?}", val),
-        _ => format!("{:10?}", val),
-    };
+    let s = xs.format_cell(&val)?;
     xs.print(&s);
     OK
 }
