@@ -10,6 +10,11 @@ pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
 pub type Xcell = Cell;
 
+pub struct XcellWithMeta {
+    meta: Cell,
+    value: Cell,
+}
+
 #[derive(Clone, Copy)]
 pub struct XfnPtr(pub XfnType);
 
@@ -49,6 +54,7 @@ pub enum Cell {
     Fun(Xfn),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
+    WithMeta(std::rc::Rc<XcellWithMeta>),
 }
 
 use std::fmt;
@@ -89,6 +95,7 @@ impl fmt::Debug for Cell {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
             },
+            Cell::WithMeta(mc) => mc.value.fmt(f),
         }
     }
 }
@@ -104,7 +111,7 @@ impl fmt::Debug for Xfn {
 
 impl PartialEq for Cell {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
+        match (self.value(), other.value()) {
             (Cell::Nil, Cell::Nil) => true,
             (Cell::Int(a), Cell::Int(b)) => a == b,
             (Cell::Real(a), Cell::Real(b)) => a == b,
@@ -122,7 +129,7 @@ use std::cmp::Ordering;
 
 impl PartialOrd for Cell {
     fn partial_cmp(&self, other: &Cell) -> Option<Ordering> {
-        match (self, other) {
+        match (self.value(), other.value()) {
             (Cell::Int(a), Cell::Int(b)) => a.partial_cmp(b),
             (Cell::Real(a), Cell::Real(b)) => a.partial_cmp(b),
             (Cell::Str(a), Cell::Str(b)) => a.partial_cmp(b),
@@ -142,36 +149,63 @@ impl Eq for Cell {}
 impl Cell {
 
     pub fn is_true(&self) -> bool {
-        match self {
+        match self.value() {
             Cell::Nil | Cell::Int(0) => false,
             _ => true,
         }
     }
 
     pub fn is_key(&self) -> bool {
-        match self {
+        match self.value() {
             Cell::Key(_) => true,
             _ => false,
         }
     }
 
-    pub fn into_string(self) -> Xresult1<Xstr> {
+    pub fn meta(&self) -> Option<&Cell> {
         match self {
-            Cell::Str(s) => Ok(s),
+            Cell::WithMeta(mc) => Some(&mc.meta),
+            _ => None,
+        }
+    }
+
+    pub fn with_meta(self, meta: Cell) -> Cell {
+        Cell::WithMeta(std::rc::Rc::new(XcellWithMeta{
+            meta, value: self
+        }))
+    }
+
+    pub fn value(&self) -> &Cell {
+        match self {
+            Cell::WithMeta(rc) => &rc.value,
+            _ => self,
+        }
+    }
+
+    pub fn vec(&self) -> Xresult1<&Xvec> {
+        match self.value() {
+           Cell::Vector(x) => Ok(x),
+           _ => Err(Xerr::TypeError)
+        }
+    }
+
+    pub fn to_string(&self) -> Xresult1<Xstr> {
+        match self.value() {
+            Cell::Str(s) => Ok(s.clone()),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_vector(self) -> Result<Xvec, Xerr> {
-        match self {
-            Cell::Vector(x) => Ok(x),
+    pub fn to_vector(&self) -> Result<Xvec, Xerr> {
+        match self.value() {
+            Cell::Vector(x) => Ok(x.clone()),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_real(self) -> Xresult1<Xreal> {
-        match self {
-            Cell::Real(x) => Ok(x),
+    pub fn to_real(&self) -> Xresult1<Xreal> {
+        match self.value() {
+            Cell::Real(x) => Ok(*x),
             _ => Err(Xerr::TypeError),
         }
     }
@@ -184,41 +218,29 @@ impl Cell {
     }
 
     pub fn to_isize(&self) -> Xresult1<isize> {
-        match self {
+        match self.value() {
             Cell::Int(i) => Ok(*i as isize),
             _ => Err(Xerr::TypeError),
         }
     }
 
     pub fn to_usize(&self) -> Xresult1<usize> {
-        match self {
+        match self.value() {
             Cell::Int(i) => Ok(*i as usize),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_int(self) -> Xresult1<Xint> {
-        match self {
-            Cell::Int(i) => Ok(i),
+    pub fn to_int(&self) -> Xresult1<Xint> {
+        match self.value() {
+            Cell::Int(i) => Ok(*i),
             _ => Err(Xerr::TypeError),
         }
     }
 
-    pub fn into_i64(self) -> Xresult1<i64> {
-        self.into_int().map(|i| i as i64)
-    }
-
-    pub fn into_usize(self) -> Xresult1<usize> {
-        self.into_int().map(|i| i as usize)
-    }
-
-    pub fn into_isize(self) -> Xresult1<isize> {
-        self.into_int().map(|i| i as isize)
-    }
-
-    pub fn into_bitstring(self) -> Xresult1<Xbitstr> {
-        match self {
-            Cell::Bitstr(s) => Ok(s),
+    pub fn to_bitstring(&self) -> Xresult1<Xbitstr> {
+        match self.value() {
+            Cell::Bitstr(s) => Ok(s.clone()),
             _ => Err(Xerr::TypeError),
         }
     }
@@ -274,6 +296,18 @@ impl From<bool> for Cell {
         } else {
             ZERO
         }
+    }
+}
+
+impl From<Xvec> for Cell {
+    fn from(x: Xvec) -> Self {
+        Cell::Vector(x)
+    }
+}
+
+impl From<&str> for Cell {
+    fn from(x: &str) -> Self {
+        Cell::Str(Xstr::from(x))
     }
 }
 
@@ -337,24 +371,43 @@ pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
 
-#[macro_export]
-macro_rules! xkey {
-    ($k:ident) => {{
-        Xcell::Key(stringify!($k).into())
-    }};
-}
-
+/*
 #[macro_export]
 macro_rules! xvec {
-    ($e:expr) => {{
-        let mut v = Xvec::new();
-        v.push_back_mut(Xcell::from($e));
-        Xcell::Vector(v)
-    }};
-    ($e:expr, $($es:expr),+) => {{
-        let mut v = Xvec::new();
-        v.push_back_mut(Xcell::from($e));
-        $(v.push_back_mut(Xcell::from($es));)+
-        Xcell::Vector(v)
-    }};
+    ($($e:expr),*) => {
+        {
+            #[allow(unused_mut)]
+            let mut v = Xvec::new();
+            $(
+                v.push_back_mut(Cell::from($e));
+            )*
+            Cell::from(v)
+        }
+    };
+}
+*/
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cell_eq() {
+        let a = Cell::from(33u8);
+        let b = Cell::from(33u8);
+        assert_eq!(&a, &b);
+        let c = b.with_meta(ZERO.clone());
+        assert_eq!(&a, &c);
+        let a = Cell::from(32.0);
+        let b = Cell::from(32.0);
+        assert_eq!(&a, &b);
+        let c = b.with_meta(ONE.clone());
+        assert_eq!(&a, &c);
+        let a = Cell::from("asd");
+        let b = Cell::from("asd");
+        assert_eq!(&a, &b);
+        let c = b.with_meta(ONE.clone());
+        assert_eq!(&a, &c);
+    }
+
 }

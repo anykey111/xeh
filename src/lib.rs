@@ -22,7 +22,7 @@ pub mod prelude {
 }
 
 pub mod c_api {
-    use std::ptr::{null, null_mut};
+    use std::ptr::{null_mut};
 
     use crate::prelude::{Xcell, Xstate};
 

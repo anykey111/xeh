@@ -4,8 +4,8 @@ use crate::state::*;
 
 // (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {
-    let b = xs.pop_data()?.into_int()?;
-    let a = xs.pop_data()?.into_int()?;
+    let b = xs.pop_data()?.to_int()?;
+    let a = xs.pop_data()?.to_int()?;
     let c = ops_int(a, b);
     xs.push_data(Cell::Int(c))
 }
@@ -203,13 +203,13 @@ mod tests {
     fn test_random_round() {
         let mut xs = State::boot().unwrap();
         xs.interpret("random").unwrap();
-        let r = xs.pop_data().unwrap().into_real().unwrap();
+        let r = xs.pop_data().unwrap().to_real().unwrap();
         assert!(0.0 <= r && r <= 1.0);
         xs.interpret("random round").unwrap();
-        let i = xs.pop_data().unwrap().into_int().unwrap();
+        let i = xs.pop_data().unwrap().to_int().unwrap();
         assert!(0 <= i && i <= 1);
         xs.interpret("1 round").unwrap();
-        assert_eq!(Ok(1), xs.pop_data().unwrap().into_int());
+        assert_eq!(Ok(1), xs.pop_data().unwrap().to_int());
         assert_eq!(Err(Xerr::TypeError), xs.interpret("[] round"));
     }
 

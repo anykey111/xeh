@@ -13,8 +13,8 @@ fn resize(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    let h = xs.pop_data()?.into_usize()?;
-    let w = xs.pop_data()?.into_usize()?;
+    let h = xs.pop_data()?.to_usize()?;
+    let w = xs.pop_data()?.to_usize()?;
     let n = w * h;
     d2.width = w;
     d2.height = h;
@@ -26,7 +26,7 @@ fn color_set(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    let color = xs.pop_data()?.into_usize()?;
+    let color = xs.pop_data()?.to_usize()?;
     d2.color = color as u32;
     OK
 }
@@ -49,7 +49,7 @@ fn palette_set(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    let newpal = xs.pop_data()?.into_vector()?;
+    let newpal = xs.pop_data()?.to_vector()?;
     let mut pal = d2.pal.take().unwrap_or_else(|| Vec::with_capacity(newpal.len()));
     pal.reserve(newpal.len());
     pal.extend(newpal.iter().map(|c|
@@ -66,8 +66,8 @@ fn data_set(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    let y = xs.pop_data()?.into_usize()?;
-    let x = xs.pop_data()?.into_usize()?;
+    let y = xs.pop_data()?.to_usize()?;
+    let x = xs.pop_data()?.to_usize()?;
     let index = y * d2.width + x;
     let color = if let Some(pal) = &d2.pal {
         *pal.get(d2.color as usize).ok_or(Xerr::OutOfBounds)?
@@ -83,8 +83,8 @@ fn data_get(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    let y = xs.pop_data()?.into_usize()?;
-    let x = xs.pop_data()?.into_usize()?;
+    let y = xs.pop_data()?.to_usize()?;
+    let x = xs.pop_data()?.to_usize()?;
     let index = y * d2.width + x;
     if let Some(p) = d2.data.get(index) {
         xs.push_data(Xcell::from(*p))
@@ -151,7 +151,7 @@ mod tests {
         loop
         d2-capture-rgba
         ").unwrap();
-        let mut bs = xs.pop_data().unwrap().into_bitstring().unwrap();
+        let mut bs = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(3 * 2 * 32, bs.len());
         for y in 0..2 {
             for x in 0..3 {

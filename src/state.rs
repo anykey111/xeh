@@ -626,6 +626,8 @@ impl State {
             Def("newline", core_word_newline),
             Def("file-write", crate::file::core_word_file_write),
             Def("load", core_word_load),
+            Def("meta", core_word_meta),
+            Def("with-meta", core_word_with_meta),
             Def("HEX", core_word_hex),
             Def("DEC", core_word_decimal),
             Def("OCT", core_word_octal),
@@ -1369,7 +1371,7 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
                 for _ in 0..top_ptr - stack_ptr {
                     xs.pop_data()?;
                 }
-                xs.push_data(Cell::Vector(v))
+                xs.push_data(Cell::from(v))
             }
         }
     }
@@ -1644,18 +1646,18 @@ fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
 }
 
 fn core_word_nth(xs: &mut State) -> Xresult {
-    let index = xs.pop_data()?.into_isize()?;
-    let v = xs.pop_data()?.into_vector()?;
+    let index = xs.pop_data()?.to_isize()?;
+    let v = xs.pop_data()?.to_vector()?;
     xs.push_data(vector_get(&v, index)?.clone())
 }
 
 fn core_word_set(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    let index = xs.pop_data()?.into_isize()?;
-    let mut v = xs.pop_data()?.into_vector()?;
+    let index = xs.pop_data()?.to_isize()?;
+    let mut v = xs.pop_data()?.to_vector()?;
     let new_index = vector_relative_index(&v, index)?;
     if v.set_mut(new_index, val) {
-        xs.push_data(Cell::Vector(v))
+        xs.push_data(Cell::from(v))
     } else {
         Err(Xerr::OutOfBounds)
     }
@@ -1669,68 +1671,60 @@ fn core_word_get(xs: &mut State) -> Xresult {
     if xs.top_data().ok_or(Xerr::StackUnderflow)?.is_key() {
         core_word_get(xs)?;
     }
-    let v = xs.pop_data()?.into_vector()?;
+    let v = xs.pop_data()?.to_vector()?;
     xs.push_data(vector_get_by_key(&v, &key)?.clone())
 }
 
 fn core_word_assoc(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
     let key = xs.pop_data()?;
-    match xs.pop_data()? {
-        Cell::Vector(mut v) => {
-            let mut it = v.iter().enumerate();
-            let mut reuse = None;
-            while let Some((index, x)) = it.next() {
-                if x == &key {
-                    reuse = Some(index + 1);
-                    break;
-                }
-                it.next();
-            }
-            if let Some(index) = reuse {
-                if !v.set_mut(index, val) {
-                    return Err(Xerr::OutOfBounds);
-                }
-            } else {
-                v.push_back_mut(key);
-                v.push_back_mut(val);
-            }
-            xs.push_data(Cell::Vector(v))
+    let mut v = xs.pop_data()?.to_vector()?;
+    let mut it = v.iter().enumerate();
+    let mut reuse = None;
+    while let Some((index, x)) = it.next() {
+        if x == &key {
+            reuse = Some(index + 1);
+            break;
         }
-        _ => Err(Xerr::TypeError),
+        it.next();
     }
+    if let Some(index) = reuse {
+        if !v.set_mut(index, val) {
+            return Err(Xerr::OutOfBounds);
+        }
+    } else {
+        v.push_back_mut(key);
+        v.push_back_mut(val);
+    }
+    xs.push_data(Cell::from(v))
 }
 
 fn core_word_sort(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
-    let v = xs.pop_data()?.into_vector()?;
+    let v = xs.pop_data()?.to_vector()?;
     let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
     let sorted = Xvec::from_iter(m.into_iter());
-    xs.push_data(Cell::Vector(sorted))
+    xs.push_data(Cell::from(sorted))
 }
 
 fn core_word_sort_by_key(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
     let key = xs.pop_data()?;
-    let v = xs.pop_data()?.into_vector()?;
+    let v = xs.pop_data()?.to_vector()?;
     let mut m = std::collections::BTreeMap::new();
     for i in v.iter() {
-        let pv = if let Cell::Vector(pv) = i {
-            pv
-        } else {
-            return Err(Xerr::TypeError)
-        };
+        let pv = i.vec()?;
         m.insert(vector_get_by_key(pv, &key)?, i);
     }
     let sorted = Xvec::from_iter(m.values().map(|x| (*x).clone()));
-    xs.push_data(Cell::Vector(sorted))
+    xs.push_data(Cell::from(sorted))
 }
 
 fn core_word_rev(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
-    let v = xs.pop_data()?.into_vector()?;
+    let v = xs.pop_data()?.to_vector()?;
     let rv = Xvec::from_iter(v.iter().rev().cloned());
-    xs.push_data(Cell::Vector(rv))
+    xs.push_data(Cell::from(rv))
 }
 
 fn core_word_assert(xs: &mut State) -> Xresult {
@@ -1755,7 +1749,7 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
 
 fn core_word_exit(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
-    let code = xs.pop_data()?.into_isize()?;
+    let code = xs.pop_data()?.to_isize()?;
     Err(Xerr::Exit(code))
 }
 
@@ -1800,14 +1794,24 @@ fn core_word_no_prefix(xs: &mut State) -> Xresult {
 }
 
 fn core_word_load(xs: &mut State) -> Xresult {
-    let path = xs.pop_data()?.into_string()?;
+    let path = xs.pop_data()?.to_string()?;
     xs.load_source(&path)
+}
+
+fn core_word_meta(xs: &mut State) -> Xresult {
+    let val = xs.top_data().and_then(|x| x.meta()).unwrap_or(&NIL).clone();
+    xs.push_data(val)
+}
+
+fn core_word_with_meta(xs: &mut State) -> Xresult {
+    let meta = xs.pop_data()?;
+    let val = xs.pop_data()?.with_meta(meta);
+    xs.push_data(val)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{xvec, xkey};
 
     #[test]
     fn test_jump_offset() {
@@ -1916,7 +1920,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.interpret("begin 1 break again").unwrap();
         let x = xs.pop_data().unwrap();
-        assert_eq!(x.into_int(), Ok(1));
+        assert_eq!(x.to_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
         let res = xs.load("begin 1 again break");
@@ -1993,7 +1997,12 @@ mod tests {
     fn test_assoc() {
         let mut xs = State::boot().unwrap();
         xs.interpret("[] x: 1 assoc y: 2 assoc").unwrap();
-        assert_eq!(xvec![xkey![x], 1u32, xkey![y], 2u32], xs.pop_data().unwrap());
+        let mut m = Xvec::new();
+        m.push_back_mut(Cell::Key("x".into()));
+        m.push_back_mut(Cell::from(1u32));
+        m.push_back_mut(Cell::Key("y".into()));
+        m.push_back_mut(Cell::from(2u32));
+        assert_eq!(Ok(m), xs.pop_data().unwrap().to_vector());
         xs.interpret("[x: 1] x: 2 assoc x: get").unwrap();
         assert_eq!(Xcell::from(2usize), xs.pop_data().unwrap());
         xs.interpret("[x: 1 y: 3] x: 5 assoc x: get").unwrap();
@@ -2037,7 +2046,7 @@ mod tests {
         xs.interpret("(10 var x 2 var y (x y *))").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
         xs.interpret("(3 var n [n for I loop])").unwrap();
-        let v = xs.pop_data().unwrap().into_vector().unwrap();
+        let v = xs.pop_data().unwrap().to_vector().unwrap();
         assert_eq!(3, v.len());
     }
 
@@ -2094,14 +2103,22 @@ mod tests {
     fn test_rev() {
         let mut xs = State::boot().unwrap();
         xs.interpret("[1 2 3] rev").unwrap();
-        assert_eq!(xvec![3isize, 2isize, 1isize], xs.pop_data().unwrap());
+        let mut v = Xvec::new();
+        v.push_back_mut(Cell::Int(3));
+        v.push_back_mut(Cell::Int(2));
+        v.push_back_mut(Cell::Int(1));
+        assert_eq!(Ok(&v), xs.pop_data().unwrap().vec());
     }
 
     #[test]
     fn test_sort() {
         let mut xs = State::boot().unwrap();
         xs.interpret("[2 3 1] sort").unwrap();
-        assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
+        let mut v = Xvec::new();
+        v.push_back_mut(Cell::Int(1));
+        v.push_back_mut(Cell::Int(2));
+        v.push_back_mut(Cell::Int(3));
+        assert_eq!(Ok(&v), xs.pop_data().unwrap().vec());
     }
 
     #[test]
@@ -2109,12 +2126,16 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
         xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
-        assert_eq!(xvec![1isize, 2isize, 3isize], xs.pop_data().unwrap());
+        let mut v = Xvec::new();
+        v.push_back_mut(Cell::Int(1));
+        v.push_back_mut(Cell::Int(2));
+        v.push_back_mut(Cell::Int(3));
+        assert_eq!(Ok(&v), xs.pop_data().unwrap().vec());
     }
 
 
     fn collect_ints(xs: &State) -> Vec<isize> {
-        xs.data_stack.iter().cloned().map(|x| x.into_isize().unwrap()).collect()
+        xs.data_stack.iter().cloned().map(|x| x.to_isize().unwrap()).collect()
     }
 
     #[test]
@@ -2215,6 +2236,15 @@ mod tests {
                 assert_eq!(expected_state, snapshot(&xs));
             }
         }
+    }
+
+    #[test]
+    fn test_meta() {
+        let mut xs = State::boot().unwrap();
+        xs.interpret(" 123 \"test\" with-meta").unwrap();
+        assert_eq!(xs.top_data(), Some(&Cell::Int(123)));
+        xs.interpret("meta").unwrap();
+        assert_eq!(xs.top_data(), Some(&Cell::Str(Xstr::from("test"))));
     }
 
     #[test]

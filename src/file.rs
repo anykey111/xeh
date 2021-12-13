@@ -40,7 +40,7 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
 }
 
 pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
-    let path = xs.pop_data()?.into_string()?;
+    let path = xs.pop_data()?.to_string()?;
     let data = xs.pop_data()?;
     let s = crate::bitstring_mod::bitstring_from(data)?;
     let open = || {
