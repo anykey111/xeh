@@ -36,18 +36,6 @@ fn cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
     (result, len)
 }
 
-macro_rules! fold_bits {
-    ($range:expr, $data:expr, $f:expr) => {{
-        let mut start = $range.start;
-        let end = $range.end;
-        for x in $data {
-            let (val, n) = cut_bits(*x, start, end);
-            $f(val, n);
-            start += n;
-        }
-    }};
-}
-
 macro_rules! num_to_big {
     ($val:expr, $num_bits:expr) => {{
         let val = $val;
@@ -199,18 +187,20 @@ impl Bitstring {
     }
 
     pub fn to_uint(&self, order: Xbyteorder) -> u128 {
-        let data = self.slice();
         let mut acc: u128 = 0;
-        match order {
-            Xbyteorder::Big => fold_bits!(self.range, data, |x, num_bits| {
-                acc = (acc << num_bits) | x as u128;
-            }),
-            Xbyteorder::Little => {
-                let mut shift = 0;
-                fold_bits!(self.range, data, |x, num_bits| {
-                    acc |= (x as u128) << shift;
-                    shift += num_bits;
-                })
+        let mut pos = self.start();
+        let end = self.end();
+        if order == BIG {
+            for byte in self.slice() {
+                let (val, n) = cut_bits(*byte, pos, end);
+                acc = (acc << n) | (val as u128);
+                pos += n;
+            }
+        } else {
+            for byte in self.slice() {
+                let (val, n) = cut_bits(*byte, pos, end);
+                acc |= (val as u128) << (pos - self.start()) as u32;
+                pos += n;
             }
         }
         acc
