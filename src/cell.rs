@@ -9,6 +9,7 @@ pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
 pub type Xcell = Cell;
+pub type Xmeta = std::rc::Rc<XcellWithMeta>;
 
 pub struct XcellWithMeta {
     meta: Cell,
@@ -54,7 +55,7 @@ pub enum Cell {
     Fun(Xfn),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
-    WithMeta(std::rc::Rc<XcellWithMeta>),
+    WithMeta(Xmeta),
 }
 
 use std::fmt;
@@ -170,7 +171,7 @@ impl Cell {
     }
 
     pub fn with_meta(self, meta: Cell) -> Cell {
-        Cell::WithMeta(std::rc::Rc::new(XcellWithMeta{
+        Cell::WithMeta(Xmeta::new(XcellWithMeta{
             meta, value: self
         }))
     }
