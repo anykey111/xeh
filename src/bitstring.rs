@@ -2,7 +2,7 @@ use std::convert::From;
 use std::ops::Range;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum Xbyteorder {
     Little,
     Big,
@@ -15,22 +15,7 @@ pub const BIG: Xbyteorder = Xbyteorder::Big;
 pub const NATIVE: Xbyteorder = LITTLE;
 
 #[cfg(target_endian = "big")]
-pub const NATIVE: Byteorder = BIG;
-
-
-#[derive(Clone, PartialEq, Debug, Copy)]
-pub enum BitstringFormat {
-    Raw,
-    Signed(Xbyteorder),
-    Unsigned(Xbyteorder),
-    Real(Xbyteorder),
-}
-
-impl Default for BitstringFormat {
-    fn default() -> Self {
-        BitstringFormat::Raw
-    }
-}
+pub const NATIVE: Xbyteorder = BIG;
 
 pub type BitstringRange = Range<usize>;
 
@@ -49,39 +34,6 @@ fn cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
     let shift = 8 - (start_bit + len);
     let result = x.wrapping_shr(shift as u32) & bit_mask(len);
     (result, len)
-}
-
-macro_rules! to_unsigned {
-    ($range:expr, $data:expr, $order:expr, $t:ty) => {{
-        let mut acc: $t = 0;
-        match $order {
-            Xbyteorder::Big => fold_bits!($range, $data, |x, num_bits| {
-                acc = (acc << num_bits) | x as $t;
-            }),
-            Xbyteorder::Little => {
-                let mut shift = 0;
-                fold_bits!($range, $data, |x, num_bits| {
-                    acc |= (x as $t) << shift;
-                    shift += num_bits;
-                })
-            }
-        }
-        acc
-    }};
-}
-
-macro_rules! to_signed {
-    ($range:expr, $data:expr, $order:expr, $u_t:ty, $i_t:ty) => {{
-        let val = to_unsigned!($range, $data, $order, $u_t);
-        let len = $range.len() as u32;
-        let sign_bit = 1 << (len - 1);
-        if (val & sign_bit) > 0 {
-            let mask = !<$u_t>::MAX.overflowing_shl(len as u32).0;
-            -(((!val & mask) + 1) as $i_t)
-        } else {
-            val as $i_t
-        }
-    }};
 }
 
 macro_rules! fold_bits {
@@ -109,7 +61,6 @@ macro_rules! num_to_big {
             i -= n;
         }
         Bitstring {
-            format: BitstringFormat::Raw,
             range: BitstringRange::from(0..num_bits),
             data: Rc::new(Cow::from(tmp)),
         }
@@ -129,7 +80,6 @@ macro_rules! num_to_little {
             i += n;
         }
         Bitstring {
-            format: BitstringFormat::Raw,
             range: BitstringRange::from(0..num_bits),
             data: Rc::new(Cow::from(tmp)),
         }
@@ -150,7 +100,6 @@ impl fmt::Debug for Bitstring {
 
 #[derive(Clone, Default)]
 pub struct Bitstring {
-    format: BitstringFormat,
     pub (crate) range: BitstringRange,
     data: Rc<CowBytes>,
 }
@@ -203,14 +152,6 @@ impl Bitstring {
         (self.range.start % 8 == 0) && (self.range.end % 8 == 0)
     }
 
-    pub fn format(&self) -> BitstringFormat {
-        self.format
-    }
-
-    pub fn set_format(&mut self, format: BitstringFormat) {
-        self.format = format;
-    }
-
     pub fn seek(&mut self, pos: usize) -> Option<usize> {
         if pos <= self.end() {
             self.range.start = pos;
@@ -243,24 +184,36 @@ impl Bitstring {
         Some((left, right))
     }
 
-    pub fn to_i64(&self, order: Xbyteorder) -> i64 {
-        let src = self.slice();
-        to_signed!(self.range, src, order, u64, i64)
-    }
-
-    pub fn to_u64(&self, order: Xbyteorder) -> u64 {
-        let src = self.slice();
-        to_unsigned!(self.range, src, order, u64)
-    }
-
     pub fn to_int(&self, order: Xbyteorder) -> i128 {
-        let src = self.slice();
-        to_signed!(self.range, src, order, u128, i128)
+        let val = self.to_uint(order);
+        let len = self.len() as u32;
+        let sign_bit = 1 << (len - 1);
+        if len == i128::BITS {
+            i128::from_le_bytes(val.to_ne_bytes())
+        } else if (val & sign_bit) > 0 {
+            let mask = !u128::MAX.overflowing_shl(len as u32).0;
+            -(((!val & mask) + 1) as i128)
+        } else {
+            val as i128
+        }
     }
 
     pub fn to_uint(&self, order: Xbyteorder) -> u128 {
-        let src = self.slice();
-        to_unsigned!(self.range, src, order, u128)
+        let data = self.slice();
+        let mut acc: u128 = 0;
+        match order {
+            Xbyteorder::Big => fold_bits!(self.range, data, |x, num_bits| {
+                acc = (acc << num_bits) | x as u128;
+            }),
+            Xbyteorder::Little => {
+                let mut shift = 0;
+                fold_bits!(self.range, data, |x, num_bits| {
+                    acc |= (x as u128) << shift;
+                    shift += num_bits;
+                })
+            }
+        }
+        acc
     }
 
     pub fn from_i64(value: i64, num_bits: usize, order: Xbyteorder) -> Bitstring {
@@ -373,7 +326,6 @@ impl Bitstring {
             let mut tmp = Vec::with_capacity(upper_bound_index(end));
             tmp.extend(self.iter8().map(|(val, n)| val << (8 - n)));
             Bitstring {
-                format: BitstringFormat::Raw,
                 range: BitstringRange::from(0..end),
                 data: Rc::new(Cow::from(tmp)),
             }
@@ -460,7 +412,6 @@ impl PartialEq for Bitstring {
 impl<'a> From<&'static [u8]> for Bitstring {
     fn from(s: &'static [u8]) -> Self {
         Bitstring {
-            format: BitstringFormat::Raw,
             range: BitstringRange::from(0..(s.len() * 8)),
             data: Rc::new(CowBytes::from(s)),
         }
@@ -476,7 +427,6 @@ impl<'a> From<&'static str> for Bitstring {
 impl From<Vec<u8>> for Bitstring {
     fn from(v: Vec<u8>) -> Self {
         Bitstring {
-            format: BitstringFormat::Raw,
             range: BitstringRange::from(0..(v.len() * 8)),
             data: Rc::new(CowBytes::from(v)),
         }
@@ -537,11 +487,11 @@ mod tests {
     fn test_split_at() {
         let bs = Bitstring::from(vec![0x7f]);
         let (a, b) = bs.split_at(4).unwrap();
-        assert_eq!(a.to_u64(BIG), 7);
-        assert_eq!(b.to_i64(LITTLE), -1);
+        assert_eq!(a.to_uint(BIG), 7);
+        assert_eq!(b.to_int(LITTLE), -1);
         let (a, b) = bs.split_at(1).unwrap();
-        assert_eq!(a.to_u64(LITTLE), 0);
-        assert_eq!(b.to_u64(LITTLE), 0x7f);
+        assert_eq!(a.to_uint(LITTLE), 0);
+        assert_eq!(b.to_uint(LITTLE), 0x7f);
     }
 
     #[test]
@@ -681,29 +631,29 @@ mod tests {
     #[test]
     fn test_value() {
         let bs = Bitstring::from(vec![0x7f]);
-        assert_eq!(bs.to_i64(LITTLE), 127);
-        assert_eq!(bs.to_u64(LITTLE), 127);
+        assert_eq!(bs.to_int(LITTLE), 127);
+        assert_eq!(bs.to_uint(LITTLE), 127);
 
         let bs = Bitstring::from(vec![0xff]);
-        assert_eq!(bs.to_u64(LITTLE), 255);
-        assert_eq!(bs.to_i64(LITTLE), -1);
+        assert_eq!(bs.to_uint(LITTLE), 255);
+        assert_eq!(bs.to_int(LITTLE), -1);
 
         let bs = Bitstring::from(vec![0xfe]);
-        assert_eq!(bs.to_u64(LITTLE), 254);
-        assert_eq!(bs.to_i64(LITTLE), -2);
+        assert_eq!(bs.to_uint(LITTLE), 254);
+        assert_eq!(bs.to_int(LITTLE), -2);
 
         let bs = Bitstring::from(vec![0xff, 0xff]);
-        assert_eq!(bs.to_i64(LITTLE), -1);
+        assert_eq!(bs.to_int(LITTLE), -1);
 
         let bs = Bitstring::from(vec![0xff, 0x7f]);
-        assert_eq!(bs.to_i64(LITTLE), i16::max_value() as i64);
+        assert_eq!(bs.to_int(LITTLE), i16::max_value() as i128);
 
         let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f]);
-        assert_eq!(bs.to_i64(LITTLE), i64::max_value());
+        assert_eq!(bs.to_int(LITTLE), i64::max_value() as i128);
 
         let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(bs.to_i64(LITTLE), -1);
-        assert_eq!(bs.to_u64(LITTLE), u64::max_value());
+        assert_eq!(bs.to_int(LITTLE), -1);
+        assert_eq!(bs.to_uint(LITTLE), u64::max_value() as u128);
 
         let f = f32::MAX;
         let le = f.to_le_bytes().to_vec();
@@ -721,10 +671,10 @@ mod tests {
     fn test_nums() {
         assert_eq!(Bitstring::from_u64(0, 0, BIG).to_bytes(), vec![]);
         let bs = Bitstring::from_u64(1, 3, BIG);
-        assert_eq!(bs.to_i64(BIG), 1);
+        assert_eq!(bs.to_int(BIG), 1);
         assert_eq!(bs.to_bytes(), vec![1]);
         let ls = Bitstring::from_u64(1, 3, LITTLE);
-        assert_eq!(ls.to_i64(LITTLE), 1);
+        assert_eq!(ls.to_int(LITTLE), 1);
         assert_eq!(ls.to_bytes(), vec![1]);
 
         assert_eq!(
@@ -740,20 +690,20 @@ mod tests {
             &0x7FFFFFFFu32.to_le_bytes()
         );
         assert_eq!(
-            Bitstring::from_i64(0xFFFF_FFFF, 32, LITTLE).to_i64(LITTLE),
+            Bitstring::from_i64(0xFFFF_FFFF, 32, LITTLE).to_int(LITTLE),
             -1
         );
         assert_eq!(
-            Bitstring::from_i64(0x7FFF_FFFF, 32, LITTLE).to_i64(LITTLE),
-            i32::max_value() as i64
+            Bitstring::from_i64(0x7FFF_FFFF, 32, LITTLE).to_int(LITTLE),
+            i32::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_i64(0xFFFF_FFFF, 32, BIG).to_i64(BIG),
+            Bitstring::from_i64(0xFFFF_FFFF, 32, BIG).to_int(BIG),
             -1
         );
         assert_eq!(
-            Bitstring::from_i64(0x7FFF_FFFF, 32, BIG).to_i64(BIG),
-            i32::max_value() as i64
+            Bitstring::from_i64(0x7FFF_FFFF, 32, BIG).to_int(BIG),
+            i32::max_value() as i128
         );
         assert_eq!(
             &Bitstring::from_i64(i64::max_value(), 64, LITTLE).to_bytes(),
@@ -764,12 +714,20 @@ mod tests {
             &i64::max_value().to_be_bytes()
         );
         assert_eq!(
-            Bitstring::from_i64(i64::max_value(), 64, LITTLE).to_i64(LITTLE),
-            i64::max_value()
+            Bitstring::from_i64(i64::max_value(), 64, LITTLE).to_int(LITTLE),
+            i64::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_i64(i64::max_value(), 64, BIG).to_i64(BIG),
-            i64::max_value()
+            Bitstring::from_i64(i64::max_value(), 64, BIG).to_int(BIG),
+            i64::max_value() as i128
+        );
+        assert_eq!(
+            Bitstring::from(i128::MAX.to_le_bytes().to_vec()).to_int(LITTLE),
+            i128::MAX
+        );
+        assert_eq!(
+            Bitstring::from(i128::MIN.to_le_bytes().to_vec()).to_int(LITTLE),
+            i128::MIN
         );
     }
 

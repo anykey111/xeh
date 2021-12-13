@@ -1633,7 +1633,7 @@ fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
     v.get(new_index).ok_or(Xerr::OutOfBounds)
 }
 
-fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
+pub(crate) fn vector_get_by_key<'a>(v: &'a Xvec, key: &Cell) -> Xresult1<&'a Cell> {
     let mut it = v.iter();
     let mut val = None;
     while let Some(x) = it.next() {

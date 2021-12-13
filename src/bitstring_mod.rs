@@ -43,32 +43,32 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("u16", |xs| read_unsigned_n(xs, 16))?;
     xs.defword("u32", |xs| read_unsigned_n(xs, 32))?;
     xs.defword("u64", |xs| read_unsigned_n(xs, 64))?;
-    xs.defword("u8be", |xs| read_unsigned_nb(xs, 8, BIG))?;
-    xs.defword("u16be", |xs| read_unsigned_nb(xs, 16, BIG))?;
-    xs.defword("u32be", |xs| read_unsigned_nb(xs, 32, BIG))?;
-    xs.defword("u64be", |xs| read_unsigned_nb(xs, 64, BIG))?;
-    xs.defword("u8le", |xs| read_unsigned_nb(xs, 8, LITTLE))?;
-    xs.defword("u16le", |xs| read_unsigned_nb(xs, 16, LITTLE))?;
-    xs.defword("u32le", |xs| read_unsigned_nb(xs, 32, LITTLE))?;
-    xs.defword("u64le", |xs| read_unsigned_nb(xs, 64, LITTLE))?;
+    xs.defword("u8be", |xs| read_unsigned(xs, 8, BIG))?;
+    xs.defword("u16be", |xs| read_unsigned(xs, 16, BIG))?;
+    xs.defword("u32be", |xs| read_unsigned(xs, 32, BIG))?;
+    xs.defword("u64be", |xs| read_unsigned(xs, 64, BIG))?;
+    xs.defword("u8le", |xs| read_unsigned(xs, 8, LITTLE))?;
+    xs.defword("u16le", |xs| read_unsigned(xs, 16, LITTLE))?;
+    xs.defword("u32le", |xs| read_unsigned(xs, 32, LITTLE))?;
+    xs.defword("u64le", |xs| read_unsigned(xs, 64, LITTLE))?;
     xs.defword("i8", |xs| read_signed_n(xs, 8))?;
     xs.defword("i16", |xs| read_signed_n(xs, 16))?;
     xs.defword("i32", |xs| read_signed_n(xs, 32))?;
     xs.defword("i64", |xs| read_signed_n(xs, 64))?;
-    xs.defword("i8be", |xs| read_signed_nb(xs, 8, BIG))?;
-    xs.defword("i16be", |xs| read_signed_nb(xs, 16, BIG))?;
-    xs.defword("i32be", |xs| read_signed_nb(xs, 32, BIG))?;
-    xs.defword("i64be", |xs| read_signed_nb(xs, 64, BIG))?;
-    xs.defword("i8le", |xs| read_signed_nb(xs, 8, LITTLE))?;
-    xs.defword("i16le", |xs| read_signed_nb(xs, 16, LITTLE))?;
-    xs.defword("i32le", |xs| read_signed_nb(xs, 32, LITTLE))?;
-    xs.defword("i64le", |xs| read_signed_nb(xs, 64, LITTLE))?;
+    xs.defword("i8be", |xs| read_signed(xs, 8, BIG))?;
+    xs.defword("i16be", |xs| read_signed(xs, 16, BIG))?;
+    xs.defword("i32be", |xs| read_signed(xs, 32, BIG))?;
+    xs.defword("i64be", |xs| read_signed(xs, 64, BIG))?;
+    xs.defword("i8le", |xs| read_signed(xs, 8, LITTLE))?;
+    xs.defword("i16le", |xs| read_signed(xs, 16, LITTLE))?;
+    xs.defword("i32le", |xs| read_signed(xs, 32, LITTLE))?;
+    xs.defword("i64le", |xs| read_signed(xs, 64, LITTLE))?;
     xs.defword("f32", |xs| read_float_n(xs, 32))?;
-    xs.defword("f32le", |xs| read_float_nb(xs, 32, LITTLE))?;
-    xs.defword("f32be", |xs| read_float_nb(xs, 32, BIG))?;
+    xs.defword("f32le", |xs| read_float(xs, 32, LITTLE))?;
+    xs.defword("f32be", |xs| read_float(xs, 32, BIG))?;
     xs.defword("f64", |xs| read_float_n(xs, 64))?;
-    xs.defword("f64le", |xs| read_float_nb(xs, 64, LITTLE))?;
-    xs.defword("f64be", |xs| read_float_nb(xs, 64, BIG))?;
+    xs.defword("f64le", |xs| read_float(xs, 64, LITTLE))?;
+    xs.defword("f64be", |xs| read_float(xs, 64, BIG))?;
     xs.defword("i8>bitstr", |xs| num_to_bitstr(xs, 8, i8::MIN.into(), i8::MAX.into()))?;
     xs.defword("u8>bitstr", |xs| num_to_bitstr(xs, 8, u8::MIN.into(), u8::MAX.into()))?;
     xs.defword("i16>bitstr", |xs| num_to_bitstr(xs, 16, i16::MIN.into(), i16::MAX.into()))?;
@@ -336,10 +336,6 @@ fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
     xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(rest)).map(|_| ())
 }
 
-fn set_last_chunk(xs: &mut Xstate, s: Bitstring) -> Xresult {
-    xs.set_var(xs.bitstr_mod.last_read, Cell::Bitstr(s)).map(|_| ())
-}
-
 fn set_byteorder(xs: &mut Xstate, bo: Xbyteorder) -> Xresult {
     xs.set_var(xs.bitstr_mod.big_endian, if bo == LITTLE { ZERO } else { ONE })
         .map(|_| ())
@@ -361,14 +357,13 @@ fn bin_match(xs: &mut Xstate) -> Xresult {
         let err = Box::new((s, pat, pos));
         return Err(Xerr::BitMatchError(err));
     }
-    set_last_chunk(xs, s)?;
     set_rest(xs, rest)
 }
 
 fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
     let (s, rest) = read_bitstring(xs, n)?;
-    set_last_chunk(xs, s.clone())?;
-    xs.push_data(Cell::Bitstr(s))?;
+    let val = Cell::Bitstr(s).with_meta(bitstr_meta(n, None, false));
+    xs.push_data(val)?;
     set_rest(xs, rest)
 }
 
@@ -410,17 +405,13 @@ fn bin_read_bitstring(xs: &mut Xstate) -> Xresult {
 fn bin_read_signed(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     let bo = default_byteorder(xs)?;
-    let (x, rest) = read_signed(xs, n, bo)?;
-    xs.push_data(Cell::Int(x))?;
-    set_rest(xs, rest)
+    read_signed(xs, n, bo)
 }
 
 fn bin_read_unsigned(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     let bo = default_byteorder(xs)?;
-    let (x, rest) = read_unsigned(xs, n, bo)?;
-    xs.push_data(Cell::Int(x))?;
-    set_rest(xs, rest)
+    read_unsigned(xs, n, bo)
 }
 
 fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
@@ -432,68 +423,67 @@ fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
     }
 }
 
-fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbitstr)> {
-    let (mut s, rest) = read_bitstring(xs, n)?;
-    if s.len() > 127 {
+fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+    let (s, rest) = read_bitstring(xs, n)?;
+    if s.len() > (Xint::BITS - 1) as usize {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_uint(bo) as Xint;
-    s.set_format(BitstringFormat::Unsigned(bo));
-    set_last_chunk(xs, s)?;
-    //NOTE: result truncated!
-    Ok((x as Xint, rest))
+    let val = Cell::Int(x).with_meta(bitstr_meta(n, Some(bo), false));
+    xs.push_data(val)?;
+    set_rest(xs, rest)
 }
 
-fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult1<(Xint, Xbitstr)> {
-    let (mut s, rest) = read_bitstring(xs, n)?;
-    if s.len() > 128 {
+fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+    let (s, rest) = read_bitstring(xs, n)?;
+    if s.len() > Xint::BITS as usize {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_int(bo);
-    s.set_format(BitstringFormat::Signed(bo));
-    set_last_chunk(xs, s)?;
-    //NOTE: result truncated!
-    Ok((x as Xint, rest))
+    let val = Cell::Int(x).with_meta(bitstr_meta(n, Some(bo), true));
+    xs.push_data(val)?;
+    set_rest(xs, rest)
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
     let bo = default_byteorder(xs)?;
-    read_signed_nb(xs, n, bo)
-}
-
-fn read_signed_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (x, rest) = read_signed(xs, n, bo)?;
-    xs.push_data(Cell::Int(x))?;
-    set_rest(xs, rest)
+    read_signed(xs, n, bo)
 }
 
 fn read_unsigned_n(xs: &mut Xstate, n: usize) -> Xresult {
     let bo = default_byteorder(xs)?;
-    read_unsigned_nb(xs, n, bo)
-}
-
-fn read_unsigned_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (x, rest) = read_unsigned(xs, n, bo)?;
-    xs.push_data(Cell::Int(x))?;
-    set_rest(xs, rest)
+    read_unsigned(xs, n, bo)
 }
 
 fn read_float_n(xs: &mut Xstate, n: usize) -> Xresult {
     let bo = default_byteorder(xs)?;
-    read_float_nb(xs, n, bo)
+    read_float(xs, n, bo)
 }
 
-fn read_float_nb(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (mut s, rest) = read_bitstring(xs, n)?;
+fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+    let (s, rest) = read_bitstring(xs, n)?;
     let val = match n {
         32 => s.to_f32(bo) as Xreal,
         64 => s.to_f64(bo) as Xreal,
         _ => return Err(Xerr::TypeError),
     };
-    xs.push_data(Cell::Real(val))?;
-    s.set_format(BitstringFormat::Real(bo));
-    set_last_chunk(xs, s)?;
+    xs.push_data(Cell::from(val).with_meta(bitstr_meta(n, Some(bo), true)))?;
     set_rest(xs, rest)
+}
+
+fn bitstr_meta(len: usize, bo: Option<Xbyteorder>, signed: bool) -> Cell {
+    let mut v = Xvec::new();
+    v.push_back_mut(Cell::new_key("len"));
+    v.push_back_mut(Cell::from(len));
+    if bo == Some(Xbyteorder::Big) {
+        v.push_back_mut(Cell::new_key("big"));
+        v.push_back_mut(TRUE);
+    }
+    if signed {
+        v.push_back_mut(Cell::new_key("signed"));
+        v.push_back_mut(TRUE);
+    }
+    Cell::from(v)
 }
 
 #[cfg(test)]
@@ -543,40 +533,44 @@ mod tests {
     }
 
     #[test]
-    fn test_bitstring_chunk() {
+    fn test_bitstring_meta() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
-        xs.interpret("u8").unwrap();
-        assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-        xs.interpret("bitstr/last-read").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(8, s.len());
-        assert_eq!(BitstringFormat::Unsigned(LITTLE), s.format());
-        xs.interpret("2 bytes").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(BitstringFormat::Raw, s.format());
-        assert_eq!(16, s.len());
-        assert_eq!(vec![2, 3], s.to_bytes());
-        xs.interpret("2 bits").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(BitstringFormat::Raw, s.format());
-        assert_eq!(2, s.len());
-        xs.interpret("big-endian 2 int").unwrap();
-        assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        xs.interpret("bitstr/last-read").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(2, s.len());
-        assert_eq!(BitstringFormat::Signed(BIG), s.format());
-
-        let f: f64 = 1.0;
-        xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec())).unwrap();
-        xs.interpret("f64be").unwrap();
-        let f2 = xs.pop_data().unwrap().to_real().unwrap();
-        assert_eq!(f,  f2);
-        xs.interpret("bitstr/last-read").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(64, s.len());
-        assert_eq!(BitstringFormat::Real(BIG), s.format());
+        {
+            xs.interpret("u8").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&Cell::Int(1), val.value());
+            assert_eq!(&bitstr_meta(8, None, false), val.meta().unwrap());
+        }
+        {
+            xs.interpret("2 bytes").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&bitstr_meta(16, None, false), val.meta().unwrap());
+            let s = val.value().to_bitstring().unwrap();
+            assert_eq!(16, s.len());
+            assert_eq!(vec![2, 3], s.to_bytes());
+        }
+        {        
+            xs.interpret("2 bits").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&bitstr_meta(2, None, false), val.meta().unwrap());
+            let s = val.value().to_bitstring().unwrap();
+            assert_eq!(2, s.len());
+        }
+        {
+            xs.interpret("big-endian 2 int").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&bitstr_meta(2, Some(BIG), true), val.meta().unwrap());
+            assert_eq!(&Cell::Int(0), val.value());
+        }
+        {
+            let f: f64 = 1.0;
+            xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec())).unwrap();
+            xs.interpret("f64be").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&Cell::from(f),  val.value());
+            assert_eq!(&bitstr_meta(64, Some(BIG), true), val.meta().unwrap());
+        }
     }
 
     #[test]
@@ -636,6 +630,21 @@ mod tests {
         assert_eq!(Ok(vec![0xff]), pop_bytes(xs));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("-128 u8>bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("128 i8>bitstr"));
+    }
+
+    #[test]
+    fn test_bitstr_read_int_overflow() {
+        let xs = &mut Xstate::boot().unwrap();
+        let mut bin = Vec::new();
+        bin.resize_with(20, || 0xff);
+        xs.set_binary_input(Xbitstr::from(bin.clone())).unwrap();
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("128 uint"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("129 int"));
+        xs.interpret("127 uint").unwrap();
+        assert_eq!(Cell::Int(Xint::MAX), xs.pop_data().unwrap());
+        xs.set_binary_input(Xbitstr::from(bin.clone())).unwrap();
+        xs.interpret("128 int").unwrap();
+        assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
     }
 
     #[test]

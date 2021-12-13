@@ -4,7 +4,7 @@ use crate::state::State;
 pub type Xvec = rpds::Vector<Cell>;
 pub type Xstr = arcstr::ArcStr;
 pub type XfnType = fn(&mut State) -> Xresult;
-pub type Xint = i64;
+pub type Xint = i128;
 pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
@@ -246,6 +246,14 @@ impl Cell {
         }
     }
 
+    pub fn new_key(k: &str) -> Cell {
+        Cell::Key(Xstr::from(k))
+    }
+
+    pub fn new_str(k: &str) -> Cell {
+        Cell::Str(Xstr::from(k))
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
@@ -281,6 +289,12 @@ impl From<u32> for Cell {
 impl From<f32> for Cell {
     fn from(x: f32) -> Self {
         Cell::Real(x as f64)
+    }
+}
+
+impl From<i64> for Cell {
+    fn from(x: i64) -> Self {
+        Cell::Int(x as Xint)
     }
 }
 
@@ -371,22 +385,8 @@ impl TryInto<bool> for Cell {
 pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
-
-/*
-#[macro_export]
-macro_rules! xvec {
-    ($($e:expr),*) => {
-        {
-            #[allow(unused_mut)]
-            let mut v = Xvec::new();
-            $(
-                v.push_back_mut(Cell::from($e));
-            )*
-            Cell::from(v)
-        }
-    };
-}
-*/
+pub const TRUE: Cell = ONE;
+pub const FALSE: Cell = ZERO;
 
 #[cfg(test)]
 mod tests {
