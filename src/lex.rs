@@ -166,8 +166,8 @@ impl Lex {
                 Some('s') => {
                     use crate::bitstring::*;
                     let mut tmp = Xbitstr::new();
-                    let s0 = Xbitstr::from_u64(0, 1, LITTLE);
-                    let s1 = Xbitstr::from_u64(1, 1, BIG);
+                    let s0 = Xbitstr::from_int(0, 1, LITTLE);
+                    let s1 = Xbitstr::from_int(1, 1, BIG);
                     while let Some(c) = it.next() {
                         match c {
                             '_' => continue,

@@ -77,12 +77,14 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("u32>bitstr", |xs| num_to_bitstr(xs, 32, u32::MIN.into(), u32::MAX.into()))?;
     xs.defword("i64>bitstr", |xs| num_to_bitstr(xs, 64, i64::MIN.into(), i64::MAX.into()))?;
     xs.defword("u64>bitstr", |xs| num_to_bitstr(xs, 64, u64::MIN as Xint, u64::MAX as Xint))?;
+    xs.defword("int>bitstr", |xs| num_to_bitstr(xs, Xint::BITS as usize, Xint::MIN, Xint::MAX))?;
     xs.defword("seek", seek_bin)?;
     xs.defword("offset", offset_bin)?;
     xs.defword("remain", remain_bin)?;
     xs.defword("find", find_bin)?;
     xs.defword("dump", bitstr_dump)?;
     xs.defword("dump-at", bitstr_dump_at)?;
+
     xs.defword("bitstr-open", bitstring_open)?;
     xs.defword("bitstr-close", bitstring_close)?;
     OK
@@ -283,11 +285,7 @@ fn num_to_bitstr(xs: &mut Xstate, num_bits: usize, min: Xint, max: Xint) -> Xres
     if val < min || val > max {
         return Err(Xerr::IntegerOverflow);
     }
-    let s = if val < 0 {
-        Bitstring::from_i64(val as i64, num_bits, bo)
-    } else {
-        Bitstring::from_u64(val as u64, num_bits, bo)
-    };
+    let s = Bitstring::from_int(val, num_bits, bo);
     xs.push_data(Cell::Bitstr(s))
 }
 

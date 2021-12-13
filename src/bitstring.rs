@@ -36,44 +36,6 @@ fn cut_bits(x: u8, start: usize, end: usize) -> (u8, usize) {
     (result, len)
 }
 
-macro_rules! num_to_big {
-    ($val:expr, $num_bits:expr) => {{
-        let val = $val;
-        let num_bits: usize = $num_bits;
-        let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
-        let mut i = num_bits;
-        while i > 0 {
-            let n = i.min(8);
-            let x = val.wrapping_shr((i - n) as u32) as u8;
-            tmp.push(x << (8 - n));
-            i -= n;
-        }
-        Bitstring {
-            range: BitstringRange::from(0..num_bits),
-            data: Rc::new(Cow::from(tmp)),
-        }
-    }};
-}
-
-macro_rules! num_to_little {
-    ($val:expr, $num_bits:expr) => {{
-        let val = $val;
-        let num_bits: usize = $num_bits;
-        let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
-        let mut i = 0;
-        while i < num_bits {
-            let n = (num_bits - i).min(8);
-            let x = val.wrapping_shr(i as u32) as u8;
-            tmp.push(x << (8 - n));
-            i += n;
-        }
-        Bitstring {
-            range: BitstringRange::from(0..num_bits),
-            data: Rc::new(Cow::from(tmp)),
-        }
-    }};
-}
-
 use std::borrow::Cow;
 
 pub type CowBytes = Cow<'static, [u8]>;
@@ -206,17 +168,28 @@ impl Bitstring {
         acc
     }
 
-    pub fn from_i64(value: i64, num_bits: usize, order: Xbyteorder) -> Bitstring {
-        match order {
-            Xbyteorder::Big => num_to_big!(value, num_bits),
-            Xbyteorder::Little => num_to_little!(value, num_bits),
+    pub fn from_int(val: i128, num_bits: usize, order: Xbyteorder) -> Bitstring {
+        let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
+        if order == BIG {
+            let mut i = num_bits;
+            while i > 0 {
+                let n = i.min(8);
+                let x = val.wrapping_shr((i - n) as u32) as u8;
+                tmp.push(x << (8 - n));
+                i -= n;
+            }
+        } else {
+            let mut i = 0;
+            while i < num_bits {
+                let n = (num_bits - i).min(8);
+                let x = val.wrapping_shr(i as u32) as u8;
+                tmp.push(x << (8 - n));
+                i += n;
+            }
         }
-    }
-
-    pub fn from_u64(value: u64, num_bits: usize, order: Xbyteorder) -> Bitstring {
-        match order {
-            Xbyteorder::Big => num_to_big!(value, num_bits),
-            Xbyteorder::Little => num_to_little!(value, num_bits),
+        Bitstring {
+            range: BitstringRange::from(0..num_bits),
+            data: Rc::new(Cow::from(tmp)),
         }
     }
 
@@ -659,56 +632,56 @@ mod tests {
 
     #[test]
     fn test_nums() {
-        assert_eq!(Bitstring::from_u64(0, 0, BIG).to_bytes(), vec![]);
-        let bs = Bitstring::from_u64(1, 3, BIG);
+        assert_eq!(Bitstring::from_int(0, 0, BIG).to_bytes(), vec![]);
+        let bs = Bitstring::from_int(1, 3, BIG);
         assert_eq!(bs.to_int(BIG), 1);
         assert_eq!(bs.to_bytes(), vec![1]);
-        let ls = Bitstring::from_u64(1, 3, LITTLE);
+        let ls = Bitstring::from_int(1, 3, LITTLE);
         assert_eq!(ls.to_int(LITTLE), 1);
         assert_eq!(ls.to_bytes(), vec![1]);
 
         assert_eq!(
-            &Bitstring::from_u64(0x12345678, 32, LITTLE).to_bytes(),
+            &Bitstring::from_int(0x12345678, 32, LITTLE).to_bytes(),
             &0x12345678u32.to_le_bytes()
         );
         assert_eq!(
-            &Bitstring::from_u64(0x12345678, 32, BIG).to_bytes(),
+            &Bitstring::from_int(0x12345678, 32, BIG).to_bytes(),
             &0x12345678u32.to_be_bytes()
         );
         assert_eq!(
-            &Bitstring::from_u64(0x7FFFFFFF, 32, LITTLE).to_bytes(),
+            &Bitstring::from_int(0x7FFFFFFF, 32, LITTLE).to_bytes(),
             &0x7FFFFFFFu32.to_le_bytes()
         );
         assert_eq!(
-            Bitstring::from_i64(0xFFFF_FFFF, 32, LITTLE).to_int(LITTLE),
+            Bitstring::from_int(0xFFFF_FFFF, 32, LITTLE).to_int(LITTLE),
             -1
         );
         assert_eq!(
-            Bitstring::from_i64(0x7FFF_FFFF, 32, LITTLE).to_int(LITTLE),
+            Bitstring::from_int(0x7FFF_FFFF, 32, LITTLE).to_int(LITTLE),
             i32::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_i64(0xFFFF_FFFF, 32, BIG).to_int(BIG),
+            Bitstring::from_int(0xFFFF_FFFF, 32, BIG).to_int(BIG),
             -1
         );
         assert_eq!(
-            Bitstring::from_i64(0x7FFF_FFFF, 32, BIG).to_int(BIG),
+            Bitstring::from_int(0x7FFF_FFFF, 32, BIG).to_int(BIG),
             i32::max_value() as i128
         );
         assert_eq!(
-            &Bitstring::from_i64(i64::max_value(), 64, LITTLE).to_bytes(),
+            &Bitstring::from_int(i64::MAX.into(), 64, LITTLE).to_bytes(),
             &i64::max_value().to_le_bytes()
         );
         assert_eq!(
-            &Bitstring::from_i64(i64::max_value(), 64, BIG).to_bytes(),
+            &Bitstring::from_int(i64::MAX.into(), 64, BIG).to_bytes(),
             &i64::max_value().to_be_bytes()
         );
         assert_eq!(
-            Bitstring::from_i64(i64::max_value(), 64, LITTLE).to_int(LITTLE),
+            Bitstring::from_int(i64::MAX.into(), 64, LITTLE).to_int(LITTLE),
             i64::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_i64(i64::max_value(), 64, BIG).to_int(BIG),
+            Bitstring::from_int(i64::MAX.into(), 64, BIG).to_int(BIG),
             i64::max_value() as i128
         );
         assert_eq!(
