@@ -282,8 +282,10 @@ impl State {
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
-            let msg = self.pretty_error(e);
-            self.log_error(msg);
+            if depth == self.nested.len() {
+                let msg = self.pretty_error(e);
+                self.log_error(msg);
+            }
             while self.nested.len() > depth {
                 self.context_close()?;
             }
