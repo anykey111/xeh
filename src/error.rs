@@ -28,6 +28,7 @@ pub enum Xerr {
     BitSeekError(Box<(Xbitstr, usize)>),
     BitMatchError(Box<(Xbitstr, Xbitstr, usize)>),
     UnalignedBitstr,
+    InvalidFloatLength(usize),
     // Stop interpreter execution
     Exit(isize),
 }
@@ -60,6 +61,7 @@ impl Xerr {
         Xerr::BitSeekError{..} => "BitSeekError",
         Xerr::BitMatchError{..} => "BitMatchError",
         Xerr::UnalignedBitstr => "UnalignedBitstr",
+        Xerr::InvalidFloatLength{..} => "InvalidFloatLength",
         Xerr::Exit{..} => "Exit",
         }
     }

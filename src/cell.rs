@@ -254,6 +254,14 @@ impl Cell {
         Cell::Str(Xstr::from(k))
     }
 
+    pub fn empty_bitstr() -> Cell {
+        Cell::Bitstr(Xbitstr::default())
+    }
+
+    pub fn empty_vec() -> Cell {
+        Cell::Vector(Xvec::default())
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
@@ -387,6 +395,7 @@ pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
 pub const TRUE: Cell = ONE;
 pub const FALSE: Cell = ZERO;
+
 
 #[cfg(test)]
 mod tests {
