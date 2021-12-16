@@ -93,8 +93,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("find", find_bin)?;
     xs.defword("dump", bitstr_dump)?;
     xs.defword("dump-at", bitstr_dump_at)?;
-    xs.defword("bitstr-open", bitstring_open)?;
-    xs.defword("bitstr-close", bitstring_close)?;
+    xs.defword("bitstr-open", bitstr_open)?;
+    xs.defword("bitstr-close", bitstr_close)?;
     OK
 }
 
@@ -257,25 +257,21 @@ fn write_dump_position(buf: &mut String, start: usize, end: usize) {
     }
 }
 
-fn bitstring_open(xs: &mut Xstate) -> Xresult {
+fn bitstr_open(xs: &mut Xstate) -> Xresult {
     let new_bin = bitstring_from(xs.pop_data()?)?;
-    let old_bin = bitstr_input(xs)?.clone();
-    let deck = match xs.get_var(xs.bitstr_mod.input_deck)? {
-        Cell::Vector(v) => v.push_back(Cell::Bitstr(old_bin)),
-        _ => return Err(Xerr::TypeError),
-    };
-    xs.set_var(xs.bitstr_mod.input_deck, Cell::Vector(deck))?;
-    xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(new_bin))?;
+    let old = xs.set_var(xs.bitstr_mod.input, Cell::from(new_bin))?;
+    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.to_vector()?;
+    deck.push_back_mut(old);
+    xs.set_var(xs.bitstr_mod.input_deck, Cell::from(deck))?;
     OK
 }
 
-fn bitstring_close(xs: &mut Xstate) -> Xresult {
-    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.clone().to_vector()?;
-    if let Some(bin) = deck.last().cloned() {
-        deck.drop_last_mut();
-        xs.set_var(xs.bitstr_mod.input_deck, Cell::Vector(deck))?;
-        xs.set_var(xs.bitstr_mod.input, bin)?;
-    }
+fn bitstr_close(xs: &mut Xstate) -> Xresult {
+    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.to_vector()?;
+    let bin = deck.last().ok_or_else(|| Xerr::ControlFlowError)?.clone();
+    deck.drop_last_mut();
+    xs.set_var(xs.bitstr_mod.input_deck, Cell::from(deck))?;
+    xs.set_var(xs.bitstr_mod.input, bin)?;
     OK
 }
 
@@ -602,8 +598,7 @@ mod tests {
         xs.interpret("bitstr-close bitstr/input").unwrap();
         let s2 = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(0, s2.len());
-        assert_eq!(OK, xs.interpret("bitstr-close"));
-        assert_eq!(OK, xs.interpret("bitstr-close"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.interpret("bitstr-close"));
         xs.interpret("bitstr/input").unwrap();
         let empty = xs.pop_data().unwrap().to_bitstring().unwrap(); 
         assert_eq!(0, empty.len());
