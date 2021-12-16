@@ -328,6 +328,12 @@ impl From<Xvec> for Cell {
     }
 }
 
+impl From<Xbitstr> for Cell {
+    fn from(x: Xbitstr) -> Self {
+        Cell::Bitstr(x)
+    }
+}
+
 impl From<&str> for Cell {
     fn from(x: &str) -> Self {
         Cell::Str(Xstr::from(x))
