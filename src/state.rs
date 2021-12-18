@@ -10,7 +10,6 @@ use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
-    Deferred,
     Variable(usize),
     Function {
         immediate: bool,
@@ -329,51 +328,50 @@ impl State {
                     self.code_emit_value(Cell::Key(key.into()))?;
                 }
                 Tok::Word(name) => {
-                    let idx = match self.dict_find(&name) {
-                        Some(idx) => idx,
-                        None => {
-                            let idx = self
-                                .top_function_flow()
-                                .and_then(|ff| ff.locals.iter().rposition(|x| x == &name))
-                                .ok_or(Xerr::UnknownWord)?;
-                            self.code_emit(Opcode::LoadLocal(idx))?;
-                            continue;
-                        }
-                    };
-                    match self.dict_at(idx).unwrap() {
-                        Entry::Deferred => {
-                            self.code_emit(Opcode::Deferred(idx))?
-                        }
-                        Entry::Variable(a) => {
-                            let a = *a;
-                            self.code_emit(Opcode::Load(a))?;
-                        }
-                        Entry::Function {
-                            immediate: true,
-                            xf,
-                            ..
-                        } => {
-                            let xf = xf.clone();
-                            self.call_fn(xf)?;
-                        }
-                        Entry::Function {
-                            immediate: false,
-                            xf: Xfn::Interp(x),
-                            ..
-                        } => {
-                            let x = *x;
-                            self.code_emit(Opcode::Call(x))?;
-                        }
-                        Entry::Function {
-                            immediate: false,
-                            xf: Xfn::Native(x),
-                            ..
-                        } => {
-                            let x = *x;
-                            self.code_emit(Opcode::NativeCall(x))?;
-                        }
-                    }
+                    // search for local variables first
+                    if let Some(i) = self.top_function_flow()
+                    .and_then(|ff| ff.locals.iter().rposition(|x| x == &name)) {
+                        self.code_emit(Opcode::LoadLocal(i))?;
+                } else {
+                    self.build_resolve_word(name)?;
                 }
+                }
+            }
+        }
+    }
+
+    fn build_resolve_word(&mut self, name: String) -> Xresult {
+        match self.dict_entry(&name) {
+            None =>
+                self.code_emit(Opcode::Unresolved(name)),
+
+            Some(Entry::Variable(a)) => {
+                let a = *a;
+                self.code_emit(Opcode::Load(a))
+            }
+            Some(Entry::Function {
+                immediate: true,
+                xf,
+                ..
+            }) => {
+                let xf = xf.clone();
+                self.call_fn(xf)
+            }
+            Some(Entry::Function {
+                immediate: false,
+                xf: Xfn::Interp(x),
+                ..
+            }) => {
+                let x = *x;
+                self.code_emit(Opcode::Call(x))
+            }
+            Some(Entry::Function {
+                immediate: false,
+                xf: Xfn::Native(x),
+                ..
+            }) => {
+                let x = *x;
+                self.code_emit(Opcode::NativeCall(x))
             }
         }
     }
@@ -467,18 +465,6 @@ impl State {
         Ok(Xref::Heap(a))
     }
 
-    pub fn get_var_by_name(&self, name: &str) -> Xresult1<&Cell> {
-        let e = self
-            .dict_find(name)
-            .and_then(|idx| self.dict_at(idx))
-            .ok_or(Xerr::UnknownWord)?;
-        match e {
-            Entry::Variable(a) => self.get_var(Xref::Heap(*a)),
-            Entry::Function { .. } => Err(Xerr::ReadonlyAddress),
-            Entry::Deferred => Err(Xerr::UnknownWord),
-        }
-    }
-
     pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
         match xref {
             Xref::Heap(a) => self.heap.get(a).ok_or(Xerr::InvalidAddress),
@@ -567,7 +553,6 @@ impl State {
             Def("nil", core_word_nil),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
-            Def("defer", core_word_defer),
             Def("for", core_word_for),
             Def("loop", core_word_loop),
         ]
@@ -655,6 +640,10 @@ impl State {
         Ok(wa)
     }
 
+    pub fn dict_entry(&self, name: &str) -> Option<&Entry> {
+        self.dict.iter().rfind(|x| x.name == name).map(|x| &x.entry)
+    }
+
     pub fn dict_find(&self, name: &str) -> Option<usize> {
         self.dict.iter().rposition(|x| x.name == name)
     }
@@ -728,15 +717,13 @@ impl State {
     }
 
     pub fn eval_word(&mut self, name: &str) -> Xresult {
-        let e = self
-            .dict_find(name)
-            .and_then(|idx| self.dict_at(idx))
-            .cloned()
-            .ok_or(Xerr::UnknownWord)?;
-        match e {
-            Entry::Variable{..} => Err(Xerr::InvalidAddress),
-            Entry::Function { xf, .. } => self.call_fn(xf),
-            Entry::Deferred => Err(Xerr::UnknownWord),
+        match self.dict_entry(name) {
+            None => Err(Xerr::UnknownWord),
+            Some(Entry::Variable(a)) => {
+                let val = self.heap[*a].clone();
+                self.push_data(val)
+            }
+            Some(Entry::Function { xf, .. }) => self.call_fn(*xf),
         }
 
     }
@@ -775,21 +762,21 @@ impl State {
                 let frame = self.pop_return()?;
                 self.set_ip(frame.return_to)
             }
-            Opcode::Deferred(idx) => match self.dict_at(idx).ok_or(Xerr::UnknownWord)? {
-                Entry::Deferred => Err(Xerr::UnknownWord),
-                Entry::Variable(a) => {
+            Opcode::Unresolved(name) => match self.dict_entry(&name) {
+                None => Err(Xerr::UnknownWord),
+                Some(Entry::Variable(a)) => {
                     let a = *a;
                     self.backpatch(ip, Opcode::Load(a))
                 }
-                Entry::Function {
+                Some(Entry::Function {
                     xf: Xfn::Interp(x), ..
-                } => {
+                }) => {
                     let x = *x;
                     self.backpatch(ip, Opcode::Call(x))
                 }
-                Entry::Function {
+                Some(Entry::Function {
                     xf: Xfn::Native(x), ..
-                } => {
+                }) => {
                     let x = *x;
                     self.backpatch(ip, Opcode::NativeCall(x))
                 }
@@ -1468,13 +1455,9 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
         Tok::Word(name) => name,
         _other => return Err(Xerr::ExpectingName),
     };
-    let e = xs
-        .dict_find(&name)
-        .and_then(|i| xs.dict_at(i))
-        .ok_or(Xerr::UnknownWord)?;
-    match e {
-        Entry::Deferred => Err(Xerr::UnknownWord),
-        Entry::Variable(a) => {
+    match xs.dict_entry(&name) {
+        None => Err(Xerr::UnknownWord),
+        Some(Entry::Variable(a)) => {
             let a = *a;
             xs.code_emit(Opcode::Store(a))
         }
@@ -1514,7 +1497,7 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         if xs.ip() == at { " * " } else { "   " },
         match &xs.code[at] {
             Opcode::Call(a) => format!("call       {:#x}", a),
-            Opcode::Deferred(a) => format!("defer      {:#x}", a),
+            Opcode::Unresolved(name) => format!("unresolved {:?}", &name),
             Opcode::NativeCall(x) => format!("callx      {:#x}", x.0 as usize),
             Opcode::Ret => format!("ret"),
             Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(at, offs)),
@@ -1533,17 +1516,6 @@ pub fn format_opcode(xs: &State, at: usize) -> String {
         },
         debug_comment,
     )
-}
-
-fn core_word_defer(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _ => return Err(Xerr::ExpectingName),
-    };
-    if xs.dict_find(&name).is_none() {
-        xs.dict_insert(DictEntry::new(name, Entry::Deferred))?;
-    }
-    OK
 }
 
 fn for_init(xs: &mut State) -> Xresult1<Loop> {
