@@ -133,6 +133,9 @@ impl Lex {
                 let ss = self.buf.substr(start..self.pos);
                 self.last_substr = Some(ss.clone());
                 if !num_prefix {
+                    if ss.len() > 1 && ss.ends_with(":") {
+                        return Ok(Tok::Literal(Cell::new_key(&ss)));
+                    }
                     return Ok(Tok::Word(ss));
                 }
                 let val = if has_dot {
@@ -164,6 +167,10 @@ mod tests {
 
     fn word(s: &str) -> Tok {
         Tok::Word(Xstr::from(s).substr(..))
+    }
+
+    fn key(s: &str) -> Tok {
+        Tok::Literal(Xcell::new_key(s))
     }
 
     fn str(s: &str) -> Tok {
@@ -221,8 +228,8 @@ mod tests {
 
     #[test]
     fn test_lex_keys() {
-        let res = tokenize_input(" a:1 x: 2").unwrap();
-        assert_eq!(res, vec![word("a:1"),word("x:"),int(2)]);
+        let res = tokenize_input(" a:1 x: 2 yy::").unwrap();
+        assert_eq!(res, vec![word("a:1"),key("x:"),int(2),key("yy::")]);
     }
 
     #[test]

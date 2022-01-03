@@ -217,7 +217,7 @@ impl State {
         let tok_start = tok.range().start;
         for (i, s) in tok.parent().lines().enumerate() {
             let line_end = line_start + s.len();
-            if line_start <= tok_start || tok_start <= line_end {
+            if line_start <= tok_start && tok_start <= line_end {
                 let len = tok_start - line_start;
                 let col = s[..len].chars().count();
                 let name = self.sources
@@ -2004,7 +2004,7 @@ mod tests {
         assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
         xs.interpret("[ x: [ y: [ z: 10 ] ] ] x: y: z: get").unwrap();
         assert_eq!(Cell::from(10isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::NotFound), xs.interpret("[ x: [ y: [1 2 3 ] ] ] f: y: x: get"));
+        assert_eq!(Err(Xerr::NotFound), xs.interpret("[ x: [ y: [ 1 2 3 ] ] ] f: y: x: get"));
     }
 
     #[test]
@@ -2012,9 +2012,9 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.interpret("[ ] x: 1 assoc y: 2 assoc").unwrap();
         let mut m = Xvec::new();
-        m.push_back_mut(Cell::Key("x".into()));
+        m.push_back_mut(Cell::Key("x:".into()));
         m.push_back_mut(Cell::from(1u32));
-        m.push_back_mut(Cell::Key("y".into()));
+        m.push_back_mut(Cell::Key("y:".into()));
         m.push_back_mut(Cell::from(2u32));
         assert_eq!(Ok(m), xs.pop_data().unwrap().to_vector());
         xs.interpret("[ x: 1 ] x: 2 assoc x: get").unwrap();
@@ -2138,8 +2138,8 @@ mod tests {
     #[test]
     fn test_sort_by_key() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ [ \"k\" 2 ] [ \"k\" 3 ] [ \"k\" 1 ] ] \"k\" sort-by-key var x").unwrap();
-        xs.interpret("[ 3 for x I nth \"k\" get loop ]").unwrap();
+        xs.interpret("[ [ k: 2 ] [ k: 3 ] [ k: 1 ] ] k: sort-by-key var x").unwrap();
+        xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2228,7 +2228,7 @@ mod tests {
             local from
             local n
             n 1 = if
-                [ n from to]
+                [ n from to ]
             else
                 n dec from aux to tower-of-hanoi
                 [ n from to ]

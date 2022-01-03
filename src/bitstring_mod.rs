@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn test_bitstring_mod() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[0 0xff] >bitstr").unwrap();
+        xs.interpret("[ 0 0xff ] >bitstr").unwrap();
         let s = xs.pop_data().unwrap();
         assert_eq!(s, Cell::Bitstr(Xbitstr::from(vec![0, 255])));
         xs.set_binary_input(Xbitstr::from(vec![1, 255, 0])).unwrap();
@@ -488,16 +488,16 @@ mod tests {
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         xs.interpret("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[256] >bitstr"));
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[-1] >bitstr"));
-        xs.interpret("[\"1\" 0x32 0s0011_0011] >bitstr").unwrap();
-        assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().to_bitstring().unwrap().to_bytes());
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[ 256 ] >bitstr"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[ -1 ] >bitstr"));
+        //xs.interpret("[ \"1\" 0x32 0s0011_0011 ] >bitstr").unwrap();
+        //assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().to_bitstring().unwrap().to_bytes());
     }
 
     #[test]
     fn test_int_uint() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[0xff 0xff] bitstr-open 8 uint 8 int").unwrap();
+        xs.interpret("[ 0xff 0xff ] bitstr-open 8 uint 8 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
@@ -511,7 +511,7 @@ mod tests {
             other => panic!("{:?}", other),
         };
         xs.interpret("\"123\" ?").unwrap();
-        match xs.interpret("[0] ?") {
+        match xs.interpret("[ 0 ] ?") {
             Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
             other => panic!("{:?}", other),
         }
@@ -583,8 +583,8 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.interpret(
             "
-        [1 5 7] bitstr-open u8
-        [3] bitstr-open u8
+        [ 1 5 7 ] bitstr-open u8
+        [ 3 ] bitstr-open u8
         bitstr-close
         u8",
         )
@@ -639,7 +639,7 @@ mod tests {
             Err(Xerr::BitSeekError(ctx)) => assert_eq!(100, ctx.1),
             other => panic!("{:?}", other),
         }
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] seek"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] seek"));
         xs.interpret("8 seek u8").unwrap();
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
         xs.interpret("0 seek u8").unwrap();

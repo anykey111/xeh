@@ -59,7 +59,7 @@ pub enum Cell {
     WithMeta(Xmeta),
 }
 
-use std::fmt;
+use std::fmt::{self};
 
 impl fmt::Debug for XfnPtr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -82,8 +82,15 @@ impl fmt::Debug for Cell {
             },
             Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) => write!(f, "{}", s),
-            Cell::Key(k) => write!(f, "{}:", k),
-            Cell::Vector(v) => f.debug_list().entries(v.iter()).finish(),
+            Cell::Key(k) => write!(f, "{}", k),
+            Cell::Vector(v) => {
+                f.write_str("[")?;
+                for x in v {
+                    f.write_str(" ")?;
+                    x.fmt(f)?;
+                }
+                f.write_str(" ]")
+            }
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => if s.is_bytestring() {
                     f
