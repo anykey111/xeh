@@ -3,6 +3,7 @@ use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
 pub type Xstr = arcstr::ArcStr;
+pub type Xsubstr = arcstr::Substr;
 pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i128;
 pub type Xreal = f64;

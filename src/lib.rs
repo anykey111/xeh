@@ -2,7 +2,6 @@ mod arith;
 pub mod bitstring;
 mod bitstring_mod;
 pub mod cell;
-pub mod debug;
 pub mod error;
 pub mod lex;
 mod opcodes;

@@ -661,16 +661,16 @@ mod tests {
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[33 55 77] bitstr-open [77] find").unwrap();
+        xs.interpret("[ 33 55 77 ] bitstr-open [ 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
-        xs.interpret("[55 77] find").unwrap();
+        xs.interpret("[ 55 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.interpret("[] find").unwrap();
+        xs.interpret("[ ] find").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
-        xs.interpret("[56] find").unwrap();
+        xs.interpret("[ 56 ] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
-        assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [56] find"));
-        xs.interpret("[0x31 0x32 0x33] bitstr-open \"23\" find").unwrap();
+        assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [ 56 ] find"));
+        xs.interpret("[ 0x31 0x32 0x33 ] bitstr-open \"23\" find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 }

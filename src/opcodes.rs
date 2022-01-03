@@ -3,7 +3,7 @@ use crate::cell::*;
 #[derive(Clone, PartialEq, Debug)]
 pub enum Opcode {
     Call(usize),
-    Unresolved(String),
+    Unresolved(Xstr),
     NativeCall(XfnPtr),
     Ret,
     JumpIf(isize),

@@ -210,7 +210,7 @@ mod tests {
         assert!(0 <= i && i <= 1);
         xs.interpret("1 round").unwrap();
         assert_eq!(Ok(1), xs.pop_data().unwrap().to_int());
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] round"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] round"));
     }
 
     #[test]

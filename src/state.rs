@@ -1,11 +1,11 @@
 use crate::arith::*;
 use crate::cell::*;
-use crate::debug::*;
 use crate::error::*;
 use crate::lex::*;
 use crate::opcodes::*;
 use crate::bitstring_mod::BitstrMod;
 
+use std::fmt::*;
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,12 +130,19 @@ pub enum ReverseStep {
     DropLocal(usize),
 }
 
+#[derive(Default, Clone, Debug)]
+struct SourceBuf {
+    name: String,
+    buf: Xstr,
+}
+
 #[derive(Default, Clone)]
 pub struct State {
     dict: Vec<DictEntry>,
     heap: Vec<Cell>,
     code: Vec<Opcode>,
-    debug_map: DebugMap,
+    debug_map: Vec<Option<Xsubstr>>,
+    sources: Vec<SourceBuf>,
     data_stack: Vec<Cell>,
     return_stack: Vec<Frame>,
     flow_stack: Vec<Flow>,
@@ -154,7 +161,6 @@ pub struct State {
 
 impl State {
     fn format_error(&mut self, err: &Xerr) -> String {
-        use std::fmt::Write;
         let mut msg = String::with_capacity(1000);
         writeln!(msg, "error: {}", err.name()).unwrap();
         match err {
@@ -205,19 +211,47 @@ impl State {
         };
         Ok(s)
     }
-    
-    pub fn pretty_error(&mut self, err: &Xerr) -> String {
-        let mut error_text = self.format_error(err);
-        if self.ctx.mode == ContextMode::Load {
-            let lex = self.ctx.source.as_ref().unwrap();
-            error_text.push_str(&self.debug_map.format_lex_location(lex));
-        } else if let Some(loc) = self.debug_map.format_location(self.ip()) {
-            error_text.push_str(&loc);
-        } else {
-            let lex = self.ctx.source.as_ref().unwrap();
-            error_text.push_str(&self.debug_map.format_lex_location(lex));
+
+    fn write_location(&self, buf: &mut String, tok: &Xsubstr) {
+        let mut line_start = 0;
+        let tok_start = tok.range().start;
+        for (i, s) in tok.parent().lines().enumerate() {
+            let line_end = line_start + s.len();
+            if line_start <= tok_start || tok_start <= line_end {
+                let len = tok_start - line_start;
+                let col = s[..len].chars().count();
+                let name = self.sources
+                    .iter()
+                    .find(|x| &x.buf == tok.parent())
+                    .map(|x| x.name.as_str())
+                    .unwrap_or_default();
+                writeln!(buf, "{}:{}:{}", name, i + 1, col + 1).unwrap();
+                writeln!(buf, "{}", s).unwrap();
+                writeln!(buf, "{:->1$}", '^', col).unwrap();
+                break;
+            }
+            line_start = line_end;
         }
-        error_text
+    }
+
+    pub fn current_line(&mut self) -> String {
+        let mut buf = String::with_capacity(1000);
+        if self.ctx.mode == ContextMode::Load {
+            if let Some(tok) = self.ctx.source.as_ref().and_then(|x| x.last_token()) {
+                self.write_location(&mut buf, &tok);
+            }
+        } else{
+            if let Some(Some(tok)) = self.debug_map.get(self.ip()) {
+                self.write_location(&mut buf, tok);
+            }
+        }
+        buf
+    }
+
+    pub fn pretty_error(&mut self, err: &Xerr) -> String {
+        let mut buf = self.format_error(err);
+        buf.push_str(&self.current_line());
+        buf
     }
 
     pub fn log_error(&mut self, mut msg: String) {
@@ -246,12 +280,6 @@ impl State {
         crate::bitstring_mod::print_dump(self, nrows, ncols)
     }
 
-    pub fn current_line(&self) -> String {
-        self.debug_map.format_location(self.ip()).unwrap_or_else(|| {
-            format!("{:x}:", self.ip())
-        })
-    }
-
     pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
         self.push_data(Cell::Bitstr(bin))?;
         self.eval_word("bitstr-open")
@@ -262,18 +290,34 @@ impl State {
             self.log_error(format!("{}: {}", path, e));
             Xerr::IOError
         })?;
-        let src = self.debug_map.add_source(&buf, Some(path.to_string()));
+        let src = self.add_source(&buf, Some(path));
         self.build_source(src, ContextMode::Load)
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
-        let src = self.debug_map.add_source(source, None);
+        let src = self.add_source(source, None);
         self.build_source(src, ContextMode::Load)
     }
 
     pub fn interpret(&mut self, buffer: &str) -> Xresult {
-        let src = self.debug_map.add_source(buffer, None);
+        let src = self.add_source(buffer, None);
         self.build_source(src, ContextMode::Eval)
+    }
+
+    fn add_source(&mut self, buf: &str, path: Option<&str>) -> Lex {
+        let id = self.sources.len();
+        let buf = Xstr::from(buf);
+        let lex = Lex::new(buf.clone());
+        let name = if let Some(s) = path {
+            s.to_string()
+        } else {
+            format!("<buffer#{}>", id)
+        };
+        self.sources.push(SourceBuf {
+            name,
+            buf,
+        });
+        lex
     }
 
     fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
@@ -312,38 +356,26 @@ impl State {
                     }
                     break self.context_close();
                 }
-                Tok::Num(n) => {
-                    self.code_emit_value(Cell::Int(n))?;
-                }
-                Tok::Real(r) => {
-                    self.code_emit_value(Cell::Real(r))?;
-                }
-                Tok::Str(s) => {
-                    self.code_emit_value(Cell::Str(s.into()))?;
-                }
-                Tok::Bstr(s) => {
-                    self.code_emit_value(Cell::Bitstr(s))?;
-                }
-                Tok::Key(key) => {
-                    self.code_emit_value(Cell::Key(key.into()))?;
+                Tok::Literal(val) => {
+                    self.code_emit_value(val)?;
                 }
                 Tok::Word(name) => {
                     // search for local variables first
                     if let Some(i) = self.top_function_flow()
-                    .and_then(|ff| ff.locals.iter().rposition(|x| x == &name)) {
-                        self.code_emit(Opcode::LoadLocal(i))?;
-                } else {
-                    self.build_resolve_word(name)?;
-                }
+                        .and_then(|ff| ff.locals.iter().rposition(|x| x == name.as_str())) {
+                            self.code_emit(Opcode::LoadLocal(i))?;
+                    } else {
+                        self.build_resolve_word(name)?;
+                    }
                 }
             }
         }
     }
 
-    fn build_resolve_word(&mut self, name: String) -> Xresult {
-        match self.dict_entry(&name) {
+    fn build_resolve_word(&mut self, name: Xsubstr) -> Xresult {
+        match self.dict_entry(name.as_str()) {
             None =>
-                self.code_emit(Opcode::Unresolved(name)),
+                self.code_emit(Opcode::Unresolved(Xstr::from(name.as_str()))),
 
             Some(Entry::Variable(a)) => {
                 let a = *a;
@@ -374,6 +406,15 @@ impl State {
                 self.code_emit(Opcode::NativeCall(x))
             }
         }
+    }
+
+    fn next_name(&mut self) -> Xresult1<String> {
+        if let Some(lex) = &mut self.ctx.source {
+            if let Tok::Word(name) = lex.next()? {
+                return Ok(name.to_string());
+            }
+        }
+        Err(Xerr::ExpectingName)
     }
 
     fn next_token(&mut self) -> Xresult1<Tok> {
@@ -429,7 +470,6 @@ impl State {
         assert_eq!(prev_ctx.ss_ptr, self.special.len());
         assert_eq!(prev_ctx.rs_len, self.return_stack.len());
         self.ctx = prev_ctx;
-        
         OK
     }
 
@@ -546,6 +586,7 @@ impl State {
             Def("]", core_word_vec_end),
             Def(":", core_word_def_begin),
             Def(";", core_word_def_end),
+            Def("#", core_word_comment),
             Def("immediate", core_word_immediate),
             Def("local", core_word_def_local),
             Def("var", core_word_variable),
@@ -640,16 +681,12 @@ impl State {
         Ok(wa)
     }
 
-    pub fn dict_entry(&self, name: &str) -> Option<&Entry> {
+    fn dict_entry(&self, name: &str) -> Option<&Entry> {
         self.dict.iter().rfind(|x| x.name == name).map(|x| &x.entry)
     }
 
     pub fn dict_find(&self, name: &str) -> Option<usize> {
         self.dict.iter().rposition(|x| x.name == name)
-    }
-
-    fn dict_at(&self, idx: usize) -> Option<&Entry> {
-        self.dict.get(idx).map(|x| &x.entry)
     }
 
     fn code_origin(&self) -> usize {
@@ -669,8 +706,15 @@ impl State {
 
     fn code_emit(&mut self, op: Opcode) -> Xresult {
         let at = self.code.len();
-        let lex = self.ctx.source.as_ref();
-        self.debug_map.insert_with_source(at, lex);
+        let len = self.debug_map.len();
+        let loc = self.ctx.source.as_ref().and_then(|x| x.last_token());
+        if at < len {
+            self.debug_map[at] = loc.clone();
+        } else if at == len {
+            self.debug_map.push(loc.clone());
+        } else {
+            panic!("non-linear allocation {}/{}", at, len);
+        }
         self.code.push(op);
         OK
     }
@@ -723,7 +767,10 @@ impl State {
                 let val = self.heap[*a].clone();
                 self.push_data(val)
             }
-            Some(Entry::Function { xf, .. }) => self.call_fn(*xf),
+            Some(Entry::Function { xf, .. }) => {
+                let xf = xf.clone();
+                self.call_fn(xf)
+            }
         }
 
     }
@@ -762,7 +809,7 @@ impl State {
                 let frame = self.pop_return()?;
                 self.set_ip(frame.return_to)
             }
-            Opcode::Unresolved(name) => match self.dict_entry(&name) {
+            Opcode::Unresolved(ref name) => match self.dict_entry(&name) {
                 None => Err(Xerr::UnknownWord),
                 Some(Entry::Variable(a)) => {
                     let a = *a;
@@ -1365,10 +1412,7 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_begin(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _other => return Err(Xerr::ExpectingName),
-    };
+    let name = xs.next_name()?;
     let start = xs.code_origin();
     // jump over function body
     xs.code_emit(Opcode::Jump(0))?;
@@ -1406,6 +1450,13 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_comment(xs: &mut State) -> Xresult {
+    if let Some(src) = xs.ctx.source.as_mut(){
+        src.skip_line();
+    }
+    OK
+}
+
 fn core_word_immediate(xs: &mut State) -> Xresult {
     let dict_idx = xs
         .top_function_flow()
@@ -1423,10 +1474,7 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_local(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _ => return Err(Xerr::ExpectingName),
-    };
+    let name = xs.next_name()?;
     let ff = xs.top_function_flow().ok_or(Xerr::ControlFlowError)?;
     let idx = ff.locals.len();
     ff.locals.push(name);
@@ -1434,10 +1482,7 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
 }
 
 fn core_word_variable(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _other => return Err(Xerr::ExpectingName),
-    };
+    let name = xs.next_name()?;
     let a = if xs.ctx.mode == ContextMode::Load {
         let a = xs.alloc_cell(Cell::Nil)?;
         xs.code_emit(Opcode::Store(a))?;
@@ -1451,10 +1496,7 @@ fn core_word_variable(xs: &mut State) -> Xresult {
 }
 
 fn core_word_setvar(xs: &mut State) -> Xresult {
-    let name = match xs.next_token()? {
-        Tok::Word(name) => name,
-        _other => return Err(Xerr::ExpectingName),
-    };
+    let name = xs.next_name()?;
     match xs.dict_entry(&name) {
         None => Err(Xerr::UnknownWord),
         Some(Entry::Variable(a)) => {
@@ -1807,7 +1849,7 @@ mod tests {
         xs.interpret("5 6 swap").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 swap)"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 ( 2 swap )"));
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
         let mut xs = State::boot().unwrap();
@@ -1816,7 +1858,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 (2 3 rot)"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 ( 2 3 rot )"));
         let mut xs = State::boot().unwrap();
         xs.interpret("1 2 over").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
@@ -1876,7 +1918,7 @@ mod tests {
     #[test]
     fn test_length() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[1 2 3] len").unwrap();
+        xs.interpret("[ 1 2 3 ] len").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         xs.interpret("\"12345\" len").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
@@ -1912,72 +1954,72 @@ mod tests {
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // start with negative
         let mut xs = State::boot().unwrap();
-        xs.interpret("[-1 1] for I loop").unwrap();
+        xs.interpret("[ -1 1 ] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         // start from zero
         let mut xs = State::boot().unwrap();
-        xs.interpret("[0 3] for I loop").unwrap();
+        xs.interpret("[ 0 3 ] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // counters
         let mut xs = State::boot().unwrap();
-        xs.interpret("[5 6] for [2 3] for 1 for I J K loop loop loop")
+        xs.interpret("[ 5 6 ] for [ 2 3 ] for 1 for I J K loop loop loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // empty range
         let mut xs = State::boot().unwrap();
-        xs.interpret("[3 0] for I loop").unwrap();
+        xs.interpret("[ 3 0 ] for I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        xs.interpret("[0 0] for I loop").unwrap();
+        xs.interpret("[ 0 0 ] for I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range        
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] for I loop"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[1] for I loop"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[1 2 3] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ 1 ] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ 1 2 3 ] for I loop"));
 
     }
 
     #[test]
     fn test_get_set() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[11 22 33] 2 nth").unwrap();
+        xs.interpret("[ 11 22 33 ] 2 nth").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
-        xs.interpret("[11 22 33] -2 nth").unwrap();
+        xs.interpret("[ 11 22 33 ] -2 nth").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        xs.interpret("[1 2 3] 0 5 set 0 nth").unwrap();
+        xs.interpret("[ 1 2 3 ] 0 5 set 0 nth").unwrap();
         assert_eq!(Cell::from(5isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] 100 nth"));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[1 2 3] -100 nth"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[] key: nth"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[ 1 2 3 ] 100 nth"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[ 1 2 3 ] -100 nth"));
+        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] key: nth"));
     }
 
     #[test]
     fn test_lookup() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[x: 1] x: get").unwrap();
+        xs.interpret("[ x: 1 ] x: get").unwrap();
         assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
-        xs.interpret("[x: [y: [z: 10]]] x: y: z: get").unwrap();
+        xs.interpret("[ x: [ y: [ z: 10 ] ] ] x: y: z: get").unwrap();
         assert_eq!(Cell::from(10isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::NotFound), xs.interpret("[x: [y: [1 2 3]]] f: y: x: get"));
+        assert_eq!(Err(Xerr::NotFound), xs.interpret("[ x: [ y: [1 2 3 ] ] ] f: y: x: get"));
     }
 
     #[test]
     fn test_assoc() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[] x: 1 assoc y: 2 assoc").unwrap();
+        xs.interpret("[ ] x: 1 assoc y: 2 assoc").unwrap();
         let mut m = Xvec::new();
         m.push_back_mut(Cell::Key("x".into()));
         m.push_back_mut(Cell::from(1u32));
         m.push_back_mut(Cell::Key("y".into()));
         m.push_back_mut(Cell::from(2u32));
         assert_eq!(Ok(m), xs.pop_data().unwrap().to_vector());
-        xs.interpret("[x: 1] x: 2 assoc x: get").unwrap();
+        xs.interpret("[ x: 1 ] x: 2 assoc x: get").unwrap();
         assert_eq!(Xcell::from(2usize), xs.pop_data().unwrap());
-        xs.interpret("[x: 1 y: 3] x: 5 assoc x: get").unwrap();
+        xs.interpret("[ x: 1 y: 3 ] x: 5 assoc x: get").unwrap();
     }
 
     #[test]
@@ -2003,21 +2045,21 @@ mod tests {
     #[test]
     fn test_immediate() {
         let mut xs = State::boot().unwrap();
-        let res = xs.load(": f [] 0 nth immediate ; f");
+        let res = xs.load(": f [ ] 0 nth immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 
     #[test]
     fn test_nested_interpreter() {
         let mut xs = State::boot().unwrap();
-        xs.load("(3 5 *)").unwrap();
+        xs.load("( 3 5 * )").unwrap();
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
-        xs.interpret("(2 2 +)").unwrap();
+        xs.interpret("( 2 2 + )").unwrap();
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        xs.interpret("(10 var x 2 var y (x y *))").unwrap();
+        xs.interpret("( 10 var x 2 var y ( x y * ) )").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.interpret("(3 var n [n for I loop])").unwrap();
+        xs.interpret("( 3 var n [ n for I loop ] )").unwrap();
         let v = xs.pop_data().unwrap().to_vector().unwrap();
         assert_eq!(3, v.len());
     }
@@ -2067,14 +2109,14 @@ mod tests {
         xs.interpret("255 NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("FF".to_string()), xs.console);
         xs.console = Some(String::new());
-        xs.interpret("[255] NO-PREFIX HEX print").unwrap();
-        assert_eq!(Some("[FF]".to_string()), xs.console);
+        xs.interpret("[ 255 ] NO-PREFIX HEX print").unwrap();
+        assert_eq!(Some("[ FF ]".to_string()), xs.console);
     }
 
     #[test]
     fn test_rev() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[1 2 3] rev").unwrap();
+        xs.interpret("[ 1 2 3 ] rev").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(3));
         v.push_back_mut(Cell::Int(2));
@@ -2085,7 +2127,7 @@ mod tests {
     #[test]
     fn test_sort() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[2 3 1] sort").unwrap();
+        xs.interpret("[ 2 3 1 ] sort").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2096,8 +2138,8 @@ mod tests {
     #[test]
     fn test_sort_by_key() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[[k: 2] [k: 3] [k: 1]] k: sort-by-key var x").unwrap();
-        xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
+        xs.interpret("[ [ \"k\" 2 ] [ \"k\" 3 ] [ \"k\" 1 ] ] \"k\" sort-by-key var x").unwrap();
+        xs.interpret("[ 3 for x I nth \"k\" get loop ]").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2189,7 +2231,7 @@ mod tests {
                 [ n from to]
             else
                 n dec from aux to tower-of-hanoi
-                [n from to]
+                [ n from to ]
                 n dec aux to from tower-of-hanoi
             then
         ;        
