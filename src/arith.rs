@@ -162,67 +162,67 @@ mod tests {
     #[test]
     fn test_arith() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("5 4 -").unwrap();
+        xs.eval("5 4 -").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("4 5 -").unwrap();
+        xs.eval("4 5 -").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.interpret("4 5 *").unwrap();
+        xs.eval("4 5 *").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.interpret("20 4 /").unwrap();
+        xs.eval("20 4 /").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-        xs.interpret("1 1 +").unwrap();
+        xs.eval("1 1 +").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("7 3 rem").unwrap();
+        xs.eval("7 3 rem").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("1 inc").unwrap();
+        xs.eval("1 inc").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("1 dec").unwrap();
+        xs.eval("1 dec").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 +"));
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("+"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("\"s\" 1 +"));
-        xs.interpret("1 1 band").unwrap();
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("\"s\" 1 +"));
+        xs.eval("1 1 band").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("1 2 bor").unwrap();
+        xs.eval("1 2 bor").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.interpret("1 3 bxor").unwrap();
+        xs.eval("1 3 bxor").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("0 bnot").unwrap();
+        xs.eval("0 bnot").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.interpret("1 3 bshl").unwrap();
+        xs.eval("1 3 bshl").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.interpret("16 3 bshr").unwrap();
+        xs.eval("16 3 bshr").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("1 neg").unwrap();
+        xs.eval("1 neg").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.interpret("-1 neg").unwrap();
+        xs.eval("-1 neg").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
     }
 
     #[test]
     fn test_random_round() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("random").unwrap();
+        xs.eval("random").unwrap();
         let r = xs.pop_data().unwrap().to_real().unwrap();
         assert!(0.0 <= r && r <= 1.0);
-        xs.interpret("random round").unwrap();
+        xs.eval("random round").unwrap();
         let i = xs.pop_data().unwrap().to_int().unwrap();
         assert!(0 <= i && i <= 1);
-        xs.interpret("1 round").unwrap();
+        xs.eval("1 round").unwrap();
         assert_eq!(Ok(1), xs.pop_data().unwrap().to_int());
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] round"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] round"));
     }
 
     #[test]
     fn test_cmp() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("-1 0 <").unwrap();
+        xs.eval("-1 0 <").unwrap();
         assert_eq!(Ok(ONE), xs.pop_data());
-        xs.interpret("10 5 <").unwrap();
+        xs.eval("10 5 <").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.interpret("2 3 =").unwrap();
+        xs.eval("2 3 =").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.interpret("4 4 =").unwrap();
+        xs.eval("4 4 =").unwrap();
         assert_eq!(Ok(ONE), xs.pop_data());
     }
 }

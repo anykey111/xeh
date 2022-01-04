@@ -70,12 +70,12 @@ pub enum Special {
 
 #[derive(Clone, PartialEq)]
 enum ContextMode {
-    // assemble function
+    // assemble bytecode
     Load,
     // normal evaluation
     Eval,
     // meta evaluation
-    Nested,
+    MetaEval,
 }
 
 impl Default for ContextMode {
@@ -285,7 +285,7 @@ impl State {
         self.eval_word("bitstr-open")
     }
 
-    pub fn load_source(&mut self, path: &str) -> Xresult {
+    pub fn load_file(&mut self, path: &str) -> Xresult {
         let buf =     std::fs::read_to_string(path).map_err(|e| {
             self.log_error(format!("{}: {}", path, e));
             Xerr::IOError
@@ -299,8 +299,8 @@ impl State {
         self.build_source(src, ContextMode::Load)
     }
 
-    pub fn interpret(&mut self, buffer: &str) -> Xresult {
-        let src = self.add_source(buffer, None);
+    pub fn eval(&mut self, source: &str) -> Xresult {
+        let src = self.add_source(source, None);
         self.build_source(src, ContextMode::Eval)
     }
 
@@ -365,14 +365,14 @@ impl State {
                         .and_then(|ff| ff.locals.iter().rposition(|x| x == name.as_str())) {
                             self.code_emit(Opcode::LoadLocal(i))?;
                     } else {
-                        self.build_resolve_word(name)?;
+                        self.code_emit_word(name)?;
                     }
                 }
             }
         }
     }
 
-    fn build_resolve_word(&mut self, name: Xsubstr) -> Xresult {
+    fn code_emit_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
             None =>
                 self.code_emit(Opcode::Unresolved(Xstr::from(name.as_str()))),
@@ -441,8 +441,8 @@ impl State {
             // take source form previous context
             tmp.source = self.ctx.source.take();
         }
-        if tmp.mode == ContextMode::Nested {
-            // set bottom stack limit for nested interpreter
+        if tmp.mode == ContextMode::MetaEval {
+            // set bottom stack limit for meta interpreter
             tmp.ds_len = self.data_stack.len();
         }
         std::mem::swap(&mut self.ctx, &mut tmp);
@@ -455,11 +455,11 @@ impl State {
             // take source from current context
             prev_ctx.source = self.ctx.source.take();
         }
-        if self.ctx.mode == ContextMode::Nested {
-            // purge nested context code after evaluation
+        if self.ctx.mode == ContextMode::MetaEval {
+            // purge meta context code after evaluation
             self.code.truncate(self.ctx.cs_len);
             if prev_ctx.mode == ContextMode::Load {
-                // compile evaluation result
+                // emit meta-evaluation result
                 while self.data_stack.len() > self.ctx.ds_len {
                     let val = self.pop_data()?;
                     self.code_emit_value(val)?;
@@ -1516,12 +1516,12 @@ fn core_word_nil(xs: &mut State) -> Xresult {
 }
 
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
-    xs.context_open(ContextMode::Nested, None);
+    xs.context_open(ContextMode::MetaEval, None);
     OK
 }
 
 fn core_word_nested_end(xs: &mut State) -> Xresult {
-    if xs.ctx.mode != ContextMode::Nested
+    if xs.ctx.mode != ContextMode::MetaEval
         || xs.flow_stack.len() > xs.ctx.fs_len
         || xs.loops.len() > xs.ctx.ls_len
     {
@@ -1809,7 +1809,7 @@ fn core_word_no_prefix(xs: &mut State) -> Xresult {
 
 fn core_word_load(xs: &mut State) -> Xresult {
     let path = xs.pop_data()?.to_string()?;
-    xs.load_source(&path)
+    xs.load_file(&path)
 }
 
 fn core_word_meta(xs: &mut State) -> Xresult {
@@ -1836,35 +1836,35 @@ mod tests {
     #[test]
     fn test_data_stack() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("1 \"s\" 2").unwrap();
-        xs.interpret("dup").unwrap();
+        xs.eval("1 \"s\" 2").unwrap();
+        xs.eval("dup").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.interpret("drop").unwrap();
+        xs.eval("drop").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        let res = xs.interpret("drop");
+        let res = xs.eval("drop");
         assert_eq!(Err(Xerr::StackUnderflow), res);
-        let res = xs.interpret("dup");
+        let res = xs.eval("dup");
         assert_eq!(Err(Xerr::StackUnderflow), res);
-        xs.interpret("5 6 swap").unwrap();
+        xs.eval("5 6 swap").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 ( 2 swap )"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 ( 2 swap )"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 swap"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 swap"));
         let mut xs = State::boot().unwrap();
-        xs.interpret("1 2 3 rot").unwrap();
+        xs.eval("1 2 3 rot").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 ( 2 3 rot )"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 ( 2 3 rot )"));
         let mut xs = State::boot().unwrap();
-        xs.interpret("1 2 over").unwrap();
+        xs.eval("1 2 over").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.interpret("1 over"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 over"));
     }
 
     #[test]
@@ -1896,7 +1896,7 @@ mod tests {
     #[test]
     fn test_begin_again() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("0 begin dup 5 < while inc again").unwrap();
+        xs.eval("0 begin dup 5 < while inc again").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
         xs.load("begin break again").unwrap();
@@ -1904,9 +1904,9 @@ mod tests {
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
         let mut xs = State::boot().unwrap();
-        xs.interpret("begin 1 0 until").unwrap();
+        xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("1 var x begin x while 0 -> x again").unwrap();
+        xs.eval("1 var x begin x while 0 -> x again").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
@@ -1918,21 +1918,21 @@ mod tests {
     #[test]
     fn test_length() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 1 2 3 ] len").unwrap();
+        xs.eval("[ 1 2 3 ] len").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.interpret("\"12345\" len").unwrap();
+        xs.eval("\"12345\" len").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.interpret("len");
+        let res = xs.eval("len");
         assert_eq!(Err(Xerr::StackUnderflow), res);
-        let res = xs.interpret("1 len");
+        let res = xs.eval("1 len");
         assert_eq!(Err(Xerr::TypeError), res);
     }
 
     #[test]
     fn test_loop_break() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("begin 1 break again").unwrap();
+        xs.eval("begin 1 break again").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.to_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
@@ -1948,98 +1948,98 @@ mod tests {
     fn test_for_loop() {
         let mut xs = State::boot().unwrap();
         // short form for [0 3]
-        xs.interpret("3 for I loop").unwrap();
+        xs.eval("3 for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // start with negative
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ -1 1 ] for I loop").unwrap();
+        xs.eval("[ -1 1 ] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         // start from zero
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 0 3 ] for I loop").unwrap();
+        xs.eval("[ 0 3 ] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // counters
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 5 6 ] for [ 2 3 ] for 1 for I J K loop loop loop")
+        xs.eval("[ 5 6 ] for [ 2 3 ] for 1 for I J K loop loop loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // empty range
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 3 0 ] for I loop").unwrap();
+        xs.eval("[ 3 0 ] for I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        xs.interpret("[ 0 0 ] for I loop").unwrap();
+        xs.eval("[ 0 0 ] for I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range        
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] for I loop"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ 1 ] for I loop"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ 1 2 3 ] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 ] for I loop"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 2 3 ] for I loop"));
 
     }
 
     #[test]
     fn test_get_set() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 11 22 33 ] 2 nth").unwrap();
+        xs.eval("[ 11 22 33 ] 2 nth").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
-        xs.interpret("[ 11 22 33 ] -2 nth").unwrap();
+        xs.eval("[ 11 22 33 ] -2 nth").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        xs.interpret("[ 1 2 3 ] 0 5 set 0 nth").unwrap();
+        xs.eval("[ 1 2 3 ] 0 5 set 0 nth").unwrap();
         assert_eq!(Cell::from(5isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[ 1 2 3 ] 100 nth"));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.interpret("[ 1 2 3 ] -100 nth"));
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] key: nth"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("[ 1 2 3 ] 100 nth"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("[ 1 2 3 ] -100 nth"));
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] key: nth"));
     }
 
     #[test]
     fn test_lookup() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ x: 1 ] x: get").unwrap();
+        xs.eval("[ x: 1 ] x: get").unwrap();
         assert_eq!(Cell::from(1isize), xs.pop_data().unwrap());
-        xs.interpret("[ x: [ y: [ z: 10 ] ] ] x: y: z: get").unwrap();
+        xs.eval("[ x: [ y: [ z: 10 ] ] ] x: y: z: get").unwrap();
         assert_eq!(Cell::from(10isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::NotFound), xs.interpret("[ x: [ y: [ 1 2 3 ] ] ] f: y: x: get"));
+        assert_eq!(Err(Xerr::NotFound), xs.eval("[ x: [ y: [ 1 2 3 ] ] ] f: y: x: get"));
     }
 
     #[test]
     fn test_assoc() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ ] x: 1 assoc y: 2 assoc").unwrap();
+        xs.eval("[ ] x: 1 assoc y: 2 assoc").unwrap();
         let mut m = Xvec::new();
         m.push_back_mut(Cell::Key("x:".into()));
         m.push_back_mut(Cell::from(1u32));
         m.push_back_mut(Cell::Key("y:".into()));
         m.push_back_mut(Cell::from(2u32));
         assert_eq!(Ok(m), xs.pop_data().unwrap().to_vector());
-        xs.interpret("[ x: 1 ] x: 2 assoc x: get").unwrap();
+        xs.eval("[ x: 1 ] x: 2 assoc x: get").unwrap();
         assert_eq!(Xcell::from(2usize), xs.pop_data().unwrap());
-        xs.interpret("[ x: 1 y: 3 ] x: 5 assoc x: get").unwrap();
+        xs.eval("[ x: 1 y: 3 ] x: 5 assoc x: get").unwrap();
     }
 
     #[test]
     fn test_locals() {
         let mut xs = State::boot().unwrap();
-        xs.interpret(": f local x local y x y y x ; 1 2 f").unwrap();
+        xs.eval(": f local x local y x y y x ; 1 2 f").unwrap();
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::UnknownWord), xs.interpret("x y"));
+        assert_eq!(Err(Xerr::UnknownWord), xs.eval("x y"));
     }
 
     #[test]
     fn test_base() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("HEX 16 BASE assert-eq").unwrap();
-        xs.interpret("DEC 10 BASE assert-eq").unwrap();
-        xs.interpret("OCT 8 BASE assert-eq").unwrap();
-        xs.interpret("BIN 2 BASE assert-eq").unwrap();
+        xs.eval("HEX 16 BASE assert-eq").unwrap();
+        xs.eval("DEC 10 BASE assert-eq").unwrap();
+        xs.eval("OCT 8 BASE assert-eq").unwrap();
+        xs.eval("BIN 2 BASE assert-eq").unwrap();
     }
 
     #[test]
@@ -2055,11 +2055,11 @@ mod tests {
         xs.load("( 3 5 * )").unwrap();
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
-        xs.interpret("( 2 2 + )").unwrap();
+        xs.eval("( 2 2 + )").unwrap();
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        xs.interpret("( 10 var x 2 var y ( x y * ) )").unwrap();
+        xs.eval("( 10 var x 2 var y ( x y * ) )").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.interpret("( 3 var n [ n for I loop ] )").unwrap();
+        xs.eval("( 3 var n [ n for I loop ] )").unwrap();
         let v = xs.pop_data().unwrap().to_vector().unwrap();
         assert_eq!(3, v.len());
     }
@@ -2071,9 +2071,9 @@ mod tests {
         assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x));
         let x2 = xs.defvar("X", Cell::Int(2)).unwrap();
         assert_eq!(Ok(&Cell::Int(2)), xs.get_var(x2));
-        xs.interpret(": Y 3 ;").unwrap();
+        xs.eval(": Y 3 ;").unwrap();
         xs.defvar("Y", Cell::Nil).unwrap();
-        xs.interpret("4 var Z").unwrap();
+        xs.eval("4 var Z").unwrap();
         xs.defvar("Z", Cell::Nil).unwrap();
     }
 
@@ -2084,18 +2084,18 @@ mod tests {
             assert_eq!(Ok(ONE), xs.pop_data());
             xs.push_data(ZERO)
         }, ONE).unwrap();
-        xs.interpret("self1").unwrap();
+        xs.eval("self1").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
     }
 
     #[test]
     fn test_caseof() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("2 case 1 of 100 endof 2 of 200 endof endcase").unwrap();
+        xs.eval("2 case 1 of 100 endof 2 of 200 endof endcase").unwrap();
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
-        xs.interpret("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
+        xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.interpret("10 for I I case 5 of break endof drop endcase loop").unwrap();
+        xs.eval("10 for I I case 5 of break endof drop endcase loop").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 
@@ -2103,20 +2103,20 @@ mod tests {
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
-        xs.interpret("255 HEX print").unwrap();
+        xs.eval("255 HEX print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.console);
         xs.console = Some(String::new());
-        xs.interpret("255 NO-PREFIX HEX print").unwrap();
+        xs.eval("255 NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("FF".to_string()), xs.console);
         xs.console = Some(String::new());
-        xs.interpret("[ 255 ] NO-PREFIX HEX print").unwrap();
+        xs.eval("[ 255 ] NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("[ FF ]".to_string()), xs.console);
     }
 
     #[test]
     fn test_rev() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 1 2 3 ] rev").unwrap();
+        xs.eval("[ 1 2 3 ] rev").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(3));
         v.push_back_mut(Cell::Int(2));
@@ -2127,7 +2127,7 @@ mod tests {
     #[test]
     fn test_sort() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ 2 3 1 ] sort").unwrap();
+        xs.eval("[ 2 3 1 ] sort").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2138,8 +2138,8 @@ mod tests {
     #[test]
     fn test_sort_by_key() {
         let mut xs = State::boot().unwrap();
-        xs.interpret("[ [ k: 2 ] [ k: 3 ] [ k: 1 ] ] k: sort-by-key var x").unwrap();
-        xs.interpret("[ 3 for x I nth k: get loop ]").unwrap();
+        xs.eval("[ [ k: 2 ] [ k: 3 ] [ k: 1 ] ] k: sort-by-key var x").unwrap();
+        xs.eval("[ 3 for x I nth k: get loop ]").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2255,16 +2255,16 @@ mod tests {
     #[test]
     fn test_meta() {
         let mut xs = State::boot().unwrap();
-        xs.interpret(" 123 \"test\" with-meta").unwrap();
+        xs.eval(" 123 \"test\" with-meta").unwrap();
         assert_eq!(xs.top_data(), Some(&Cell::Int(123)));
-        xs.interpret("meta").unwrap();
+        xs.eval("meta").unwrap();
         assert_eq!(xs.top_data(), Some(&Cell::Str(Xstr::from("test"))));
     }
 
     #[test]
     fn test_exit_err() {
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::Exit(-1)), xs.interpret("-1 exit drop"));
+        assert_eq!(Err(Xerr::Exit(-1)), xs.eval("-1 exit drop"));
         let mut xs = State::boot().unwrap();
         xs.load("0 exit +").unwrap();
         assert_eq!(Err(Xerr::Exit(0)), xs.run());

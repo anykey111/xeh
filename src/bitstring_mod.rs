@@ -478,18 +478,18 @@ mod tests {
     #[test]
     fn test_bitstring_mod() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[ 0 0xff ] >bitstr").unwrap();
+        xs.eval("[ 0 0xff ] >bitstr").unwrap();
         let s = xs.pop_data().unwrap();
         assert_eq!(s, Cell::Bitstr(Xbitstr::from(vec![0, 255])));
         xs.set_binary_input(Xbitstr::from(vec![1, 255, 0])).unwrap();
-        xs.interpret("u8").unwrap();
+        xs.eval("u8").unwrap();
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
-        xs.interpret("i8").unwrap();
+        xs.eval("i8").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
-        xs.interpret("i8").unwrap();
+        xs.eval("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[ 256 ] >bitstr"));
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("[ -1 ] >bitstr"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ 256 ] >bitstr"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ -1 ] >bitstr"));
         //xs.interpret("[ \"1\" 0x32 0s0011_0011 ] >bitstr").unwrap();
         //assert_eq!(vec![0x31, 0x32, 0x33], xs.pop_data().unwrap().to_bitstring().unwrap().to_bytes());
     }
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn test_int_uint() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[ 0xff 0xff ] bitstr-open 8 uint 8 int").unwrap();
+        xs.eval("[ 0xff 0xff ] bitstr-open 8 uint 8 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
@@ -506,12 +506,12 @@ mod tests {
     fn test_bitstring_match() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
-        match xs.interpret("\"124\" ?") {
+        match xs.eval("\"124\" ?") {
             Err(Xerr::BitMatchError(ctx)) => assert_eq!(16, ctx.2),
             other => panic!("{:?}", other),
         };
-        xs.interpret("\"123\" ?").unwrap();
-        match xs.interpret("[ 0 ] ?") {
+        xs.eval("\"123\" ?").unwrap();
+        match xs.eval("[ 0 ] ?") {
             Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
             other => panic!("{:?}", other),
         }
@@ -522,13 +522,13 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
         {
-            xs.interpret("u8").unwrap();
+            xs.eval("u8").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::Int(1), val.value());
             assert_eq!(&bitstr_meta(8, None, false), val.meta().unwrap());
         }
         {
-            xs.interpret("2 bytes").unwrap();
+            xs.eval("2 bytes").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&bitstr_meta(16, None, false), val.meta().unwrap());
             let s = val.value().to_bitstring().unwrap();
@@ -536,14 +536,14 @@ mod tests {
             assert_eq!(vec![2, 3], s.to_bytes());
         }
         {        
-            xs.interpret("2 bits").unwrap();
+            xs.eval("2 bits").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&bitstr_meta(2, None, false), val.meta().unwrap());
             let s = val.value().to_bitstring().unwrap();
             assert_eq!(2, s.len());
         }
         {
-            xs.interpret("big-endian 2 int").unwrap();
+            xs.eval("big-endian 2 int").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&bitstr_meta(2, Some(BIG), true), val.meta().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
@@ -551,7 +551,7 @@ mod tests {
         {
             let f: f64 = 1.0;
             xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec())).unwrap();
-            xs.interpret("f64be").unwrap();
+            xs.eval("f64be").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::from(f),  val.value());
             assert_eq!(&bitstr_meta(64, Some(BIG), true), val.meta().unwrap());
@@ -563,25 +563,25 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         let s: Vec<u8> = (0..1024*1024+1024).map(|_| 1).collect();
         xs.set_binary_input(Xbitstr::from(s)).unwrap();
-        xs.interpret("1 kbytes 1 mbytes remain").unwrap();
+        xs.eval("1 kbytes 1 mbytes remain").unwrap();
         assert_eq!(0, xs.pop_data().unwrap().to_usize().unwrap());
     }
 
     #[test]
     fn test_to_num_bytes() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("2 b>").unwrap();
+        xs.eval("2 b>").unwrap();
         assert_eq!(16, xs.pop_data().unwrap().to_usize().unwrap());
-        xs.interpret("4 kb>").unwrap();
+        xs.eval("4 kb>").unwrap();
         assert_eq!(32768, xs.pop_data().unwrap().to_usize().unwrap());
-        xs.interpret("3 mb>").unwrap();
+        xs.eval("3 mb>").unwrap();
         assert_eq!(25165824, xs.pop_data().unwrap().to_usize().unwrap());
     }
 
     #[test]
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret(
+        xs.eval(
             "
         [ 1 5 7 ] bitstr-open u8
         [ 3 ] bitstr-open u8
@@ -592,14 +592,14 @@ mod tests {
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.interpret("bitstr/input").unwrap();
+        xs.eval("bitstr/input").unwrap();
         let s = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(vec![7], s.to_bytes());
-        xs.interpret("bitstr-close bitstr/input").unwrap();
+        xs.eval("bitstr-close bitstr/input").unwrap();
         let s2 = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(0, s2.len());
-        assert_eq!(Err(Xerr::ControlFlowError), xs.interpret("bitstr-close"));
-        xs.interpret("bitstr/input").unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.eval("bitstr-close"));
+        xs.eval("bitstr/input").unwrap();
         let empty = xs.pop_data().unwrap().to_bitstring().unwrap(); 
         assert_eq!(0, empty.len());
     }
@@ -608,9 +608,9 @@ mod tests {
     fn test_bitstr_from_int() {
         let xs = &mut Xstate::boot().unwrap();
         let pop_bytes = |xs: &mut Xstate| xs.pop_data()?.to_bitstring().map(|s| s.to_bytes());
-        xs.interpret("-128 i8!").unwrap();
+        xs.eval("-128 i8!").unwrap();
         assert_eq!(Ok(vec![0x80]), pop_bytes(xs));
-        xs.interpret("255 u8!").unwrap();
+        xs.eval("255 u8!").unwrap();
         assert_eq!(Ok(vec![0xff]), pop_bytes(xs));
         // assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("-128 u8!"));
         // assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("128 i8!"));
@@ -622,12 +622,12 @@ mod tests {
         let mut bin = Vec::new();
         bin.resize_with(20, || 0xff);
         xs.set_binary_input(Xbitstr::from(bin.clone())).unwrap();
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("128 uint"));
-        assert_eq!(Err(Xerr::IntegerOverflow), xs.interpret("129 int"));
-        xs.interpret("127 uint").unwrap();
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("128 uint"));
+        assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("129 int"));
+        xs.eval("127 uint").unwrap();
         assert_eq!(Cell::Int(Xint::MAX), xs.pop_data().unwrap());
         xs.set_binary_input(Xbitstr::from(bin.clone())).unwrap();
-        xs.interpret("128 int").unwrap();
+        xs.eval("128 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
     }
 
@@ -635,14 +635,14 @@ mod tests {
     fn test_bitstring_input_seek() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![100, 200])).unwrap();
-        match xs.interpret("100 seek") {
+        match xs.eval("100 seek") {
             Err(Xerr::BitSeekError(ctx)) => assert_eq!(100, ctx.1),
             other => panic!("{:?}", other),
         }
-        assert_eq!(Err(Xerr::TypeError), xs.interpret("[ ] seek"));
-        xs.interpret("8 seek u8").unwrap();
+        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] seek"));
+        xs.eval("8 seek u8").unwrap();
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
-        xs.interpret("0 seek u8").unwrap();
+        xs.eval("0 seek u8").unwrap();
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
     }
 
@@ -650,36 +650,37 @@ mod tests {
     fn test_bitstr_remain() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![1, 2])).unwrap();
-        xs.interpret("remain").unwrap();
+        xs.eval("remain").unwrap();
         assert_eq!(Cell::Int(16), xs.pop_data().unwrap());
-        xs.interpret("5 bits drop remain").unwrap();
+        xs.eval("5 bits drop remain").unwrap();
         assert_eq!(Cell::Int(11), xs.pop_data().unwrap());
-        xs.interpret("11 bits drop remain").unwrap();
+        xs.eval("11 bits drop remain").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
     }
 
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("[ 33 55 77 ] bitstr-open [ 77 ] find").unwrap();
+        xs.eval("[ 33 55 77 ] bitstr-open [ 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
-        xs.interpret("[ 55 77 ] find").unwrap();
+        xs.eval("[ 55 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.interpret("[ ] find").unwrap();
+        xs.eval("[ ] find").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
-        xs.interpret("[ 56 ] find").unwrap();
+        xs.eval("[ 56 ] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
-        assert_eq!(Err(Xerr::UnalignedBitstr), xs.interpret("5 seek [ 56 ] find"));
-        xs.interpret("[ 0x31 0x32 0x33 ] bitstr-open \"23\" find").unwrap();
+        assert_eq!(Err(Xerr::UnalignedBitstr), xs.eval("5 seek [ 56 ] find"));
+        xs.eval("[ 0x31 0x32 0x33 ] bitstr-open \"23\" find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 
     #[test]
     fn  test_bitstr_pack() {
         let mut xs = Xstate::boot().unwrap();
-        xs.interpret("255 u8!").unwrap();
+        xs.eval("255 u8!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
-        xs.interpret("big-endian 123 32 int!").unwrap();
+        assert_eq!(bs, Xbitstr::from(vec![255]));
+        xs.eval("big-endian 123 32 int!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
         

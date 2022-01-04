@@ -36,7 +36,7 @@ fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
             eprintln!("\t{:?}", val);
         }
     } else {
-        xs.interpret(line)?;
+        xs.eval(line)?;
     }
     OK
 }
@@ -114,7 +114,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         xs.start_reverse_debugging();
     }
     for filename in args.sources.iter() {
-        xs.load_source(filename)?;
+        xs.load_file(filename)?;
     }
     if !args.sources.is_empty() {
         let result = xs.run();
@@ -124,7 +124,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         }
     }
     if let Some(s) = args.eval {
-        xs.interpret(&s)
+        xs.eval(&s)
     } else if args.sources.is_empty() {
         crate::repl::run(xs)
     } else {

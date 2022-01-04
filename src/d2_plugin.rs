@@ -139,7 +139,7 @@ mod tests {
     fn test_d2_rgba() {
         let mut xs = Xstate::boot().unwrap();
         self::load(&mut xs).unwrap();
-        xs.interpret("
+        xs.eval("
         3 var W
         2 var H
         W H d2-resize
