@@ -673,4 +673,15 @@ mod tests {
         xs.interpret("[ 0x31 0x32 0x33 ] bitstr-open \"23\" find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
+
+    #[test]
+    fn  test_bitstr_pack() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.interpret("255 u8!").unwrap();
+        let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
+        xs.interpret("big-endian 123 32 int!").unwrap();
+        let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
+        assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
+        
+    }
 }
