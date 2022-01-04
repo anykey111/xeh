@@ -51,7 +51,7 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
             eprintln!("BYE!");
             break;
         }
-        let readline = rl.readline(">");
+        let readline = rl.readline(">>");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
