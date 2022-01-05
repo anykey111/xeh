@@ -213,25 +213,39 @@ impl State {
     }
 
     fn write_location(&self, buf: &mut String, tok: &Xsubstr) {
-        let mut line_start = 0;
         let tok_start = tok.range().start;
-        for (i, s) in tok.parent().lines().enumerate() {
-            let line_end = line_start + s.len();
-            if line_start <= tok_start && tok_start <= line_end {
-                let len = tok_start - line_start;
-                let col = s[..len].chars().count();
-                let name = self.sources
+        let par = tok.parent();
+        let mut it = par.char_indices();
+        let mut start = 0;
+        let mut end = 1;
+        let mut line = 0;
+        let mut col = 0;
+        while let Some((i, c)) = it.next() {
+            end = i;
+            if end == par.len() {
+                end += c.len_utf8();
+            } else if c == '\n'  {
+                if (start..end).contains(&tok_start) {
+                    break;
+                }
+                line += 1;
+                start = i + 1; // skip \n
+                col = 0;
+            } else if i < tok_start {
+                col += 1;
+            }
+        }
+        let name = self.sources
                     .iter()
                     .find(|x| &x.buf == tok.parent())
                     .map(|x| x.name.as_str())
-                    .unwrap_or_default();
-                writeln!(buf, "{}:{}:{}", name, i + 1, col + 1).unwrap();
-                writeln!(buf, "{}", s).unwrap();
-                writeln!(buf, "{:->1$}", '^', col).unwrap();
-                break;
-            }
-            line_start = line_end;
-        }
+                    .unwrap();
+        let whole_line = tok.parent().substr(start..end);
+        println!("{:?}", (start, end, tok.parent(), &whole_line));
+        writeln!(buf, "{}:{}:{}", name, line + 1, col + 1).unwrap();
+        writeln!(buf, "{}", whole_line).unwrap();
+        println!("col={}", col);
+        writeln!(buf, "{:->1$}", '^', col + 1).unwrap();
     }
 
     pub fn current_line(&mut self) -> String {
@@ -505,6 +519,14 @@ impl State {
         Ok(Xref::Heap(a))
     }
 
+    pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
+        match self.dict_entry(name) {
+            None => Err(Xerr::UnknownWord),
+            Some(Entry::Variable(a)) => Ok(&self.heap[*a]),
+            _ => Err(Xerr::InvalidAddress),
+        }
+    }
+
     pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
         match xref {
             Xref::Heap(a) => self.heap.get(a).ok_or(Xerr::InvalidAddress),
@@ -685,8 +707,8 @@ impl State {
         self.dict.iter().rfind(|x| x.name == name).map(|x| &x.entry)
     }
 
-    pub fn dict_find(&self, name: &str) -> Option<usize> {
-        self.dict.iter().rposition(|x| x.name == name)
+    fn dict_find(&self, name: &str) -> Option<usize> {
+        self.dict.iter().rposition(|e| e.name == name)
     }
 
     fn code_origin(&self) -> usize {
@@ -2259,6 +2281,34 @@ mod tests {
         assert_eq!(xs.top_data(), Some(&Cell::Int(123)));
         xs.eval("meta").unwrap();
         assert_eq!(xs.top_data(), Some(&Cell::Str(Xstr::from("test"))));
+    }
+
+    #[test]
+    fn test_error_location() {
+        let mut xs = State::boot().unwrap();
+        xs.console = Some(String::new());
+        assert_eq!(Err(Xerr::UnknownWord), xs.eval(" \r\n \r\n\n   x"));
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[1], "<buffer#0>:4:4");
+        assert_eq!(lines[2], "   x");
+        assert_eq!(lines[3], "---^");
+
+        xs.console = Some(String::new());
+        assert_eq!(Err(Xerr::UnknownWord), xs.eval("z"));
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[1], "<buffer#1>:1:1");
+        assert_eq!(lines[2], "z");
+        assert_eq!(lines[3], "^");
+
+        xs.console = Some(String::new());
+        assert_eq!(Err(Xerr::UnknownWord), xs.eval("\n q\n"));
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[1], "<buffer#2>:2:2");
+        assert_eq!(lines[2], " q");
+        assert_eq!(lines[3], "_^");
     }
 
     #[test]
