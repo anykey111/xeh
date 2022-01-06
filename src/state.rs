@@ -241,10 +241,8 @@ impl State {
                     .map(|x| x.name.as_str())
                     .unwrap();
         let whole_line = tok.parent().substr(start..end);
-        println!("{:?}", (start, end, tok.parent(), &whole_line));
         writeln!(buf, "{}:{}:{}", name, line + 1, col + 1).unwrap();
         writeln!(buf, "{}", whole_line).unwrap();
-        println!("col={}", col);
         writeln!(buf, "{:->1$}", '^', col + 1).unwrap();
     }
 
@@ -502,6 +500,10 @@ impl State {
         xs.load_core()?;
         crate::bitstring_mod::load(&mut xs)?;
         Ok(xs)
+    }
+
+    pub fn capture_stdout(&mut self) {
+        self.console = Some(String::new());
     }
 
     pub fn start_reverse_debugging(&mut self) {
@@ -2124,13 +2126,13 @@ mod tests {
     #[test]
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
+        xs.capture_stdout();
         xs.eval("255 HEX print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.console);
-        xs.console = Some(String::new());
+        xs.capture_stdout();
         xs.eval("255 NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("FF".to_string()), xs.console);
-        xs.console = Some(String::new());
+        xs.capture_stdout();
         xs.eval("[ 255 ] NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("[ FF ]".to_string()), xs.console);
     }
