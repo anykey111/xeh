@@ -17,3 +17,6 @@ fibench:
 
 universal-debug:
 	cargo-lipo build
+
+test_ps:
+	$env:RUST_BACKTRACE = 1; cargo test
