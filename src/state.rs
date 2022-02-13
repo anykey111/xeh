@@ -221,15 +221,16 @@ impl State {
         let mut line = 0;
         let mut col = 0;
         while let Some((i, c)) = it.next() {
-            end = i;
-            if end == par.len() {
-                end += c.len_utf8();
-            } else if c == '\n'  {
+            end = i + c.len_utf8();
+            if c == '\n' || c == '\r' {
                 if (start..end).contains(&tok_start) {
+                    end = i;
                     break;
                 }
-                line += 1;
-                start = i + 1; // skip \n
+                if c == '\n' {
+                    line += 1;
+                }
+                start = end;
                 col = 0;
             } else if i < tok_start {
                 col += 1;
@@ -2310,7 +2311,7 @@ mod tests {
         assert_eq!(lines[0], "error: UnknownWord");
         assert_eq!(lines[1], "<buffer#2>:2:2");
         assert_eq!(lines[2], " q");
-        assert_eq!(lines[3], "_^");
+        assert_eq!(lines[3], "-^");
     }
 
     #[test]
