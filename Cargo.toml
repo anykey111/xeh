@@ -12,12 +12,12 @@ mmap = ["mapr"]
 stdio = ["rustyline"]
 
 [dependencies]
-rpds = "0.7"
+rpds = "^0.11"
 rustyline = { version = "6.1.2", optional = true }
 getopts = "0.2"
-getrandom = { version = "0.2.2", features = ["js"] }
+getrandom = { version = "0.2.5", features = ["js"] }
 twoway = "0.2.1"
-arcstr = "1.1.1"
+arcstr = "1.1.3"
 
 mapr = { version = "0.8", optional = true }
 
