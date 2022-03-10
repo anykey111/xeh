@@ -17,11 +17,11 @@ fn arithmetic_ops_real(
 ) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    match (a, b) {
-        (Cell::Int(a), Cell::Int(b)) => xs.push_data(Cell::Int(ops_int(a, b))),
-        (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(a as f64, b))),
-        (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(a, b as f64))),
-        (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(a, b as f64))),
+    match (a.value(), b.value()) {
+        (Cell::Int(a), Cell::Int(b)) => xs.push_data(Cell::Int(ops_int(*a, *b))),
+        (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a as f64, *b))),
+        (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
+        (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
         _ => Err(Xerr::TypeError),
     }
 }

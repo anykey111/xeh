@@ -80,7 +80,7 @@ impl fmt::Debug for Cell {
                 16 => write!(f, "{:X}", n),
                 _ => write!(f, "{}", n),
             },
-            Cell::Real(r) => write!(f, "{}", r),
+            Cell::Real(r) => write!(f, "{:0.1}", r),
             Cell::Str(s) => write!(f, "{}", s),
             Cell::Key(k) => write!(f, "{}", k),
             Cell::Vector(v) => {
@@ -156,6 +156,21 @@ impl Ord for Cell {
 impl Eq for Cell {}
 
 impl Cell {
+
+    pub fn type_name(&self) -> &str {
+        match self {
+            Cell::Nil{..} => "nil",
+            Cell::Int{..} => "int",
+            Cell::Real{..} => "real",
+            Cell::Str{..} => "str",
+            Cell::Key{..} => "key",
+            Cell::Vector{..} => "vec",
+            Cell::Fun{..} => "fun",
+            Cell::Bitstr{..} => "bitstr",
+            Cell::AnyRc{..} => "any",
+            Cell::WithMeta{..} => "meta",
+        }
+    }
 
     pub fn is_true(&self) -> bool {
         match self.value() {
