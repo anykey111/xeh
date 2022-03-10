@@ -479,9 +479,9 @@ impl State {
                 }
             }
         }
-        assert_eq!(prev_ctx.ls_len, self.loops.len());
-        assert_eq!(prev_ctx.ss_ptr, self.special.len());
-        assert_eq!(prev_ctx.rs_len, self.return_stack.len());
+        // assert_eq!(prev_ctx.ls_len, self.loops.len());
+        // assert_eq!(prev_ctx.ss_ptr, self.special.len());
+        // assert_eq!(prev_ctx.rs_len, self.return_stack.len());
         self.ctx = prev_ctx;
         OK
     }
@@ -1517,14 +1517,12 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
 
 fn core_word_variable(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
-    let a = if xs.ctx.mode == ContextMode::Load {
-        let a = xs.alloc_cell(Cell::Nil)?;
-        xs.code_emit(Opcode::Store(a))?;
-        a
-    } else {
-        let val = xs.pop_data()?;
-        xs.alloc_cell(val)?
-    };
+    if !xs.flow_stack.is_empty() {
+        //FIXME: do something with variables
+        return Err(Xerr::ControlFlowError);
+    }
+    let a = xs.alloc_cell(Cell::Nil)?;
+    xs.code_emit(Opcode::Store(a))?;
     xs.dict_insert(DictEntry::new(name, Entry::Variable(a)))?;
     OK
 }
@@ -1935,6 +1933,13 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 else 222 then"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("else 222 if"));
+    }
+
+    #[test]
+    fn test_if_var() {
+        let mut xs = State::boot().unwrap();
+        let res = xs.eval("0 if 100 var X then");
+        assert_eq!(Err(Xerr::ControlFlowError), res);
     }
 
     #[test]
