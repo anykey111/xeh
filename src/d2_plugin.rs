@@ -7,7 +7,6 @@ struct D2Context {
     color: u32,
     width: usize,
     height: usize,
-    changed: bool,
 }
 
 fn resize(xs: &mut Xstate) -> Xresult {
@@ -20,7 +19,6 @@ fn resize(xs: &mut Xstate) -> Xresult {
     d2.width = w;
     d2.height = h;
     d2.data.resize(n, 0);
-    d2.changed = true;
     OK
 }
 
@@ -30,7 +28,6 @@ fn color_set(xs: &mut Xstate) -> Xresult {
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let color = xs.pop_data()?.to_usize()?;
     d2.color = color as u32;
-    d2.changed = true;
     OK
 }
 
@@ -62,7 +59,6 @@ fn palette_set(xs: &mut Xstate) -> Xresult {
         }
     ));
     d2.pal = Some(pal);
-    d2.changed = true;
     OK
 }
 
@@ -113,20 +109,16 @@ pub fn load(xs: &mut Xstate) -> Xresult1<Xcell> {
 fn buffer_u8_get(xs: &mut Xstate) -> Xresult {
     let ctx = xs.pop_data()?;
     let mut buf = Vec::new();
-    copy_rgba_data(ctx, &mut buf, true)?;
+    copy_rgba_data(ctx, &mut buf)?;
     let mut v = Xvec::new();
     v.extend(buf.iter().map(|x| Xcell::from(*x)));
     xs.push_data(Xcell::Bitstr(Xbitstr::from(buf)))
 }
 
-
-pub fn copy_rgba_data(d2ctx: Xcell, buf: &mut Vec<u8>, force: bool) -> Xresult1<(usize, usize)> {
+pub fn copy_rgba_data(d2ctx: Xcell, buf: &mut Vec<u8>) -> Xresult1<(usize, usize)> {
     let any = d2ctx.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
-    if !force && !d2.changed && buf.len() == d2.data.len() {
-        return Ok((d2.width, d2.height));
-    }
     buf.clear();
     buf.reserve(d2.data.len() * 4);
     for c in d2.data.iter() {
@@ -136,7 +128,6 @@ pub fn copy_rgba_data(d2ctx: Xcell, buf: &mut Vec<u8>, force: bool) -> Xresult1<
         buf.push((c >> 8) as u8);
         buf.push(c as u8);
     }
-    d2.changed = false;
     Ok((d2.width, d2.height))
 }
 
@@ -168,5 +159,9 @@ mod tests {
                 assert_eq!(c[3], y * 3 + x);
             }
         }
+        xs.eval_word("d2-width").unwrap();
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+        xs.eval_word("d2-height").unwrap();
+        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
     }
 }

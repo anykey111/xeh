@@ -565,7 +565,9 @@ impl State {
         let start = self.code_origin();
         self.code_emit(Opcode::Jump(0))?;
         let fn_addr = self.code_origin();
+        println!("start {} self {:?} fn: {:?}", fn_addr, &slf, XfnPtr(x));
         self.code_emit_value(slf)?;
+        
         self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
@@ -793,8 +795,15 @@ impl State {
                 self.push_data(val)
             }
             Some(Entry::Function { xf, .. }) => {
-                let xf = xf.clone();
-                self.call_fn(xf)
+                match xf.clone() {
+                    Xfn::Native(x) => x.0(self),
+                    Xfn::Interp(x) => {
+                        let halt_ip = self.code.len();
+                        self.push_return(halt_ip)?;
+                        self.set_ip(x)?;
+                        self.run()
+                    }
+                }
             }
         }
 
@@ -1893,6 +1902,16 @@ mod tests {
     }
 
     #[test]
+    fn test_data_stack_iter() {
+        let mut xs = State::boot().unwrap();
+        xs.eval("1 2 3").unwrap();
+        assert_eq!(Some(&Cell::Int(3)), xs.get_data(0));
+        assert_eq!(Some(&Cell::Int(2)), xs.get_data(1));
+        assert_eq!(Some(&Cell::Int(1)), xs.get_data(2));
+        assert_eq!(3, xs.data_depth());
+    }
+
+    #[test]
     fn test_if_flow() {
         let mut xs = State::boot().unwrap();
         xs.load("1 if 222 then").unwrap();
@@ -1977,11 +1996,13 @@ mod tests {
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start with negative
         let mut xs = State::boot().unwrap();
         xs.eval("[ -1 1 ] for I loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start from zero
         let mut xs = State::boot().unwrap();
         xs.eval("[ 0 3 ] for I loop").unwrap();
@@ -2003,10 +2024,12 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range        
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] for I loop"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 ] for I loop"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 2 3 ] for I loop"));
-
-    }
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
+     }
 
     #[test]
     fn test_get_set() {
