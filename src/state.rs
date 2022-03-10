@@ -471,12 +471,10 @@ impl State {
         if self.ctx.mode == ContextMode::MetaEval {
             // purge meta context code after evaluation
             self.code.truncate(self.ctx.cs_len);
-            if prev_ctx.mode == ContextMode::Load {
-                // emit meta-evaluation result
-                while self.data_stack.len() > self.ctx.ds_len {
-                    let val = self.pop_data()?;
-                    self.code_emit_value(val)?;
-                }
+            // emit meta-evaluation result
+            while self.data_stack.len() > self.ctx.ds_len {
+                let val = self.pop_data()?;
+                self.code_emit_value(val)?;
             }
         }
         // assert_eq!(prev_ctx.ls_len, self.loops.len());
@@ -2115,6 +2113,8 @@ mod tests {
         xs.eval("( 3 var n [ n for I loop ] )").unwrap();
         let v = xs.pop_data().unwrap().to_vector().unwrap();
         assert_eq!(3, v.len());
+        xs.eval(": f [ ( 3 3 * ) ] ; f 0 nth").unwrap();
+        assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
 
     #[test]
