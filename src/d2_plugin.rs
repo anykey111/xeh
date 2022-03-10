@@ -50,14 +50,11 @@ fn palette_set(xs: &mut Xstate) -> Xresult {
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let newpal = xs.pop_data()?.to_vector()?;
-    let mut pal = d2.pal.take().unwrap_or_else(|| Vec::with_capacity(newpal.len()));
-    pal.reserve(newpal.len());
-    pal.extend(newpal.iter().map(|c|
-        match c {
-            Cell::Int(x) => *x as u32,
-            _ => 0,
-        }
-    ));
+    let mut pal = Vec::with_capacity(newpal.len());
+    for x in newpal.iter() {
+        let color = x.to_usize()? as u32;
+        pal.push(color);
+    }
     d2.pal = Some(pal);
     OK
 }
