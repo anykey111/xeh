@@ -615,7 +615,7 @@ impl State {
             Def("immediate", core_word_immediate),
             Def("local", core_word_def_local),
             Def("var", core_word_variable),
-            Def("->", core_word_setvar),
+            Def(":=", core_word_setvar),
             Def("nil", core_word_nil),
             Def("(", core_word_nested_begin),
             Def(")", core_word_nested_end),
@@ -2164,6 +2164,15 @@ mod tests {
         xs.capture_stdout();
         xs.eval("[ 255 ] NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("[ FF ]".to_string()), xs.console);
+        xs.capture_stdout();
+        xs.eval("[ ] print").unwrap();
+        assert_eq!(Some("[ ]".to_string()), xs.console);
+        xs.capture_stdout();
+        xs.eval(" [ 0xff 0xee ] >bitstr HEX NO-PREFIX print").unwrap();
+        assert_eq!(Some("[ ff ee ]".to_string()), xs.console);
+        xs.eval(" [ ] >bitstr HEX NO-PREFIX print").unwrap();
+        assert_eq!(Some("[ ]".to_string()), xs.console);
+
     }
 
     #[test]
