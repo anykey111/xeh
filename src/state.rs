@@ -1953,7 +1953,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 var x begin x while 0 -> x again").unwrap();
+        xs.eval("1 var x begin x while 0 := x again").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
@@ -2127,7 +2127,9 @@ mod tests {
         xs.eval(": Y 3 ;").unwrap();
         xs.defvar("Y", Cell::Nil).unwrap();
         xs.eval("4 var Z").unwrap();
-        xs.defvar("Z", Cell::Nil).unwrap();
+        let z = xs.defvar("Z", Cell::Nil).unwrap();
+        xs.eval("10 := Z").unwrap();
+        assert_eq!(Ok(&Cell::Int(10)), xs.get_var(z));
     }
 
     #[test]
@@ -2169,7 +2171,8 @@ mod tests {
         assert_eq!(Some("[ ]".to_string()), xs.console);
         xs.capture_stdout();
         xs.eval(" [ 0xff 0xee ] >bitstr HEX NO-PREFIX print").unwrap();
-        assert_eq!(Some("[ ff ee ]".to_string()), xs.console);
+        assert_eq!(Some("[ FF EE ]".to_string()), xs.console);
+        xs.capture_stdout();
         xs.eval(" [ ] >bitstr HEX NO-PREFIX print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.console);
 

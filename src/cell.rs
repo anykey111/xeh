@@ -84,19 +84,21 @@ impl fmt::Debug for Cell {
             Cell::Str(s) => write!(f, "{}", s),
             Cell::Key(k) => write!(f, "{}", k),
             Cell::Vector(v) => {
-                f.write_str("[")?;
+                f.write_str("[ ")?;
                 for x in v {
-                    f.write_str(" ")?;
                     x.fmt(f)?;
+                    f.write_str(" ")?;
                 }
-                f.write_str(" ]")
+                f.write_str("]")
             }
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => if s.is_bytestring() {
-                    f
-                    .debug_list()
-                    .entries(s.iter8().map(|x| Cell::Int(x.0 as Xint)))
-                    .finish()
+                    f.write_str("[ ")?;
+                    for x in s.iter8().map(|x| Cell::Int(x.0 as Xint)) {
+                        x.fmt(f)?;
+                        f.write_str(" ")?;
+                    }
+                    f.write_str( "]")
                 } else {
                     write!(f, "0s{}", s.to_bin_string())
                 },
