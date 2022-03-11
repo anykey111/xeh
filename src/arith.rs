@@ -43,7 +43,7 @@ pub fn core_word_div(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_inc(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a + 1)),
         Cell::Real(a) => xs.push_data(Cell::Real(a + 1.0)),
         _ => Err(Xerr::TypeError),
@@ -51,7 +51,7 @@ pub fn core_word_inc(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_dec(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a - 1)),
         Cell::Real(a) => xs.push_data(Cell::Real(a - 1.0)),
         _ => Err(Xerr::TypeError),
@@ -59,7 +59,7 @@ pub fn core_word_dec(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_negate(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.checked_neg().ok_or(Xerr::IntegerOverflow)?)),
         Cell::Real(a) => xs.push_data(Cell::Real(-a)),
         _ => Err(Xerr::TypeError),
@@ -67,7 +67,7 @@ pub fn core_word_negate(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_abs(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.abs())),
         Cell::Real(a) => xs.push_data(Cell::Real(a.abs())),
         _ => Err(Xerr::TypeError),
@@ -89,11 +89,11 @@ fn compare_reals(a: Xreal, b: Xreal) -> Ordering {
 fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    match (a, b) {
+    match (a.value(), b.value()) {
         (Cell::Int(a), Cell::Int(b)) => Ok(a.cmp(&b)),
-        (Cell::Int(a), Cell::Real(b)) => Ok(compare_reals(a as Xreal, b)),
-        (Cell::Real(a), Cell::Int(b)) => Ok(compare_reals(a, b as Xreal)),
-        (Cell::Real(a), Cell::Real(b)) => Ok(compare_reals(a, b)),
+        (Cell::Int(a), Cell::Real(b)) => Ok(compare_reals(*a as Xreal, *b)),
+        (Cell::Real(a), Cell::Int(b)) => Ok(compare_reals(*a, *b as Xreal)),
+        (Cell::Real(a), Cell::Real(b)) => Ok(compare_reals(*a, *b)),
         _ => Err(Xerr::TypeError),
     }
 }
@@ -133,9 +133,8 @@ pub fn core_word_bitshr(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_bitnot(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    match xs.pop_data()?.value() {
         Cell::Int(x) => xs.push_data(Cell::Int(!x)),
-
         _ => Err(Xerr::TypeError),
     }
 }
@@ -148,9 +147,9 @@ pub fn core_word_random(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_round(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
-        n @ Cell::Int(_) => xs.push_data(n),
-        Cell::Real(x) => xs.push_data(Cell::Int(x as Xint)),
+    match xs.pop_data()?.value() {
+        n @ Cell::Int(_) => xs.push_data(n.clone()),
+        Cell::Real(x) => xs.push_data(Cell::Int(*x as Xint)),
         _ => Err(Xerr::TypeError),
     }
 }
@@ -197,6 +196,15 @@ mod tests {
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         xs.eval("-1 neg").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_meta_arith() {
+        let mut xs = State::boot().unwrap();
+        xs.eval("1 ok: with-meta 1.0 +").unwrap();
+        assert_eq!(Ok(Cell::Real(2.0)), xs.pop_data());
+        xs.eval("2 ok: with-meta inc").unwrap();
+        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
     }
 
     #[test]
