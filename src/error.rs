@@ -1,10 +1,10 @@
-use crate::prelude::Xbitstr;
+use crate::prelude::{Xbitstr, Xstr};
 
 use std::fmt;
 
 #[derive(PartialEq, Clone)]
 pub enum Xerr {
-    UnknownWord,
+    UnknownWord(Xstr),
     InputIncomplete,
     InputParseError,
     IntegerOverflow,
@@ -38,7 +38,7 @@ pub enum Xerr {
 impl fmt::Debug for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Xerr::UnknownWord => f.write_str("UnknownWord"),
+            Xerr::UnknownWord(s) => write!(f, "unknown word {}", s),
             Xerr::InputIncomplete => f.write_str("InputIncomplete"),
             Xerr::InputParseError => f.write_str("InputParseError"),
             Xerr::IntegerOverflow => f.write_str("IntegerOverflow"),

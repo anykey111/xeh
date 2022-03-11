@@ -515,7 +515,7 @@ impl State {
 
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name) {
-            None => Err(Xerr::UnknownWord),
+            None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => Ok(&self.heap[*a]),
             _ => Err(Xerr::InvalidAddress),
         }
@@ -556,7 +556,6 @@ impl State {
         let start = self.code_origin();
         self.code_emit(Opcode::Jump(0))?;
         let fn_addr = self.code_origin();
-        println!("start {} self {:?} fn: {:?}", fn_addr, &slf, XfnPtr(x));
         self.code_emit_value(slf)?;
         
         self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
@@ -575,7 +574,7 @@ impl State {
     }
 
     pub fn set_doc(&mut self, name: &str, help: String) -> Xresult {
-        let a = self.dict_find(name).ok_or(Xerr::UnknownWord)?;
+        let a = self.dict_find(name).ok_or(Xerr::UnknownWord(Xstr::from(name)))?;
         self.dict[a].help = Some(help);
         OK
     }
@@ -780,7 +779,7 @@ impl State {
 
     pub fn eval_word(&mut self, name: &str) -> Xresult {
         match self.dict_entry(name) {
-            None => Err(Xerr::UnknownWord),
+            None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => {
                 let val = self.heap[*a].clone();
                 self.push_data(val)
@@ -835,7 +834,7 @@ impl State {
                 self.set_ip(frame.return_to)
             }
             Opcode::Unresolved(ref name) => match self.dict_entry(&name) {
-                None => Err(Xerr::UnknownWord),
+                None => Err(Xerr::UnknownWord(name.clone())),
                 Some(Entry::Variable(a)) => {
                     let a = *a;
                     self.backpatch(ip, Opcode::Load(a))
@@ -1521,7 +1520,7 @@ fn core_word_variable(xs: &mut State) -> Xresult {
 fn core_word_setvar(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     match xs.dict_entry(&name) {
-        None => Err(Xerr::UnknownWord),
+        None => Err(Xerr::UnknownWord(Xstr::from(name))),
         Some(Entry::Variable(a)) => {
             let a = *a;
             xs.code_emit(Opcode::Store(a))
@@ -2074,7 +2073,7 @@ mod tests {
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::UnknownWord), xs.eval("x y"));
+        assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval("x y"));
     }
 
     #[test]
@@ -2323,25 +2322,25 @@ mod tests {
     fn test_error_location() {
         let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
-        assert_eq!(Err(Xerr::UnknownWord), xs.eval(" \r\n \r\n\n   x"));
+        assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval(" \r\n \r\n\n   x"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
-        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[0], "error: unknown word x");
         assert_eq!(lines[1], "<buffer#0>:4:4");
         assert_eq!(lines[2], "   x");
         assert_eq!(lines[3], "---^");
 
         xs.console = Some(String::new());
-        assert_eq!(Err(Xerr::UnknownWord), xs.eval("z"));
+        assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
-        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[0], "error: unknown word z");
         assert_eq!(lines[1], "<buffer#1>:1:1");
         assert_eq!(lines[2], "z");
         assert_eq!(lines[3], "^");
 
         xs.console = Some(String::new());
-        assert_eq!(Err(Xerr::UnknownWord), xs.eval("\n q\n"));
+        assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
-        assert_eq!(lines[0], "error: UnknownWord");
+        assert_eq!(lines[0], "error: unknown word q");
         assert_eq!(lines[1], "<buffer#2>:2:2");
         assert_eq!(lines[2], " q");
         assert_eq!(lines[3], "-^");
