@@ -5,7 +5,7 @@ use crate::lex::*;
 use crate::opcodes::*;
 use crate::bitstring_mod::BitstrMod;
 
-use std::fmt::*;
+use std::fmt;
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,6 +136,23 @@ struct SourceBuf {
     buf: Xstr,
 }
 
+#[derive(Clone)]
+struct TokenInfo {
+    token: Xsubstr,
+    line: usize,
+    col: usize,
+    filename: String,
+    whole_line: Xsubstr,
+}
+
+impl fmt::Debug for TokenInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
+        writeln!(f, "{}", self.whole_line)?;
+        writeln!(f, "{:->1$}", '^', self.col + 1)
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct State {
     dict: Vec<DictEntry>,
@@ -152,6 +169,7 @@ pub struct State {
     nested: Vec<Context>,
     reverse_log: Option<Vec<ReverseStep>>,
     console: Option<String>,
+    last_error: Option<(Xerr, TokenInfo)>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrMod,
     // default base
@@ -160,41 +178,7 @@ pub struct State {
 }
 
 impl State {
-    fn format_error(&mut self, err: &Xerr) -> String {
-        let mut msg = String::with_capacity(1000);
-        writeln!(msg, "error: {}", err.name()).unwrap();
-        match err {
-            Xerr::BitReadError(ctx) => {
-                writeln!(msg, " trying to read {} bits while only {} remain",
-                    ctx.1, ctx.0.len()).unwrap();
-            }
-            Xerr::BitSeekError(ctx) => {
-                writeln!(msg, " position {} is beyond of available limit {}",
-                    ctx.1, ctx.0.end()).unwrap();
-            }
-            Xerr::BitMatchError(ctx) => {
-                let src = &ctx.0;
-                let pat = &ctx.1;
-                let at = ctx.2;
-                writeln!(msg, " source bits are differ from pattern at offset {}", at).unwrap();
-                write!(msg, " [").unwrap();
-                let (_, src_diff) = src.split_at(at).unwrap();
-                for (x, _) in src_diff.iter8().take(8) {
-                    write!(msg, " {:02X}", x).unwrap();
-                }
-                writeln!(msg, " ] source at {}", src.start() + at).unwrap();
-                write!(msg, " [").unwrap();
-                let (_, pat_diff) = pat.split_at(at).unwrap();
-                for (x, _) in pat_diff.iter8().take(8){
-                    write!(msg, " {:02X}", x).unwrap();
-                }
-                writeln!(msg, " ] pattern at {}", pat.start() + at).unwrap();
-            }
-            _ => (),
-        }
-        msg
-    }
-
+    
     pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
         let prefix = self
             .get_var(self.fmt_prefix)
@@ -212,9 +196,10 @@ impl State {
         Ok(s)
     }
 
-    fn write_location(&self, buf: &mut String, tok: &Xsubstr) {
-        let tok_start = tok.range().start;
-        let par = tok.parent();
+
+    fn token_info(&self,  token: Xsubstr) -> TokenInfo {
+        let tok_start = token.range().start;
+        let par = token.parent();
         let mut it = par.char_indices();
         let mut start = 0;
         let mut end = 1;
@@ -238,33 +223,37 @@ impl State {
         }
         let name = self.sources
                     .iter()
-                    .find(|x| &x.buf == tok.parent())
+                    .find(|x| &x.buf == token.parent())
                     .map(|x| x.name.as_str())
                     .unwrap();
-        let whole_line = tok.parent().substr(start..end);
-        writeln!(buf, "{}:{}:{}", name, line + 1, col + 1).unwrap();
-        writeln!(buf, "{}", whole_line).unwrap();
-        writeln!(buf, "{:->1$}", '^', col + 1).unwrap();
+        let whole_line = token.parent().substr(start..end);
+        TokenInfo {
+            line,
+            col,
+            token,
+            filename: name.to_owned(),
+            whole_line,
+        }
     }
 
-    pub fn current_line(&mut self) -> String {
-        let mut buf = String::with_capacity(1000);
+    fn current_token(&self) -> Option<Xsubstr> {
+        let mut res = None;
         if self.ctx.mode == ContextMode::Load {
             if let Some(tok) = self.ctx.source.as_ref().and_then(|x| x.last_token()) {
-                self.write_location(&mut buf, &tok);
+                res = Some(tok);
             }
         } else{
             if let Some(Some(tok)) = self.debug_map.get(self.ip()) {
-                self.write_location(&mut buf, tok);
+                res = Some(tok.clone());
             }
         }
-        buf
+        res
     }
 
-    pub fn pretty_error(&mut self, err: &Xerr) -> String {
-        let mut buf = self.format_error(err);
-        buf.push_str(&self.current_line());
-        buf
+    pub fn current_line(&self) -> Option<String> {
+        self.current_token().map(|token| 
+            format!("{:?}", self.token_info(token))
+        )
     }
 
     pub fn log_error(&mut self, mut msg: String) {
@@ -339,8 +328,12 @@ impl State {
         let result = self.build();
         if let Err(e) = result.as_ref() {
             if depth == self.nested.len() {
-                let msg = self.pretty_error(e);
+                let token = self.current_token().ok_or(Xerr::InternalError)?;
+                let token_info = self.token_info(token);
+                let msg = format!("error: {:?}\n{:?}", e, &token_info);
                 self.log_error(msg);
+                self.last_error = Some((e.clone(), token_info));
+                
             }
             while self.nested.len() > depth {
                 self.context_close()?;

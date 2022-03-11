@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use crate::state::format_opcode;
 use getopts::Options;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -12,18 +11,14 @@ pub fn run(xs: &mut Xstate) -> Xresult {
 fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
-        if let Err(e) = xs.next() {
-            eprintln!("{}", xs.pretty_error(&e));
-            eprintln!("{}", format_opcode(xs, xs.ip()));
-        } else {
-            eprintln!("{}", xs.current_line());
+        let _ = xs.next();
+        if let Some(s) = xs.current_line() {
+            eprintln!("{}", s);
         }
     } else if cmd == ".rnext" {
-        if let Err(e) = xs.rnext() {
-            eprintln!("{}", xs.pretty_error(&e));
-            eprintln!("{}", format_opcode(xs, xs.ip()));
-        } else {
-            eprintln!("{}", xs.current_line());
+        let _ = xs.rnext();
+        if let Some(s) = xs.current_line() {
+            eprintln!("{}", s);
         }
     } else if cmd == ".s" {
         let mut i = 0;
@@ -117,11 +112,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         xs.load_file(filename)?;
     }
     if !args.sources.is_empty() {
-        let result = xs.run();
-        if let Err(e) = &result {
-            eprintln!("{}", xs.pretty_error(e));
-            return result;
-        }
+        let _ = xs.run()?;
     }
     if let Some(s) = args.eval {
         xs.eval(&s)
