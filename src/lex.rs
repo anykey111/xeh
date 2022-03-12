@@ -1,6 +1,8 @@
 use crate::cell::*;
 use crate::error::*;
 
+use std::iter::Iterator;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
@@ -161,6 +163,39 @@ impl Lex {
 
 }
 
+pub struct XstrLines {
+    buf: Xstr,
+    pos: usize,
+}
+
+impl Iterator for XstrLines {
+    type Item = Xsubstr;
+    fn next(&mut self) -> Option<Xsubstr> {
+        let start = self.pos;
+        if start >= self.buf.len() {
+            return None;
+        }
+        let mut it = self.buf[start..].char_indices();
+        while let Some((i, c)) = it.next() {
+            if c == '\n' {
+                let end = start + i;
+                let ss = self.buf.substr(start..end);
+                self.pos = end + c.len_utf8();
+                return Some(ss);
+            }
+        }
+        let ss = self.buf.substr(start..);
+        self.pos = self.buf.len();
+        return Some(ss);
+    }
+}
+
+impl XstrLines {
+    pub fn new(buf: Xstr) -> XstrLines {
+        Self { buf, pos: 0}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,5 +296,15 @@ mod tests {
         assert_eq!(res, vec![str("\\ \" \r \n")]);
         let res = tokenize_input(r#" " \x " "#);
         assert_eq!(res, Err(Xerr::InputParseError));
+    }
+
+
+    #[test]
+    fn test_xstr_lines() {
+        let mut it = XstrLines::new("1\nff\nddd".into());
+        assert_eq!(it.next(), Some("1".into()));
+        assert_eq!(it.next(), Some("ff".into()));
+        assert_eq!(it.next(), Some("ddd".into()));
+        assert_eq!(it.next(), None);
     }
 }

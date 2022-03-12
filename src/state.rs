@@ -137,12 +137,12 @@ struct SourceBuf {
 }
 
 #[derive(Clone)]
-struct TokenInfo {
-    token: Xsubstr,
-    line: usize,
-    col: usize,
-    filename: String,
-    whole_line: Xsubstr,
+pub struct TokenInfo {
+    pub token: Xsubstr,
+    pub line: usize,
+    pub col: usize,
+    pub filename: String,
+    pub whole_line: Xsubstr,
 }
 
 impl fmt::Debug for TokenInfo {
@@ -292,26 +292,35 @@ impl State {
             self.log_error(format!("{}: {}", path, e));
             Xerr::IOError
         })?;
-        let src = self.add_source(&buf, Some(path));
+        let src = self.add_source(Xstr::from(buf), Some(path));
         self.build_source(src, ContextMode::Load)
     }
 
     pub fn load(&mut self, source: &str) -> Xresult {
+        self.loadxstr(source.into())
+    }
+
+    pub fn loadxstr(&mut self, source: Xstr) -> Xresult {
         let src = self.add_source(source, None);
-        self.build_source(src, ContextMode::Load)
+        self.build_source(src, ContextMode::Load)?;
+        OK
     }
 
     pub fn eval(&mut self, source: &str) -> Xresult {
-        let src = self.add_source(source, None);
-        self.build_source(src, ContextMode::Eval)
+        self.evalxstr(source.into())
     }
 
-    fn add_source(&mut self, buf: &str, path: Option<&str>) -> Lex {
+    pub fn evalxstr(&mut self, source: Xstr) -> Xresult {
+        let src = self.add_source(source, None);
+        self.build_source(src, ContextMode::Eval)?;
+        OK
+    }
+
+    fn add_source(&mut self, buf: Xstr, path: Option<&str>) -> Lex {
         let id = self.sources.len();
-        let buf = Xstr::from(buf);
         let lex = Lex::new(buf.clone());
-        let name = if let Some(s) = path {
-            s.to_string()
+        let name = if let Some(name) = path {
+            name.to_string()
         } else {
             format!("<buffer#{}>", id)
         };
@@ -322,18 +331,21 @@ impl State {
         lex
     }
 
+    pub fn last_error(&self) -> Option<(Xerr, TokenInfo)> {
+        self.last_error.clone()
+    }
+
     fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
         self.context_open(mode, Some(src));
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
             if depth == self.nested.len() {
-                let token = self.current_token().ok_or(Xerr::InternalError)?;
+                let token = self.current_token().unwrap();
                 let token_info = self.token_info(token);
                 let msg = format!("error: {:?}\n{:?}", e, &token_info);
                 self.log_error(msg);
                 self.last_error = Some((e.clone(), token_info));
-                
             }
             while self.nested.len() > depth {
                 self.context_close()?;

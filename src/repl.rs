@@ -115,7 +115,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         let _ = xs.run()?;
     }
     if let Some(s) = args.eval {
-        xs.eval(&s)
+        let _ = xs.eval(&s)
     } else if args.sources.is_empty() {
         crate::repl::run(xs)
     } else {

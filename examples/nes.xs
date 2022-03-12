@@ -9,9 +9,12 @@ u8 var ram-banks
 1 uint var PAL
 7 uint var reserved1
 5 bytes var reserved2
+
 flags6 0b100 band if
-  512 bytes drop // tainer data
-then
+  512
+else
+  0
+then bytes var tainer-data
 
 offset var prg-offset
 prg-len 16384 * bytes var prg-data
