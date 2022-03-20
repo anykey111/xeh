@@ -71,7 +71,7 @@ pub enum Special {
 #[derive(Clone, PartialEq)]
 enum ContextMode {
     // assemble bytecode
-    Load,
+    Compile,
     // normal evaluation
     Eval,
     // meta evaluation
@@ -204,8 +204,12 @@ impl State {
 
 
     fn set_last_error(&mut self, err: Xerr) {
-        let token = self.current_token().expect("error location");
-        let location = self.error_location(token);
+        let token = if err == Xerr::ControlFlowError || self.ctx.mode == ContextMode::Compile {
+            self.ctx.source.as_ref().and_then(|x| x.last_token())
+        } else {
+            self.debug_map.get(self.ip()).expect("opcode").clone()
+        };
+        let location = self.error_location(token.unwrap());
         let msg = format!("error: {:?}\n{:?}", &err, &location);
         self.log_error(msg);
         self.last_error = Some(ErrorContext {
@@ -253,22 +257,6 @@ impl State {
         }
     }
 
-    fn current_token(&self) -> Option<Xsubstr> {
-        let mut res = None;
-        if let Some(tok) = self.ctx.source.as_ref().and_then(|x| x.last_token()) {
-            res = Some(tok);
-        } else if let Some(Some(tok)) = self.debug_map.get(self.ip()) {
-            res = Some(tok.clone());
-        }
-        res
-    }
-
-    pub fn current_line(&self) -> Option<String> {
-        self.current_token().map(|token| 
-            format!("{:?}", self.error_location(token))
-        )
-    }
-
     pub fn log_error(&mut self, mut msg: String) {
         msg.push_str("\n");
         self.print(&msg);
@@ -300,22 +288,22 @@ impl State {
         self.eval_word("bitstr-open")
     }
 
-    pub fn load_file(&mut self, path: &str) -> Xresult {
+    pub fn compile_file(&mut self, path: &str) -> Xresult {
         let buf =     std::fs::read_to_string(path).map_err(|e| {
             self.log_error(format!("{}: {}", path, e));
             Xerr::IOError
         })?;
         let src = self.add_source(Xstr::from(buf), Some(path));
-        self.build_source(src, ContextMode::Load)
+        self.build_source(src, ContextMode::Compile)
     }
 
-    pub fn load(&mut self, source: &str) -> Xresult {
-        self.loadxstr(source.into())
+    pub fn compile(&mut self, source: &str) -> Xresult {
+        self.compile_xstr(source.into())
     }
 
-    pub fn loadxstr(&mut self, source: Xstr) -> Xresult {
+    pub fn compile_xstr(&mut self, source: Xstr) -> Xresult {
         let src = self.add_source(source, None);
-        self.build_source(src, ContextMode::Load)?;
+        self.build_source(src, ContextMode::Compile)?;
         OK
     }
 
@@ -363,7 +351,7 @@ impl State {
 
     fn build(&mut self) -> Xresult {
         loop {
-            if self.ctx.mode != ContextMode::Load
+            if self.ctx.mode != ContextMode::Compile
                 && !self.has_pending_flow()
                 && self.ip() < self.code_origin()
             {
@@ -375,7 +363,7 @@ impl State {
                         break Err(Xerr::ControlFlowError);
                     }
                     if self.ip() < self.code_origin() {
-                        if self.ctx.mode != ContextMode::Load {
+                        if self.ctx.mode != ContextMode::Compile {
                             self.run()?;
                         }
                     }
@@ -1549,7 +1537,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
 }
 
 fn core_word_nil(xs: &mut State) -> Xresult {
-    if xs.ctx.mode == ContextMode::Load {
+    if xs.ctx.mode == ContextMode::Compile {
         xs.code_emit(Opcode::LoadNil)
     } else {
         xs.push_data(Cell::Nil)
@@ -1850,7 +1838,7 @@ fn core_word_no_prefix(xs: &mut State) -> Xresult {
 
 fn core_word_load(xs: &mut State) -> Xresult {
     let path = xs.pop_data()?.to_string()?;
-    xs.load_file(&path)
+    xs.compile_file(&path)
 }
 
 fn core_word_meta(xs: &mut State) -> Xresult {
@@ -1921,12 +1909,12 @@ mod tests {
     #[test]
     fn test_if_flow() {
         let mut xs = State::boot().unwrap();
-        xs.load("1 if 222 then").unwrap();
+        xs.compile("1 if 222 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
         let mut xs = State::boot().unwrap();
-        xs.load("1 if 222 else 333 then").unwrap();
+        xs.compile("1 if 222 else 333 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
@@ -1934,14 +1922,14 @@ mod tests {
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         // test errors
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else 333"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222 else 333"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222 else"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222 else"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 if 222"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("1 else 222 then"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("else 222 if"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 else 222 then"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("else 222 if"));
     }
 
     #[test]
@@ -1957,7 +1945,7 @@ mod tests {
         xs.eval("0 begin dup 5 < while inc again").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        xs.load("begin break again").unwrap();
+        xs.compile("begin break again").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
@@ -1965,12 +1953,12 @@ mod tests {
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x while 0 := x again").unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("if begin then repeat"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("again begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin then while"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("until begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin again until"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.load("begin until again"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin then repeat"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin then while"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("until begin"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin again until"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin until again"));
     }
 
     #[test]
@@ -1995,10 +1983,10 @@ mod tests {
         assert_eq!(x.to_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.load("begin 1 again break");
+        let res = xs.compile("begin 1 again break");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let mut xs = State::boot().unwrap();
-        xs.load("begin 1 if break else break then again").unwrap();
+        xs.compile("begin 1 if break else break then again").unwrap();
     }
 
     
@@ -2107,14 +2095,14 @@ mod tests {
     #[test]
     fn test_immediate() {
         let mut xs = State::boot().unwrap();
-        let res = xs.load(": f [ ] 0 nth immediate ; f");
+        let res = xs.compile(": f [ ] 0 nth immediate ; f");
         assert_eq!(Err(Xerr::OutOfBounds), res);
     }
 
     #[test]
     fn test_nested_interpreter() {
         let mut xs = State::boot().unwrap();
-        xs.load("( 3 5 * )").unwrap();
+        xs.compile("( 3 5 * )").unwrap();
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
         xs.eval("( 2 2 + )").unwrap();
@@ -2233,7 +2221,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.rnext());
         xs.start_reverse_debugging();
-        xs.load(r#"
+        xs.compile(r#"
         100 4 /
         3 *
         5 +
@@ -2275,7 +2263,7 @@ mod tests {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
         xs.start_reverse_debugging();
-        xs.load("[ 3 for I loop ] len").unwrap();
+        xs.compile("[ 3 for I loop ] len").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
             while xs.ip() != xs.code.len() {
@@ -2297,7 +2285,7 @@ mod tests {
              xs.return_stack.clone());
         let mut xs = State::boot().unwrap();
         xs.start_reverse_debugging();
-        xs.load(r#"
+        xs.compile(r#"
        : tower-of-hanoi
             local aux
             local to
@@ -2378,7 +2366,7 @@ mod tests {
 
         let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
-        let res = xs.load("( [\n( loop )\n] )");
+        let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ControlFlowError");
@@ -2403,9 +2391,9 @@ mod tests {
         assert_eq!(Err(Xerr::ExpectingKey), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ExpectingKey");
-        assert_eq!(lines[1], "<buffer#0>:1:8");
-        assert_eq!(lines[2], "[ again ]");
-        assert_eq!(lines[3], "--^");
+        assert_eq!(lines[1], "<buffer#0>:1:9");
+        assert_eq!(lines[2], ": test3 get ;");
+        assert_eq!(lines[3], "--------^");
     }
 
     #[test]
@@ -2413,7 +2401,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::Exit(-1)), xs.eval("-1 exit drop"));
         let mut xs = State::boot().unwrap();
-        xs.load("0 exit +").unwrap();
+        xs.compile("0 exit +").unwrap();
         assert_eq!(Err(Xerr::Exit(0)), xs.run());
     }
 }

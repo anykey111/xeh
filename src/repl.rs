@@ -12,14 +12,14 @@ fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
         let _ = xs.next();
-        if let Some(s) = xs.current_line() {
-            eprintln!("{}", s);
-        }
+        // if let Some(s) = xs.current_line() {
+        //     eprintln!("{}", s);
+        // }
     } else if cmd == ".rnext" {
         let _ = xs.rnext();
-        if let Some(s) = xs.current_line() {
-            eprintln!("{}", s);
-        }
+        // if let Some(s) = xs.current_line() {
+        //     eprintln!("{}", s);
+        // }
     } else if cmd == ".s" {
         let mut i = 0;
         while let Some(val) = xs.get_data(i) {
@@ -109,7 +109,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         xs.start_reverse_debugging();
     }
     for filename in args.sources.iter() {
-        xs.load_file(filename)?;
+        xs.compile_file(filename)?;
     }
     if !args.sources.is_empty() {
         let _ = xs.run()?;
