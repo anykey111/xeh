@@ -137,7 +137,7 @@ struct SourceBuf {
 }
 
 #[derive(Clone)]
-pub struct TokenInfo {
+pub struct ErrorLocation {
     pub token: Xsubstr,
     pub line: usize,
     pub col: usize,
@@ -145,12 +145,18 @@ pub struct TokenInfo {
     pub whole_line: Xsubstr,
 }
 
-impl fmt::Debug for TokenInfo {
+impl fmt::Debug for ErrorLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
         writeln!(f, "{}", self.whole_line)?;
         writeln!(f, "{:->1$}", '^', self.col + 1)
     }
+}
+
+#[derive(Clone)]
+pub struct ErrorContext {
+    pub err: Xerr,
+    pub location: ErrorLocation,
 }
 
 #[derive(Default, Clone)]
@@ -169,7 +175,7 @@ pub struct State {
     nested: Vec<Context>,
     reverse_log: Option<Vec<ReverseStep>>,
     console: Option<String>,
-    last_error: Option<(Xerr, TokenInfo)>,
+    last_error: Option<ErrorContext>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrMod,
     // default base
@@ -197,7 +203,18 @@ impl State {
     }
 
 
-    fn token_info(&self,  token: Xsubstr) -> TokenInfo {
+    fn set_last_error(&mut self, err: Xerr) {
+        let token = self.current_token().expect("error location");
+        let location = self.error_location(token);
+        let msg = format!("error: {:?}\n{:?}", &err, &location);
+        self.log_error(msg);
+        self.last_error = Some(ErrorContext {
+            err,
+            location,
+        });
+    }
+
+    fn error_location(&self,  token: Xsubstr) -> ErrorLocation {
         let tok_start = token.range().start;
         let par = token.parent();
         let mut it = par.char_indices();
@@ -227,7 +244,7 @@ impl State {
                     .map(|x| x.name.as_str())
                     .unwrap();
         let whole_line = token.parent().substr(start..end);
-        TokenInfo {
+        ErrorLocation {
             line,
             col,
             token,
@@ -238,21 +255,17 @@ impl State {
 
     fn current_token(&self) -> Option<Xsubstr> {
         let mut res = None;
-        if self.ctx.mode == ContextMode::Load {
-            if let Some(tok) = self.ctx.source.as_ref().and_then(|x| x.last_token()) {
-                res = Some(tok);
-            }
-        } else{
-            if let Some(Some(tok)) = self.debug_map.get(self.ip()) {
-                res = Some(tok.clone());
-            }
+        if let Some(tok) = self.ctx.source.as_ref().and_then(|x| x.last_token()) {
+            res = Some(tok);
+        } else if let Some(Some(tok)) = self.debug_map.get(self.ip()) {
+            res = Some(tok.clone());
         }
         res
     }
 
     pub fn current_line(&self) -> Option<String> {
         self.current_token().map(|token| 
-            format!("{:?}", self.token_info(token))
+            format!("{:?}", self.error_location(token))
         )
     }
 
@@ -331,8 +344,8 @@ impl State {
         lex
     }
 
-    pub fn last_error(&self) -> Option<(Xerr, TokenInfo)> {
-        self.last_error.clone()
+    pub fn last_error(&mut self) -> &Option<ErrorContext> {
+        &mut self.last_error
     }
 
     fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
@@ -340,13 +353,7 @@ impl State {
         let depth = self.nested.len();
         let result = self.build();
         if let Err(e) = result.as_ref() {
-            if depth == self.nested.len() {
-                let token = self.current_token().unwrap();
-                let token_info = self.token_info(token);
-                let msg = format!("error: {:?}\n{:?}", e, &token_info);
-                self.log_error(msg);
-                self.last_error = Some((e.clone(), token_info));
-            }
+            self.set_last_error(e.clone());
             while self.nested.len() > depth {
                 self.context_close()?;
             }
@@ -2341,21 +2348,55 @@ mod tests {
         assert_eq!(lines[2], "   x");
         assert_eq!(lines[3], "---^");
 
+        let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word z");
-        assert_eq!(lines[1], "<buffer#1>:1:1");
+        assert_eq!(lines[1], "<buffer#0>:1:1");
         assert_eq!(lines[2], "z");
         assert_eq!(lines[3], "^");
 
+        let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word q");
-        assert_eq!(lines[1], "<buffer#2>:2:2");
+        assert_eq!(lines[1], "<buffer#0>:2:2");
         assert_eq!(lines[2], " q");
         assert_eq!(lines[3], "-^");
+
+        let mut xs = State::boot().unwrap();
+        xs.console = Some(String::new());
+        let res = xs.eval("[\n10 loop\n]");
+        assert_eq!(Err(Xerr::ControlFlowError), res);
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: ControlFlowError");
+        assert_eq!(lines[1], "<buffer#0>:2:4");
+        assert_eq!(lines[2], "10 loop");
+        assert_eq!(lines[3], "---^");
+
+        let mut xs = State::boot().unwrap();
+        xs.console = Some(String::new());
+        let res = xs.load("( [\n( loop )\n] )");
+        assert_eq!(Err(Xerr::ControlFlowError), res);
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: ControlFlowError");
+        assert_eq!(lines[1], "<buffer#0>:2:3");
+        assert_eq!(lines[2], "( loop )");
+        assert_eq!(lines[3], "--^");
+
+        let mut xs = State::boot().unwrap();
+        xs.console = Some(String::new());
+        let res = xs.eval("\"src/test-location1.xs\" load");
+        assert_eq!(Err(Xerr::ControlFlowError), res);
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: ControlFlowError");
+        assert_eq!(lines[1], "src/test-location2.xs:2:3");
+        assert_eq!(lines[2], "[ again ]");
+        assert_eq!(lines[3], "--^");
+
+
     }
 
     #[test]
