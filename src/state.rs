@@ -344,8 +344,8 @@ impl State {
         lex
     }
 
-    pub fn last_error(&mut self) -> &Option<ErrorContext> {
-        &mut self.last_error
+    pub fn last_error(&self) -> &Option<ErrorContext> {
+        &self.last_error
     }
 
     fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
@@ -2396,7 +2396,16 @@ mod tests {
         assert_eq!(lines[2], "[ again ]");
         assert_eq!(lines[3], "--^");
 
-
+        let mut xs = State::boot().unwrap();
+        xs.console = Some(String::new());
+        xs.eval(": test3 get ;").unwrap();
+        let res = xs.eval("1 2 test3");
+        assert_eq!(Err(Xerr::ExpectingKey), res);
+        let lines:Vec<&str> = xs.console().unwrap().lines().collect();
+        assert_eq!(lines[0], "error: ExpectingKey");
+        assert_eq!(lines[1], "<buffer#0>:1:8");
+        assert_eq!(lines[2], "[ again ]");
+        assert_eq!(lines[3], "--^");
     }
 
     #[test]

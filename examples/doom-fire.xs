@@ -82,8 +82,8 @@ FIRE_WIDTH for 36 loop
 ;
 
 : update_fire
-    FIRE_WIDTH 0 do
-        FIRE_HEIGHT 2 do
+    FIRE_WIDTH for
+        [ 2 FIRE_HEIGHT ] for
             FIRE_WIDTH I * J + spread_fire
         loop
     loop
@@ -92,8 +92,8 @@ FIRE_WIDTH for 36 loop
   
 : draw_fire
     update_fire
-    FIRE_WIDTH 0 do
-        FIRE_HEIGHT 0 do
+    FIRE_WIDTH for
+        FIRE_HEIGHT for
             FIRE_WIDTH I * J + fire_img_get
             PALETTE get
             0xff000000 bor  # add alpha
