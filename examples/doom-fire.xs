@@ -41,11 +41,9 @@
     0xFFFFFF
 ] var PALETTE
 
-FIRE_WIDTH FIRE_HEIGHT minifb_new var fb
-
 [
-FIRE_HEIGHT dec FIRE_WIDTH * 0 do 0 loop
-FIRE_WIDTH 0 do 36 loop
+FIRE_HEIGHT dec FIRE_WIDTH * for 0 loop
+FIRE_WIDTH for 36 loop
 ] var fire_img
 
 : fire_img_update
@@ -91,23 +89,16 @@ FIRE_WIDTH 0 do 36 loop
     loop
 ;
 
-: draw_fire_pixel
-    I J rot fb minifb_put_pixel
-;    
-
+  
 : draw_fire
+    update_fire
     FIRE_WIDTH 0 do
         FIRE_HEIGHT 0 do
             FIRE_WIDTH I * J + fire_img_get
             PALETTE get
             0xff000000 bor  # add alpha
-            draw_fire_pixel
+            d2-color!
+            I J d2-data!
         loop
     loop
 ;
-
-begin fb minifb_is_open while
-    update_fire
-    draw_fire
-    fb minifb_update
-repeat
