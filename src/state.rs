@@ -181,6 +181,8 @@ pub struct State {
     // default base
     pub(crate) fmt_base: Xref,
     pub(crate) fmt_prefix: Xref,
+    // d2 canvas
+    pub(crate) d2: Xref,
 }
 
 impl State {
