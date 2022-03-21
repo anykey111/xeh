@@ -137,7 +137,7 @@ struct SourceBuf {
 }
 
 #[derive(Clone)]
-pub struct ErrorLocation {
+pub struct TokenLocation {
     pub token: Xsubstr,
     pub line: usize,
     pub col: usize,
@@ -145,7 +145,7 @@ pub struct ErrorLocation {
     pub whole_line: Xsubstr,
 }
 
-impl fmt::Debug for ErrorLocation {
+impl fmt::Debug for TokenLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
         writeln!(f, "{}", self.whole_line)?;
@@ -156,7 +156,7 @@ impl fmt::Debug for ErrorLocation {
 #[derive(Clone)]
 pub struct ErrorContext {
     pub err: Xerr,
-    pub location: ErrorLocation,
+    pub location: TokenLocation,
 }
 
 #[derive(Default, Clone)]
@@ -218,7 +218,7 @@ impl State {
         });
     }
 
-    fn error_location(&self,  token: Xsubstr) -> ErrorLocation {
+    fn error_location(&self,  token: Xsubstr) -> TokenLocation {
         let tok_start = token.range().start;
         let par = token.parent();
         let mut it = par.char_indices();
@@ -248,7 +248,7 @@ impl State {
                     .map(|x| x.name.as_str())
                     .unwrap();
         let whole_line = token.parent().substr(start..end);
-        ErrorLocation {
+        TokenLocation {
             line,
             col,
             token,
@@ -784,7 +784,7 @@ impl State {
         OK
     }
 
-    pub fn eval_word(&mut self, name: &str) -> Xresult {
+     fn eval_word(&mut self, name: &str) -> Xresult {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => {
@@ -915,6 +915,13 @@ impl State {
                 }
             }
         }
+    }
+
+    pub fn current_location(&self) -> Option<TokenLocation> {
+        let dbg = self.debug_map.get(self.ip())?;
+        dbg.as_ref().map(|token| {
+            self.error_location(token.clone())
+        })
     }
 
     pub fn next(&mut self) -> Xresult {
@@ -1049,6 +1056,10 @@ impl State {
 
     pub fn ip(&self) -> usize {
         self.ctx.ip
+    }
+
+    pub fn bytecode(&self) -> &[Opcode] {
+        &self.code
     }
 
     fn set_ip(&mut self, new_ip: usize) -> Xresult {
@@ -2214,6 +2225,18 @@ mod tests {
 
     fn collect_ints(xs: &State) -> Vec<isize> {
         xs.data_stack.iter().cloned().map(|x| x.to_isize().unwrap()).collect()
+    }
+
+    #[test]
+    fn text_next() {
+        let mut xs = State::boot().unwrap();
+        xs.compile("1 2 +").unwrap();
+        assert_eq!(OK, xs.next());
+        assert_eq!(xs.top_data(), Some(&Cell::Int(1)));
+        assert_eq!(OK, xs.next());
+        assert_eq!(xs.top_data(), Some(&Cell::Int(2)));
+        assert_eq!(OK, xs.next());
+        assert_eq!(xs.top_data(), Some(&Cell::Int(3)));
     }
 
     #[test]
