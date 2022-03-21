@@ -22,6 +22,13 @@ fn resize(xs: &mut Xstate) -> Xresult {
     OK
 }
 
+pub fn size(c: Cell) -> Xresult1<(usize, usize)> {
+    let any = c.into_any()?;
+    let p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
+    let d2 = p.downcast_ref::<D2Context>().ok_or(Xerr::TypeError)?;
+    Ok((d2.width, d2.height))
+}
+
 fn color_set(xs: &mut Xstate) -> Xresult {
     let any = xs.pop_data()?.into_any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
