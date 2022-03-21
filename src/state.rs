@@ -202,6 +202,44 @@ impl State {
         Ok(s)
     }
 
+    pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
+        let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
+        match op {
+            Opcode::Call(x) => {
+                let name = self.dict.iter().rev().find(|e| {
+                    match e.entry {
+                        Entry::Function { xf: Xfn::Interp(f), ..} => f == *x,
+                        _ => false,
+                    }
+                }).map(|e| e.name.as_str()).unwrap_or_default();
+                format!("call {:#x} # {}" , x, name)
+            },
+            Opcode::NativeCall(x)=> {
+                let name = self.dict.iter().rev().find(|e| {
+                    match e.entry {
+                        Entry::Function { xf: Xfn::Native(f), ..} => f == *x,
+                        _ => false,
+                    }
+                }).map(|e| e.name.as_str()).unwrap_or_default();
+                format!("nativecall {:#x} # {}" , x.0 as usize, name)
+            },
+            Opcode::Unresolved(name) => format!("unresolved {:?}", &name),
+            Opcode::Ret => format!("ret"),
+            Opcode::JumpIf(offs) => format!("jumpif     #{:#05x}", jumpaddr(ip, offs)),
+            Opcode::JumpIfNot(offs) => format!("jumpifnot  {:#05x}", jumpaddr(ip, offs)),
+            Opcode::Jump(offs) => format!("jump       {:#05x}", jumpaddr(ip, offs)),
+            Opcode::CaseOf(rel) => format!("caseof     {:#05x}", jumpaddr(ip, rel)),
+            Opcode::For(rel) => format!("for        {:#05x}", jumpaddr(ip, rel)),
+            Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
+            Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
+            Opcode::Load(a) => format!("load       {}", a),
+            Opcode::LoadInt(i) => format!("loadint    {}", i),
+            Opcode::LoadNil => format!("loadnil"),
+            Opcode::Store(a) => format!("store      {}", a),
+            Opcode::InitLocal(i) => format!("initlocal  {}", i),
+            Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
+        }
+    }
 
     fn set_last_error(&mut self, err: Xerr) {
         let token = if err == Xerr::ControlFlowError || self.ctx.mode == ContextMode::Compile {
@@ -502,7 +540,9 @@ impl State {
     }
 
     pub fn capture_stdout(&mut self) {
-        self.console = Some(String::new());
+        if self.console.is_none() {
+            self.console = Some(String::new());
+        }
     }
 
     pub fn start_reverse_debugging(&mut self) {
@@ -784,7 +824,7 @@ impl State {
         OK
     }
 
-     fn eval_word(&mut self, name: &str) -> Xresult {
+    pub fn eval_word(&mut self, name: &str) -> Xresult {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => {
@@ -1570,36 +1610,6 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
-pub fn format_opcode(xs: &State, at: usize) -> String {
-    let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
-    let debug_comment = "not implemented!";
-    format!(
-        "{:08x}{}{:<30} # {}",
-        at,
-        if xs.ip() == at { " * " } else { "   " },
-        match &xs.code[at] {
-            Opcode::Call(a) => format!("call       {:#x}", a),
-            Opcode::Unresolved(name) => format!("unresolved {:?}", &name),
-            Opcode::NativeCall(x) => format!("callx      {:#x}", x.0 as usize),
-            Opcode::Ret => format!("ret"),
-            Opcode::JumpIf(offs) => format!("jumpif     ${:05x}", jumpaddr(at, offs)),
-            Opcode::JumpIfNot(offs) => format!("jumpifnot  ${:05x}", jumpaddr(at, offs)),
-            Opcode::Jump(offs) => format!("jump       ${:05x}", jumpaddr(at, offs)),
-            Opcode::CaseOf(rel) => format!("caseof     ${:05x}", jumpaddr(at, rel)),
-            Opcode::For(rel) => format!("for        ${:05x}", jumpaddr(at, rel)),
-            Opcode::Loop(rel) => format!("loop       ${:05x}", jumpaddr(at, rel)),
-            Opcode::Break(rel) => format!("break      ${:05x}", jumpaddr(at, rel)),
-            Opcode::Load(a) => format!("load       {}", a),
-            Opcode::LoadInt(i) => format!("loadint    {}", i),
-            Opcode::LoadNil => format!("loadnil"),
-            Opcode::Store(a) => format!("store      {}", a),
-            Opcode::InitLocal(i) => format!("initlocal  {}", i),
-            Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
-        },
-        debug_comment,
-    )
-}
-
 fn for_init(xs: &mut State) -> Xresult1<Loop> {
     match xs.pop_data()? {
         Cell::Int(n) =>
@@ -2167,22 +2177,22 @@ mod tests {
     #[test]
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval("255 HEX print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.console);
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval("255 NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("FF".to_string()), xs.console);
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval("[ 255 ] NO-PREFIX HEX print").unwrap();
         assert_eq!(Some("[ FF ]".to_string()), xs.console);
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.console);
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval(" [ 0xff 0xee ] >bitstr HEX NO-PREFIX print").unwrap();
         assert_eq!(Some("[ FF EE ]".to_string()), xs.console);
-        xs.capture_stdout();
+        xs.console = Some(String::new());
         xs.eval(" [ ] >bitstr HEX NO-PREFIX print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.console);
 
@@ -2417,6 +2427,25 @@ mod tests {
         assert_eq!(lines[1], "<buffer#0>:1:9");
         assert_eq!(lines[2], ": test3 get ;");
         assert_eq!(lines[3], "--------^");
+    }
+
+    #[test]
+    fn test_fmt_opcode() {
+        let mut xs = State::boot().unwrap();
+        xs.compile(": myword  1 ;").unwrap();
+        let a = match xs.dict_entry("myword").unwrap() {
+            Entry::Function { xf: Xfn::Interp(a), .. } => Some(*a),
+            _ => None,
+        };
+        let s = format!("call {:#x} # myword", a.unwrap());
+        assert_eq!(s, xs.fmt_opcode(0, &Opcode::Call(a.unwrap())));
+
+        let f = match xs.dict_entry("drop").unwrap() {
+            Entry::Function { xf: Xfn::Native(f), .. } => Some(*f),
+            _ => None,
+        };
+        let s = format!("nativecall {:#x} # drop", f.unwrap().0 as usize);
+        assert_eq!(s, xs.fmt_opcode(0, &Opcode::NativeCall(f.unwrap())));
     }
 
     #[test]

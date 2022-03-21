@@ -22,7 +22,7 @@ pub struct XfnPtr(pub XfnType);
 
 impl PartialEq for XfnPtr {
     fn eq(&self, other: &Self) -> bool {
-        self.0 as usize == other.0 as usize
+        (self.0 as usize) == (other.0 as usize)
     }
 }
 
