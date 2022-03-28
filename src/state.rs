@@ -548,7 +548,9 @@ impl State {
     }
 
     pub fn start_reverse_debugging(&mut self) {
+        if self.reverse_log.is_none() {
         self.reverse_log = Some(Vec::default());
+    }
     }
 
     pub fn stop_reverse_debugging(&mut self) {
