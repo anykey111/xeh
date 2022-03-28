@@ -549,8 +549,8 @@ impl State {
 
     pub fn start_reverse_debugging(&mut self) {
         if self.reverse_log.is_none() {
-        self.reverse_log = Some(Vec::default());
-    }
+            self.reverse_log = Some(Vec::default());
+        }
     }
 
     pub fn stop_reverse_debugging(&mut self) {
@@ -590,17 +590,19 @@ impl State {
         }
     }
 
-    pub fn defword(&mut self, name: &str, x: XfnType) -> Xresult1<Xref> {
-        let xf = Xfn::Native(XfnPtr(x));
-        let idx = self.dict_insert(DictEntry::new(
-            name.to_string(),
-            Entry::Function {
-                immediate: false,
-                xf,
-                len: Some(0),
-            })
-        )?;
-        Ok(Xref::Word(idx))
+    fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult1<Xref> {
+        let xf = Xfn::Native(XfnPtr(f));
+        let i = self.dict_insert(DictEntry::new(name.into(),
+            Entry::Function { immediate, xf, len: None }))?;
+        Ok(Xref::Word(i))
+    }
+
+    pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult1<Xref> {
+        self.dict_add_word(name, f, false)
+    }
+
+    pub fn def_immediate(&mut self, name: &str, f: XfnType) -> Xresult1<Xref> {
+        self.dict_add_word(name, f, true)
     }
 
     pub fn defwordself(&mut self, name: &str, x: XfnType, slf: Cell) -> Xresult1<Xref> {
@@ -636,110 +638,83 @@ impl State {
     }
 
     fn load_core(&mut self) -> Xresult {
-        struct Def(&'static str, XfnType);
-        for i in [
-            Def("if", core_word_if),
-            Def("else", core_word_else),
-            Def("then", core_word_then),
-            Def("case", case_word),
-            Def("of", of_word),
-            Def("endof", endof_word),
-            Def("endcase", endcase_word),
-            Def("begin", core_word_begin),
-            Def("while", core_word_while),
-            Def("until", core_word_until),
-            Def("break", core_word_break),
-            Def("again", core_word_again),
-            Def("[", core_word_vec_begin),
-            Def("]", core_word_vec_end),
-            Def(":", core_word_def_begin),
-            Def(";", core_word_def_end),
-            Def("#", core_word_comment),
-            Def("immediate", core_word_immediate),
-            Def("local", core_word_def_local),
-            Def("var", core_word_variable),
-            Def(":=", core_word_setvar),
-            Def("nil", core_word_nil),
-            Def("(", core_word_nested_begin),
-            Def(")", core_word_nested_end),
-            Def("for", core_word_for),
-            Def("loop", core_word_loop),
-        ]
-        .iter()
-        {
-            self.dict_insert(DictEntry::new(
-            i.0.to_string(),
-                Entry::Function {
-                    immediate: true,
-                    xf: Xfn::Native(XfnPtr(i.1)),
-                    len: None,
-                })
-            )?;
-        }
-        for i in [
-            Def("I", core_word_counter_i),
-            Def("J", core_word_counter_j),
-            Def("K", core_word_counter_k),
-            Def("len", core_word_len),
-            Def("set", core_word_set),
-            Def("nth", core_word_nth),
-            Def("get", core_word_get),
-            Def("assoc", core_word_assoc),
-            Def("sort", core_word_sort),
-            Def("sort-by-key", core_word_sort_by_key),
-            Def("rev", core_word_rev),
-            Def("dup", |xs| xs.dup_data()),
-            Def("drop", |xs| xs.drop_data()),
-            Def("swap", |xs| xs.swap_data()),
-            Def("rot", |xs| xs.rot_data()),
-            Def("over", |xs| xs.over_data()),
-            Def("+", core_word_add),
-            Def("-", core_word_sub),
-            Def("*", core_word_mul),
-            Def("/", core_word_div),
-            Def("neg", core_word_negate),
-            Def("abs", core_word_abs),
-            Def("inc", core_word_inc),
-            Def("dec", core_word_dec),
-            Def("<", core_word_less_then),
-            Def("=", core_word_eq),
-            Def("rem", core_word_rem),
-            Def("band", core_word_bitand),
-            Def("bor", core_word_bitor),
-            Def("bxor", core_word_bitxor),
-            Def("bshl", core_word_bitshl),
-            Def("bshr", core_word_bitshr),
-            Def("bnot", core_word_bitnot),
-            Def("random", core_word_random),
-            Def("round", core_word_round),
-            Def("assert", core_word_assert),
-            Def("assert-eq", core_word_assert_eq),
-            Def("exit", core_word_exit),
-            Def("println", core_word_println),
-            Def("print", core_word_print),
-            Def("newline", core_word_newline),
-            Def("file-write", crate::file::core_word_file_write),
-            Def("load", core_word_load),
-            Def("meta", core_word_meta),
-            Def("with-meta", core_word_with_meta),
-            Def("HEX", core_word_hex),
-            Def("DEC", core_word_decimal),
-            Def("OCT", core_word_octal),
-            Def("BIN", core_word_binary),
-            Def("PREFIX", core_word_prefix),
-            Def("NO-PREFIX", core_word_no_prefix),
-        ]
-        .iter()
-        {
-            self.dict_insert(DictEntry::new(
-                i.0.to_string(),
-                    Entry::Function {
-                        immediate: false,
-                        xf: Xfn::Native(XfnPtr(i.1)),
-                        len: None,
-                    }
-                ))?;
-        }
+        self.def_immediate("if", core_word_if)?;
+        self.def_immediate("else", core_word_else)?;
+        self.def_immediate("then", core_word_then)?;
+        self.def_immediate("case", case_word)?;
+        self.def_immediate("of", of_word)?;
+        self.def_immediate("endof", endof_word)?;
+        self.def_immediate("endcase", endcase_word)?;
+        self.def_immediate("begin", core_word_begin)?;
+        self.def_immediate("while", core_word_while)?;
+        self.def_immediate("until", core_word_until)?;
+        self.def_immediate("break", core_word_break)?;
+        self.def_immediate("again", core_word_again)?;
+        self.def_immediate("[", core_word_vec_begin)?;
+        self.def_immediate("]", core_word_vec_end)?;
+        self.def_immediate(":", core_word_def_begin)?;
+        self.def_immediate(";", core_word_def_end)?;
+        self.def_immediate("#", core_word_comment)?;
+        self.def_immediate("immediate", core_word_immediate)?;
+        self.def_immediate("local", core_word_def_local)?;
+        self.def_immediate("var", core_word_variable)?;
+        self.def_immediate(":=", core_word_setvar)?;
+        self.def_immediate("nil", core_word_nil)?;
+        self.def_immediate("(", core_word_nested_begin)?;
+        self.def_immediate(")", core_word_nested_end)?;
+        self.def_immediate("for", core_word_for)?;
+        self.def_immediate("loop", core_word_loop)?;
+        self.defword("I", core_word_counter_i)?;
+        self.defword("J", core_word_counter_j)?;
+        self.defword("K", core_word_counter_k)?;
+        self.defword("len", core_word_len)?;
+        self.defword("set", core_word_set)?;
+        self.defword("nth", core_word_nth)?;
+        self.defword("get", core_word_get)?;
+        self.defword("assoc", core_word_assoc)?;
+        self.defword("sort", core_word_sort)?;
+        self.defword("sort-by-key", core_word_sort_by_key)?;
+        self.defword("rev", core_word_rev)?;
+        self.defword("dup", |xs| xs.dup_data())?;
+        self.defword("drop", |xs| xs.drop_data())?;
+        self.defword("swap", |xs| xs.swap_data())?;
+        self.defword("rot", |xs| xs.rot_data())?;
+        self.defword("over", |xs| xs.over_data())?;
+        self.defword("+", core_word_add)?;
+        self.defword("-", core_word_sub)?;
+        self.defword("*", core_word_mul)?;
+        self.defword("/", core_word_div)?;
+        self.defword("neg", core_word_negate)?;
+        self.defword("abs", core_word_abs)?;
+        self.defword("inc", core_word_inc)?;
+        self.defword("dec", core_word_dec)?;
+        self.defword("<", core_word_less_then)?;
+        self.defword("=", core_word_eq)?;
+        self.defword("rem", core_word_rem)?;
+        self.defword("band", core_word_bitand)?;
+        self.defword("bor", core_word_bitor)?;
+        self.defword("bxor", core_word_bitxor)?;
+        self.defword("bshl", core_word_bitshl)?;
+        self.defword("bshr", core_word_bitshr)?;
+        self.defword("bnot", core_word_bitnot)?;
+        self.defword("random", core_word_random)?;
+        self.defword("round", core_word_round)?;
+        self.defword("assert", core_word_assert)?;
+        self.defword("assert-eq", core_word_assert_eq)?;
+        self.defword("exit", core_word_exit)?;
+        self.defword("println", core_word_println)?;
+        self.defword("print", core_word_print)?;
+        self.defword("newline", core_word_newline)?;
+        self.defword("file-write", crate::file::core_word_file_write)?;
+        self.defword("load", core_word_load)?;
+        self.defword("meta", core_word_meta)?;
+        self.defword("with-meta", core_word_with_meta)?;
+        self.defword("HEX", core_word_hex)?;
+        self.defword("DEC", core_word_decimal)?;
+        self.defword("OCT", core_word_octal)?;
+        self.defword("BIN", core_word_binary)?;
+        self.defword("PREFIX", core_word_prefix)?;
+        self.defword("NO-PREFIX", core_word_no_prefix)?;
         OK
     }
 
