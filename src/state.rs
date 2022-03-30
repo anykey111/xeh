@@ -22,7 +22,7 @@ enum Entry {
 struct DictEntry {
     name: String,
     entry: Entry,
-    help: Option<String>,
+    help: Option<Xstr>,
 }
 
 impl DictEntry {
@@ -537,6 +537,9 @@ impl State {
         xs.fmt_base = xs.defvar("BASE", Cell::Int(10))?;
         xs.fmt_prefix = xs.defvar("*PREFIX*", ONE)?;
         xs.load_core()?;
+        let src = include_str!("../docs/help.xs").into();
+        let help_src = xs.add_source(src, Some("docs/help.xs"));
+        xs.build_source(help_src, ContextMode::Compile)?;
         crate::bitstring_mod::load(&mut xs)?;
         Ok(xs)
     }
@@ -626,13 +629,14 @@ impl State {
         Ok(Xref::Word(word_addr))
     }
 
-    pub fn set_doc(&mut self, name: &str, help: String) -> Xresult {
-        let a = self.dict_find(name).ok_or(Xerr::UnknownWord(Xstr::from(name)))?;
+    pub fn set_doc(&mut self, name: Xstr, help: Xstr) -> Xresult {
+        let a = self.dict_find(name.as_str())
+            .ok_or(Xerr::UnknownWord(name))?;
         self.dict[a].help = Some(help);
         OK
     }
 
-    pub fn help(&self, name: &str) -> Option<&String> {
+    pub fn help(&self, name: &str) -> Option<&Xstr> {
         let a = self.dict_find(name)?;
         self.dict.get(a).and_then(|x| x.help.as_ref())
     }
@@ -664,6 +668,8 @@ impl State {
         self.def_immediate(")", core_word_nested_end)?;
         self.def_immediate("for", core_word_for)?;
         self.def_immediate("loop", core_word_loop)?;
+        self.defword("doc", core_word_doc)?;
+        self.defword("help", core_word_help)?;
         self.defword("I", core_word_counter_i)?;
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
@@ -1634,6 +1640,33 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_help(xs: &mut State) -> Xresult {
+    let name = xs.pop_data()?.to_string()?;
+    let res = xs.dict_find(name.as_str())
+        .and_then(|a| xs.dict.get(a))
+        .and_then(|e| e.help.clone());
+    if let Some(help) = res {
+        xs.print(help.as_str());
+    }
+    OK
+}
+
+fn core_word_doc(xs: &mut State) -> Xresult {
+    let name = xs.pop_data()?;
+    let help = xs.pop_data()?.to_string()?;
+    match name.value() {
+        Cell::Vector(v) => {
+            for x in v.iter() {
+                let name = x.to_string()?;
+                xs.set_doc(name, help.clone())?;
+            }
+            OK
+        },
+        Cell::Str(name) => xs.set_doc(name.clone(), help),
+        _ => Err(Xerr::ExpectingName),
+    }
+}
+
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
     let l = xs.loops[xs.ctx.ls_len..]
         .iter()
@@ -2344,7 +2377,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval(" \r\n \r\n\n   x"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word x");
-        assert_eq!(lines[1], "<buffer#0>:4:4");
+        assert_eq!(lines[1], "<buffer#1>:4:4");
         assert_eq!(lines[2], "   x");
         assert_eq!(lines[3], "---^");
 
@@ -2353,7 +2386,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word z");
-        assert_eq!(lines[1], "<buffer#0>:1:1");
+        assert_eq!(lines[1], "<buffer#1>:1:1");
         assert_eq!(lines[2], "z");
         assert_eq!(lines[3], "^");
 
@@ -2362,7 +2395,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word q");
-        assert_eq!(lines[1], "<buffer#0>:2:2");
+        assert_eq!(lines[1], "<buffer#1>:2:2");
         assert_eq!(lines[2], " q");
         assert_eq!(lines[3], "-^");
 
@@ -2372,7 +2405,7 @@ mod tests {
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ControlFlowError");
-        assert_eq!(lines[1], "<buffer#0>:2:4");
+        assert_eq!(lines[1], "<buffer#1>:2:4");
         assert_eq!(lines[2], "10 loop");
         assert_eq!(lines[3], "---^");
 
@@ -2382,7 +2415,7 @@ mod tests {
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ControlFlowError");
-        assert_eq!(lines[1], "<buffer#0>:2:3");
+        assert_eq!(lines[1], "<buffer#1>:2:3");
         assert_eq!(lines[2], "( loop )");
         assert_eq!(lines[3], "--^");
 
@@ -2403,7 +2436,7 @@ mod tests {
         assert_eq!(Err(Xerr::ExpectingKey), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ExpectingKey");
-        assert_eq!(lines[1], "<buffer#0>:1:9");
+        assert_eq!(lines[1], "<buffer#1>:1:9");
         assert_eq!(lines[2], ": test3 get ;");
         assert_eq!(lines[3], "--------^");
     }
@@ -2425,6 +2458,13 @@ mod tests {
         };
         let s = format!("nativecall {:#x} # drop", f.unwrap().0 as usize);
         assert_eq!(s, xs.fmt_opcode(0, &Opcode::NativeCall(f.unwrap())));
+    }
+
+    #[test]
+    fn test_help() {
+        let mut xs = State::boot().unwrap();
+        xs.compile(": ff ; ( \"test-help\" \"ff\" doc )").unwrap();
+        assert_eq!(xs.help("ff"), Some(&Xstr::from("test-help")));
     }
 
     #[test]
