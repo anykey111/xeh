@@ -640,7 +640,7 @@ impl State {
     fn load_core(&mut self) -> Xresult {
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
-        self.def_immediate("then", core_word_then)?;
+        self.def_immediate("endif", core_word_endif)?;
         self.def_immediate("case", case_word)?;
         self.def_immediate("of", of_word)?;
         self.def_immediate("endof", endof_word)?;
@@ -1329,7 +1329,7 @@ fn core_word_else(xs: &mut State) -> Xresult {
     xs.backpatch_jump(if_org, rel)
 }
 
-fn core_word_then(xs: &mut State) -> Xresult {
+fn core_word_endif(xs: &mut State) -> Xresult {
     let if_org = match take_first_cond_flow(xs)? {
         Flow::If(org) => org,
         Flow::Else(org) => org,
@@ -1909,12 +1909,12 @@ mod tests {
     #[test]
     fn test_if_flow() {
         let mut xs = State::boot().unwrap();
-        xs.compile("1 if 222 then").unwrap();
+        xs.compile("1 if 222 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
         let mut xs = State::boot().unwrap();
-        xs.compile("1 if 222 else 333 then").unwrap();
+        xs.compile("1 if 222 else 333 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
@@ -1935,7 +1935,7 @@ mod tests {
     #[test]
     fn test_if_var() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("0 if 100 var X then");
+        let res = xs.eval("0 if 100 var X endif");
         assert_eq!(Err(Xerr::ControlFlowError), res);
     }
 
@@ -1953,9 +1953,9 @@ mod tests {
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x while 0 := x again").unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin then repeat"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin endif repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin then while"));
+        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("until begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin again until"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin until again"));
@@ -1986,7 +1986,7 @@ mod tests {
         let res = xs.compile("begin 1 again break");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let mut xs = State::boot().unwrap();
-        xs.compile("begin 1 if break else break then again").unwrap();
+        xs.compile("begin 1 if break else break endif again").unwrap();
     }
 
     
@@ -2309,7 +2309,7 @@ mod tests {
                 n dec from aux to tower-of-hanoi
                 [ n from to ]
                 n dec aux to from tower-of-hanoi
-            then
+            endif
         ;        
         4 "a" "c" "b" tower-of-hanoi
         "#).unwrap();
