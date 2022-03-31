@@ -50,7 +50,7 @@ dup "of" doc
 )
 
 (
-"Simple loop.
+"Simple conditional loop.
 
     begin FLAG while CODE repeat
 
@@ -71,6 +71,16 @@ dup "while" doc
 Repat CODE forever, unless *exit* or *leave* called.
 "
 "again" doc
+)
+
+(
+"Simple conditional loop.
+
+    begin CODE FLAG until
+
+Restart loop until FLAG evaluates to false.
+"
+"until" doc
 )
 
 (
