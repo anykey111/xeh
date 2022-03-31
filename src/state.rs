@@ -537,11 +537,14 @@ impl State {
         xs.fmt_base = xs.defvar("BASE", Cell::Int(10))?;
         xs.fmt_prefix = xs.defvar("*PREFIX*", ONE)?;
         xs.load_core()?;
-        let src = include_str!("../docs/help.xs").into();
-        let help_src = xs.add_source(src, Some("docs/help.xs"));
-        xs.build_source(help_src, ContextMode::Compile)?;
         crate::bitstring_mod::load(&mut xs)?;
         Ok(xs)
+    }
+
+    pub fn load_help(&mut self) -> Xresult {
+        let src = include_str!("../docs/help.xs").into();
+        let help_src = self.add_source(src, Some("docs/help.xs"));
+        self.build_source(help_src, ContextMode::Compile)
     }
 
     pub fn capture_stdout(&mut self) {
@@ -2377,7 +2380,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval(" \r\n \r\n\n   x"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word x");
-        assert_eq!(lines[1], "<buffer#1>:4:4");
+        assert_eq!(lines[1], "<buffer#0>:4:4");
         assert_eq!(lines[2], "   x");
         assert_eq!(lines[3], "---^");
 
@@ -2386,7 +2389,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word z");
-        assert_eq!(lines[1], "<buffer#1>:1:1");
+        assert_eq!(lines[1], "<buffer#0>:1:1");
         assert_eq!(lines[2], "z");
         assert_eq!(lines[3], "^");
 
@@ -2395,7 +2398,7 @@ mod tests {
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word q");
-        assert_eq!(lines[1], "<buffer#1>:2:2");
+        assert_eq!(lines[1], "<buffer#0>:2:2");
         assert_eq!(lines[2], " q");
         assert_eq!(lines[3], "-^");
 
@@ -2405,7 +2408,7 @@ mod tests {
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ControlFlowError");
-        assert_eq!(lines[1], "<buffer#1>:2:4");
+        assert_eq!(lines[1], "<buffer#0>:2:4");
         assert_eq!(lines[2], "10 loop");
         assert_eq!(lines[3], "---^");
 
@@ -2415,7 +2418,7 @@ mod tests {
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ControlFlowError");
-        assert_eq!(lines[1], "<buffer#1>:2:3");
+        assert_eq!(lines[1], "<buffer#0>:2:3");
         assert_eq!(lines[2], "( loop )");
         assert_eq!(lines[3], "--^");
 
@@ -2436,7 +2439,7 @@ mod tests {
         assert_eq!(Err(Xerr::ExpectingKey), res);
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: ExpectingKey");
-        assert_eq!(lines[1], "<buffer#1>:1:9");
+        assert_eq!(lines[1], "<buffer#0>:1:9");
         assert_eq!(lines[2], ": test3 get ;");
         assert_eq!(lines[3], "--------^");
     }
@@ -2461,10 +2464,20 @@ mod tests {
     }
 
     #[test]
-    fn test_help() {
+    fn test_doc_help() {
         let mut xs = State::boot().unwrap();
+        xs.capture_stdout();
         xs.compile(": ff ; ( \"test-help\" \"ff\" doc )").unwrap();
         assert_eq!(xs.help("ff"), Some(&Xstr::from("test-help")));
+        xs.eval("\"ff\" help").unwrap();
+        assert_eq!(xs.console(), Some(&mut String::from("test-help")));
+        
+    }
+
+    #[test]
+    fn test_builtin_help() {
+        let mut xs = State::boot().unwrap();
+        xs.load_help().unwrap();
     }
 
     #[test]

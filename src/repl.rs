@@ -105,6 +105,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if let Some(ref path) = args.binary_path {
         crate::file::load_binary(xs, path)?;
     }
+    xs.load_help()?;
     if args.debug {
         xs.start_reverse_debugging();
     }
