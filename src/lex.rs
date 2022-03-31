@@ -77,7 +77,15 @@ impl Lex {
                         let ss = self.buf.substr(start..self.pos);
                         self.last_substr = Some(ss);
                         let val = Xcell::Str(Xstr::from(&self.tmp));
-                        break Ok(Tok::Literal(val))
+                        let ws = self
+                            .peek_char()
+                            .map(|c| c.is_ascii_whitespace())
+                            .unwrap_or(true);
+                        if ws {
+                            break Ok(Tok::Literal(val))
+                        } else {
+                            break Err(Xerr::InputParseError)
+                        }
                     } else {
                         self.tmp.push(c);
                     }
@@ -118,7 +126,7 @@ impl Lex {
                     }
                 }
                 while let Some(c) = self.peek_char() {
-                    if c.is_ascii_whitespace() || c == '"' {
+                    if c.is_ascii_whitespace() {
                         break;
                     }
                     if num_prefix {
@@ -298,6 +306,11 @@ mod tests {
         assert_eq!(res, Err(Xerr::InputParseError));
     }
 
+    #[test]
+    fn test_str_tok() {
+        assert_eq!(tokenize_input(r#" 1"a" "#), Err(Xerr::InputParseError));
+        assert_eq!(tokenize_input(r#" "a"2 "#), Err(Xerr::InputParseError));
+    }
 
     #[test]
     fn test_xstr_lines() {
