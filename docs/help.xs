@@ -72,3 +72,10 @@ Repat CODE forever, unless *exit* or *leave* called.
 "
 "again" doc
 )
+
+(
+"Stop loop execution.
+It is an error to use *leave* outside of the loop.
+"
+"leave" doc
+)

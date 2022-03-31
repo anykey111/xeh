@@ -48,7 +48,7 @@ enum Flow {
     Else(usize),
     Begin(usize),
     While(usize),
-    Break(usize),
+    Leave(usize),
     Case,
     CaseOf(usize),
     CaseEndOf(usize),
@@ -655,7 +655,7 @@ impl State {
         self.def_immediate("begin", core_word_begin)?;
         self.def_immediate("while", core_word_while)?;
         self.def_immediate("until", core_word_until)?;
-        self.def_immediate("break", core_word_break)?;
+        self.def_immediate("leave", core_word_leave)?;
         self.def_immediate("repeat", core_word_repeat)?;
         self.def_immediate("again", core_word_again)?;
         self.def_immediate("[", core_word_vec_begin)?;
@@ -1311,7 +1311,7 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
             Flow::Case => true,
             Flow::CaseOf(_) => true,
             Flow::CaseEndOf(_) => true,
-            Flow::Break(_) => continue,
+            Flow::Leave(_) => continue,
             _ => break,
         };
         if t {
@@ -1409,7 +1409,7 @@ fn core_word_while(xs: &mut State) -> Xresult {
 fn core_word_again(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow()? {
-            Flow::Break(org) => {
+            Flow::Leave(org) => {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
@@ -1425,7 +1425,7 @@ fn core_word_again(xs: &mut State) -> Xresult {
 fn core_word_repeat(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow()? {
-            Flow::Break(org) => {
+            Flow::Leave(org) => {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
@@ -1447,10 +1447,10 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_break(xs: &mut State) -> Xresult {
+fn core_word_leave(xs: &mut State) -> Xresult {
     let org = xs.code_origin();
     xs.code_emit(Opcode::Jump(0))?;
-    xs.push_flow(Flow::Break(org))
+    xs.push_flow(Flow::Leave(org))
 }
 
 fn jump_offset(origin: usize, dest: usize) -> isize {
@@ -1645,7 +1645,7 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     let stop_org = xs.code_origin();
     loop {
         match xs.pop_flow()? {
-            Flow::Break(org) => {
+            Flow::Leave(org) => {
                 let stop_rel = jump_offset(org, stop_org);
                 xs.backpatch(org, Opcode::Break(stop_rel))?;
             }
@@ -1998,7 +1998,7 @@ mod tests {
         xs.eval("0 begin dup 5 < while inc repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        xs.compile("begin break again").unwrap();
+        xs.compile("begin leave again").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(2), it.next().unwrap());
         assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
@@ -2031,15 +2031,15 @@ mod tests {
     #[test]
     fn test_loop_break() {
         let mut xs = State::boot().unwrap();
-        xs.eval("begin 1 break again").unwrap();
+        xs.eval("begin 1 leave again").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.to_int(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.compile("begin 1 again break");
+        let res = xs.compile("begin 1 again leave");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let mut xs = State::boot().unwrap();
-        xs.compile("begin 1 if break else break endif again").unwrap();
+        xs.compile("begin 1 if leave else leave endif again").unwrap();
     }
 
     
@@ -2202,7 +2202,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
         xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("10 for I I case 5 of break endof drop endcase loop").unwrap();
+        xs.eval("10 for I I case 5 of leave endof drop endcase loop").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 
