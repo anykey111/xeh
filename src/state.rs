@@ -656,6 +656,7 @@ impl State {
         self.def_immediate("while", core_word_while)?;
         self.def_immediate("until", core_word_until)?;
         self.def_immediate("break", core_word_break)?;
+        self.def_immediate("repeat", core_word_repeat)?;
         self.def_immediate("again", core_word_again)?;
         self.def_immediate("[", core_word_vec_begin)?;
         self.def_immediate("]", core_word_vec_end)?;
@@ -1416,6 +1417,22 @@ fn core_word_again(xs: &mut State) -> Xresult {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
+            _ => break Err(Xerr::ControlFlowError),
+        }
+    }
+}
+
+fn core_word_repeat(xs: &mut State) -> Xresult {
+    loop {
+        match xs.pop_flow()? {
+            Flow::Break(org) => {
+                let offs = jump_offset(org, xs.code_origin() + 1);
+                xs.backpatch_jump(org, offs)?;
+            }
+            Flow::Begin(begin_org) => {
+                let offs = jump_offset(xs.code_origin(), begin_org);
+                break xs.code_emit(Opcode::Jump(offs));
+            }
             Flow::While(cond_org) => match xs.pop_flow()? {
                 Flow::Begin(begin_org) => {
                     let offs = jump_offset(cond_org, xs.code_origin() + 1);
@@ -1978,7 +1995,7 @@ mod tests {
     #[test]
     fn test_begin_again() {
         let mut xs = State::boot().unwrap();
-        xs.eval("0 begin dup 5 < while inc again").unwrap();
+        xs.eval("0 begin dup 5 < while inc repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
         xs.compile("begin break again").unwrap();
@@ -1988,7 +2005,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 var x begin x while 0 := x again").unwrap();
+        xs.eval("1 var x begin x while 0 := x repeat").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin endif repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));
