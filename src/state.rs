@@ -244,7 +244,11 @@ impl State {
     }
 
     fn set_last_error(&mut self, err: Xerr) {
-        let token = if err == Xerr::ControlFlowError || self.ctx.mode == ContextMode::Compile {
+        let is_lex_error = err == Xerr::ControlFlowError
+            || err == Xerr::InputIncomplete
+            || err == Xerr::ExpectingName
+            || err ==Xerr::InputParseError;
+        let token = if is_lex_error || self.ctx.mode == ContextMode::Compile {
             self.ctx.source.as_ref().and_then(|x| x.last_token())
         } else {
             self.debug_map.get(self.ip()).expect("opcode").clone()
