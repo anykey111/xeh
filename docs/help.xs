@@ -98,8 +98,8 @@ The index of the innermost loop can be accessed with *i*
 
     10 0 do i println
 "
-"do" dup doc
-"loop" dup doc
+dup "do" doc
+dup "loop" doc
 dup "i" doc
 dup "j" doc
  "k" doc
