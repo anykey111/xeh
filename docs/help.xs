@@ -50,7 +50,7 @@ dup "of" doc
 )
 
 (
-"Simple conditional loop.
+"Loop with pre-condition.
 
     begin FLAG while CODE repeat
 
@@ -64,17 +64,17 @@ dup "while" doc
 )
 
 (
-"Simple endless loop.
+"Endless loop.
 
     begin CODE again
 
-Repat CODE forever, unless *exit* or *leave* called.
+Repat CODE forever, unless *exit* or *leave* is called.
 "
 "again" doc
 )
 
 (
-"Simple conditional loop.
+"Loop with post-condition.
 
     begin CODE FLAG until
 
@@ -84,8 +84,23 @@ Restart loop until FLAG evaluates to false.
 )
 
 (
-"Stop loop execution.
-It is an error to use *leave* outside of the loop.
+"Leave the innermost loop immediatly.
 "
 "leave" doc
+)
+
+(
+"Loop for every integer starting from START and up to, but excluding LIMIT.
+    
+    LIMIT START do CODE loop
+
+The index of the innermost loop can be accessed with *i*
+
+    10 0 do i println
+"
+"do" dup doc
+"loop" dup doc
+dup "i" doc
+dup "j" doc
+ "k" doc
 )

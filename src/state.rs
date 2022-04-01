@@ -54,7 +54,7 @@ enum Flow {
     CaseEndOf(usize),
     Vec,
     Fun(FunctionFlow),
-    For { for_org: usize, body_org: usize },
+    Do { for_org: usize, body_org: usize },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -231,7 +231,7 @@ impl State {
             Opcode::JumpIfNot(offs) => format!("jumpifnot  {:#05x}", jumpaddr(ip, offs)),
             Opcode::Jump(offs) => format!("jump       {:#05x}", jumpaddr(ip, offs)),
             Opcode::CaseOf(rel) => format!("caseof     {:#05x}", jumpaddr(ip, rel)),
-            Opcode::For(rel) => format!("for        {:#05x}", jumpaddr(ip, rel)),
+            Opcode::Do(rel) => format!("do         {:#05x}", jumpaddr(ip, rel)),
             Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
             Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
             Opcode::Load(a) => format!("load       {}", a),
@@ -670,13 +670,13 @@ impl State {
         self.def_immediate("nil", core_word_nil)?;
         self.def_immediate("(", core_word_nested_begin)?;
         self.def_immediate(")", core_word_nested_end)?;
-        self.def_immediate("for", core_word_for)?;
+        self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
         self.defword("doc", core_word_doc)?;
         self.defword("help", core_word_help)?;
-        self.defword("I", core_word_counter_i)?;
-        self.defword("J", core_word_counter_j)?;
-        self.defword("K", core_word_counter_k)?;
+        self.defword("i", core_word_counter_i)?;
+        self.defword("j", core_word_counter_j)?;
+        self.defword("k", core_word_counter_k)?;
         self.defword("len", core_word_len)?;
         self.defword("set", core_word_set)?;
         self.defword("nth", core_word_nth)?;
@@ -922,8 +922,8 @@ impl State {
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Opcode::For(rel) => {
-                let l = for_init(self)?;
+            Opcode::Do(rel) => {
+                let l = do_init(self)?;
                 if l.range.is_empty() {
                     self.jump_to(rel)
                 } else {
@@ -1615,28 +1615,19 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
-fn for_init(xs: &mut State) -> Xresult1<Loop> {
-    match xs.pop_data()? {
-        Cell::Int(n) =>
-            Ok(Loop { range: 0..n as isize }),
-        Cell::Vector(v) => {
-            if v.len() == 2 {
-                let start = vector_get(&v, 0)?.to_isize()?;
-                let end = vector_get(&v, 1)?.to_isize()?;
-                Ok(Loop { range: start..end })
-            } else {
-                Err(Xerr::TypeError)
-            }
-        }
-        _ => Err(Xerr::TypeError),
-    }
+fn do_init(xs: &mut State) -> Xresult1<Loop> {
+    let start = xs.pop_data()?;
+    let limit = xs.pop_data()?;
+    let start = start.to_isize()?;
+    let limit = limit.to_isize()?;
+    Ok(Loop { range: start..limit })
 }
 
-fn core_word_for(xs: &mut State) -> Xresult {
+fn core_word_do(xs: &mut State) -> Xresult {
     let for_org = xs.code_origin();
-    xs.code_emit(Opcode::For(0))?; // init and jump over if range is empty
+    xs.code_emit(Opcode::Do(0))?; // init and jump over if range is empty
     let body_org = xs.code_origin();
-    xs.push_flow(Flow::For { for_org, body_org })
+    xs.push_flow(Flow::Do { for_org, body_org })
 }
 
 fn core_word_loop(xs: &mut State) -> Xresult {
@@ -1649,9 +1640,9 @@ fn core_word_loop(xs: &mut State) -> Xresult {
                 let stop_rel = jump_offset(org, stop_org);
                 xs.backpatch(org, Opcode::Break(stop_rel))?;
             }
-            Flow::For { for_org, body_org } => {
+            Flow::Do { for_org, body_org } => {
                 let stop_rel = jump_offset(for_org, stop_org);
-                xs.backpatch(for_org, Opcode::For(stop_rel))?;
+                xs.backpatch(for_org, Opcode::Do(stop_rel))?;
                 let body_rel = jump_offset(loop_org, body_org);
                 break xs.backpatch(loop_org, Opcode::Loop(body_rel));
             }
@@ -2047,43 +2038,38 @@ mod tests {
     fn test_for_loop() {
         let mut xs = State::boot().unwrap();
         // short form for [0 3]
-        xs.eval("3 for I loop").unwrap();
+        xs.eval("3 0 do i loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start with negative
         let mut xs = State::boot().unwrap();
-        xs.eval("[ -1 1 ] for I loop").unwrap();
+        xs.eval(" 1 -1 do i loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start from zero
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 0 3 ] for I loop").unwrap();
+        xs.eval(" 3 0 do i loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // counters
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 5 6 ] for [ 2 3 ] for 1 for I J K loop loop loop")
+        xs.eval(" 6 5 do 3 2 do 1 0 do i j k loop loop loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // empty range
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 3 0 ] for I loop").unwrap();
+        xs.eval("0 3 do i loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        xs.eval("[ 0 0 ] for I loop").unwrap();
+        xs.eval("0 0 do i loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range        
-        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] for I loop"));
-        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 ] for I loop"));
-        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 2 3 ] for I loop"));
-        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
+        assert_eq!(Err(Xerr::TypeError), xs.eval("0 0.5 do i loop"));
      }
 
     #[test]
@@ -2162,7 +2148,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
         xs.eval("( 10 var x 2 var y ( x y * ) )").unwrap();
         assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.eval("( 3 var n [ n for I loop ] )").unwrap();
+        xs.eval("( 3 var n [ n 0 do i loop ] )").unwrap();
         let v = xs.pop_data().unwrap().to_vector().unwrap();
         assert_eq!(3, v.len());
         xs.eval(": f [ ( 3 3 * ) ] ; f 0 nth").unwrap();
@@ -2202,7 +2188,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
         xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("10 for I I case 5 of leave endof drop endcase loop").unwrap();
+        xs.eval("10 0 do i i case 5 of leave endof drop endcase loop").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 
@@ -2256,7 +2242,7 @@ mod tests {
     fn test_sort_by_key() {
         let mut xs = State::boot().unwrap();
         xs.eval("[ [ k: 2 ] [ k: 3 ] [ k: 1 ] ] k: sort-by-key var x").unwrap();
-        xs.eval("[ 3 for x I nth k: get loop ]").unwrap();
+        xs.eval("[ 3 0 do x i nth k: get loop ]").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
         v.push_back_mut(Cell::Int(2));
@@ -2328,7 +2314,7 @@ mod tests {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
         xs.start_reverse_debugging();
-        xs.compile("[ 3 for I loop ] len").unwrap();
+        xs.compile("[ 3 0 do i loop ] len").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
             while xs.ip() != xs.code.len() {

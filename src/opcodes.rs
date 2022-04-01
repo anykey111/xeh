@@ -9,7 +9,7 @@ pub enum Opcode {
     JumpIf(isize),
     JumpIfNot(isize),
     Jump(isize),
-    For(isize),
+    Do(isize),
     Break(isize),
     Loop(isize),
     CaseOf(isize),
