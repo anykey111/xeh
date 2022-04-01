@@ -20,16 +20,6 @@ fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
         // if let Some(s) = xs.current_line() {
         //     eprintln!("{}", s);
         // }
-    } else if cmd == ".s" {
-        let mut i = 0;
-        while let Some(val) = xs.get_data(i) {
-            eprintln!("\t{:1?}", val);
-            i += 1;
-        }
-    } else if cmd == ".top" {
-        if let Some(val) = xs.get_data(0) {
-            eprintln!("\t{:?}", val);
-        }
     } else {
         xs.eval(line)?;
     }

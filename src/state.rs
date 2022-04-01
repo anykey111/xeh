@@ -712,6 +712,8 @@ impl State {
         self.defword("assert", core_word_assert)?;
         self.defword("assert-eq", core_word_assert_eq)?;
         self.defword("exit", core_word_exit)?;
+        self.defword(".", core_word_display_top)?;
+        self.defword(".s", core_word_display_stack)?;
         self.defword("println", core_word_println)?;
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
@@ -1838,6 +1840,21 @@ fn core_word_exit(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
     let code = xs.pop_data()?.to_isize()?;
     Err(Xerr::Exit(code))
+}
+
+fn core_word_display_top(xs: &mut State) -> Xresult {
+    core_word_println(xs)
+}
+
+fn core_word_display_stack(xs: &mut State) -> Xresult {
+    let mut buf = String::new();
+    for x in xs.data_stack.iter().rev() {
+        let s = xs.format_cell(x)?;
+        buf.push_str(&s);
+        buf.push_str("\n");
+    }
+    xs.print(&buf);
+    OK
 }
 
 fn core_word_println(xs: &mut State) -> Xresult {
