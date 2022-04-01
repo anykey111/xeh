@@ -698,7 +698,7 @@ impl State {
         self.defword("-", core_word_sub)?;
         self.defword("*", core_word_mul)?;
         self.defword("/", core_word_div)?;
-        self.defword("neg", core_word_negate)?;
+        self.defword("negate", core_word_negate)?;
         self.defword("abs", core_word_abs)?;
         self.defword("<", core_word_less_then)?;
         self.defword("=", core_word_eq)?;

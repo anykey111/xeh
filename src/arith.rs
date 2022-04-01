@@ -172,9 +172,9 @@ mod tests {
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
         xs.eval("16 3 bshr").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.eval("1 neg").unwrap();
+        xs.eval("1 negate").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.eval("-1 neg").unwrap();
+        xs.eval("-1 negate").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
     }
 
