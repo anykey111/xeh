@@ -42,22 +42,6 @@ pub fn core_word_div(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_div, std::ops::Div::<f64>::div)
 }
 
-pub fn core_word_inc(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
-        Cell::Int(a) => xs.push_data(Cell::Int(a + 1)),
-        Cell::Real(a) => xs.push_data(Cell::Real(a + 1.0)),
-        _ => Err(Xerr::TypeError),
-    }
-}
-
-pub fn core_word_dec(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
-        Cell::Int(a) => xs.push_data(Cell::Int(a - 1)),
-        Cell::Real(a) => xs.push_data(Cell::Real(a - 1.0)),
-        _ => Err(Xerr::TypeError),
-    }
-}
-
 pub fn core_word_negate(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.checked_neg().ok_or(Xerr::IntegerOverflow)?)),
@@ -173,10 +157,6 @@ mod tests {
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         xs.eval("7 3 rem").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 inc").unwrap();
-        assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.eval("1 dec").unwrap();
-        assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
         assert_eq!(Err(Xerr::TypeError), xs.eval("\"s\" 1 +"));
@@ -203,7 +183,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("1 ok: with-meta 1.0 +").unwrap();
         assert_eq!(Ok(Cell::Real(2.0)), xs.pop_data());
-        xs.eval("2 ok: with-meta inc").unwrap();
+        xs.eval("2 ok: with-meta 1 +").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
     }
 

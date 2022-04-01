@@ -700,8 +700,6 @@ impl State {
         self.defword("/", core_word_div)?;
         self.defword("neg", core_word_negate)?;
         self.defword("abs", core_word_abs)?;
-        self.defword("inc", core_word_inc)?;
-        self.defword("dec", core_word_dec)?;
         self.defword("<", core_word_less_then)?;
         self.defword("=", core_word_eq)?;
         self.defword("rem", core_word_rem)?;
@@ -2007,7 +2005,7 @@ mod tests {
     #[test]
     fn test_begin_again() {
         let mut xs = State::boot().unwrap();
-        xs.eval("0 begin dup 5 < while inc repeat").unwrap();
+        xs.eval("0 begin dup 5 < while 1 + repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
         xs.compile("begin leave again").unwrap();
@@ -2366,9 +2364,9 @@ mod tests {
             n 1 = if
                 [ n from to ]
             else
-                n dec from aux to tower-of-hanoi
+                n 1 - from aux to tower-of-hanoi
                 [ n from to ]
-                n dec aux to from tower-of-hanoi
+                n 1 - aux to from tower-of-hanoi
             endif
         ;        
         4 "a" "c" "b" tower-of-hanoi
@@ -2495,7 +2493,7 @@ mod tests {
         assert_eq!(xs.help("ff"), Some(&Xstr::from("test-help")));
         xs.eval("\"ff\" help").unwrap();
         assert_eq!(xs.console(), Some(&mut String::from("test-help")));
-        
+
     }
 
     #[test]
