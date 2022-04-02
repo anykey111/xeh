@@ -39,7 +39,31 @@ pub fn core_word_mul(xs: &mut State) -> Xresult {
 }
 
 pub fn core_word_div(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, Xint::wrapping_div, std::ops::Div::<f64>::div)
+    let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
+    match (a.value(), b.value()) {
+        (Cell::Int(a), Cell::Int(b)) => if *b == 0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                xs.push_data(Cell::Int(*a / *b))
+            },
+        (Cell::Int(a), Cell::Real(b)) => if *b == 0.0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                xs.push_data(Cell::Real(*a as f64 / *b))
+            },
+        (Cell::Real(a), Cell::Int(b)) => if *b == 0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                xs.push_data(Cell::Real(*a / *b as f64))
+            },
+        (Cell::Real(a), Cell::Real(b)) => if *b == 0.0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                xs.push_data(Cell::Real(*a / *b as f64))
+            },
+        _ => Err(Xerr::TypeError),
+    }
 }
 
 pub fn core_word_negate(xs: &mut State) -> Xresult {
@@ -199,6 +223,14 @@ mod tests {
         xs.eval("1 round").unwrap();
         assert_eq!(Ok(1), xs.pop_data().unwrap().to_int());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] round"));
+    }
+
+    #[test]
+    fn test_div_by_zero() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1 0 /"));
+        assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1 0.0 /"));
+        assert_eq!(OK, xs.eval("1 0.00000001 /"));
     }
 
     #[test]
