@@ -1,4 +1,5 @@
 use crate::arith::*;
+use crate::bitstring_mod;
 use crate::cell::*;
 use crate::error::*;
 use crate::lex::*;
@@ -329,7 +330,7 @@ impl State {
 
     pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
         self.push_data(Cell::Bitstr(bin))?;
-        self.eval_word("bitstr-open")
+        bitstring_mod::bitstr_open(self)
     }
 
     pub fn compile_file(&mut self, path: &str) -> Xresult {
@@ -818,28 +819,6 @@ impl State {
             self.fetch_and_run()?;
         }
         OK
-    }
-
-    pub fn eval_word(&mut self, name: &str) -> Xresult {
-        match self.dict_entry(name) {
-            None => Err(Xerr::UnknownWord(Xstr::from(name))),
-            Some(Entry::Variable(a)) => {
-                let val = self.heap[*a].clone();
-                self.push_data(val)
-            }
-            Some(Entry::Function { xf, .. }) => {
-                match xf.clone() {
-                    Xfn::Native(x) => x.0(self),
-                    Xfn::Interp(x) => {
-                        let halt_ip = self.code.len();
-                        self.push_return(halt_ip)?;
-                        self.set_ip(x)?;
-                        self.run()
-                    }
-                }
-            }
-        }
-
     }
 
     fn fetch_and_run(&mut self) -> Xresult {

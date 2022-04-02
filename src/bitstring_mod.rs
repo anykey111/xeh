@@ -257,7 +257,7 @@ fn write_dump_position(buf: &mut String, start: usize, end: usize) {
     }
 }
 
-fn bitstr_open(xs: &mut Xstate) -> Xresult {
+pub(crate) fn bitstr_open(xs: &mut Xstate) -> Xresult {
     let new_bin = bitstring_from(xs.pop_data()?)?;
     let old = xs.set_var(xs.bitstr_mod.input, Cell::from(new_bin))?;
     let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.to_vector()?;

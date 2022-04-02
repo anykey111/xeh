@@ -164,9 +164,9 @@ mod tests {
                 assert_eq!(c[3], y * 3 + x);
             }
         }
-        xs.eval_word("d2-width").unwrap();
+        xs.eval("d2-width").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.eval_word("d2-height").unwrap();
+        xs.eval("d2-height").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
     }
 }
