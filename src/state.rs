@@ -21,13 +21,13 @@ enum Entry {
 
 #[derive(Clone)]
 struct DictEntry {
-    name: String,
+    name: Xsubstr,
     entry: Entry,
     help: Option<Xstr>,
 }
 
 impl DictEntry {
-    fn new(name: String, entry: Entry) -> Self {
+    fn new(name: Xsubstr, entry: Entry) -> Self {
         Self {
             name,
             entry,
@@ -40,7 +40,7 @@ impl DictEntry {
 struct FunctionFlow {
     dict_idx: usize,
     start: usize,
-    locals: Vec<String>,
+    locals: Vec<Xsubstr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -466,10 +466,10 @@ impl State {
         }
     }
 
-    fn next_name(&mut self) -> Xresult1<String> {
+    fn next_name(&mut self) -> Xresult1<Xsubstr> {
         if let Some(lex) = &mut self.ctx.source {
             if let Tok::Word(name) = lex.next()? {
-                return Ok(name.to_string());
+                return Ok(name);
             }
         }
         Err(Xerr::ExpectingName)
@@ -574,7 +574,7 @@ impl State {
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<Xref> {
         // shadow previous definition
         let a = self.alloc_cell(val)?;
-        self.dict_insert(DictEntry::new(name.to_string(), Entry::Variable(a)))?;
+        self.dict_insert(DictEntry::new(name.into(), Entry::Variable(a)))?;
         Ok(Xref::Heap(a))
     }
 
@@ -629,7 +629,7 @@ impl State {
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
         let word_addr = self.dict_insert(DictEntry::new(
-            name.to_string(),
+            name.into(),
             Entry::Function {
                 immediate: false,
                 xf: Xfn::Interp(fn_addr),
@@ -743,6 +743,13 @@ impl State {
 
     fn dict_find(&self, name: &str) -> Option<usize> {
         self.dict.iter().rposition(|e| e.name == name)
+    }
+
+    pub fn dict_get_help(&self, index: usize) -> Option<(&str, &str)> {
+        self.dict.get(index).map(|e| {
+            let h = e.help.as_ref().map(|s| s.as_str());
+            (e.name.as_str(), h.unwrap_or_default())
+        })
     }
 
     fn code_origin(&self) -> usize {
@@ -1564,7 +1571,7 @@ fn core_word_variable(xs: &mut State) -> Xresult {
 fn core_word_setvar(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     match xs.dict_entry(&name) {
-        None => Err(Xerr::UnknownWord(Xstr::from(name))),
+        None => Err(Xerr::UnknownWord(Xstr::from(name.as_str()))),
         Some(Entry::Variable(a)) => {
             let a = *a;
             xs.code_emit(Opcode::Store(a))
@@ -2013,7 +2020,7 @@ mod tests {
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(2), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval("x y"));
+        assert_eq!(Err(Xerr::UnknownWord(Xstr::from("x"))), xs.eval("x y"));
     }
 
     #[test]
@@ -2261,7 +2268,7 @@ mod tests {
     fn test_error_location() {
         let mut xs = State::boot().unwrap();
         xs.console = Some(String::new());
-        assert_eq!(Err(Xerr::UnknownWord("x".into())), xs.eval(" \r\n \r\n\n   x"));
+        assert_eq!(Err(Xerr::UnknownWord(Xstr::from("x"))), xs.eval(" \r\n \r\n\n   x"));
         let lines:Vec<&str> = xs.console().unwrap().lines().collect();
         assert_eq!(lines[0], "error: unknown word x");
         assert_eq!(lines[1], "<buffer#0>:4:4");
