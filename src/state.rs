@@ -173,7 +173,7 @@ pub struct State {
     special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
-    reverse_log: Option<Vec<ReverseStep>>,
+    pub reverse_log: Option<Vec<ReverseStep>>,
     console: Option<String>,
     last_error: Option<ErrorContext>,
     pub(crate) about_to_stop: bool,
@@ -520,6 +520,9 @@ impl State {
                 let val = self.pop_data()?;
                 self.code_emit_value(val)?;
             }
+        } else if self.ctx.mode == ContextMode::Eval {
+            // preserve current ip value
+            prev_ctx.ip = self.ctx.ip;
         }
         // assert_eq!(prev_ctx.ls_len, self.loops.len());
         // assert_eq!(prev_ctx.ss_ptr, self.special.len());
@@ -685,6 +688,7 @@ impl State {
         self.defword("set", core_word_set)?;
         self.defword("nth", core_word_nth)?;
         self.defword("get", core_word_get)?;
+        //self.defword(".", core_word_get_by_key)?;
         self.defword("assoc", core_word_assoc)?;
         self.defword("sort", core_word_sort)?;
         self.defword("sort-by-key", core_word_sort_by_key)?;
@@ -714,7 +718,6 @@ impl State {
         self.defword("assert", core_word_assert)?;
         self.defword("assert-eq", core_word_assert_eq)?;
         self.defword("exit", core_word_exit)?;
-        self.defword(".", core_word_display_top)?;
         self.defword(".s", core_word_display_stack)?;
         self.defword("println", core_word_println)?;
         self.defword("print", core_word_print)?;
