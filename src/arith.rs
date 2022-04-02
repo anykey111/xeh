@@ -205,9 +205,9 @@ mod tests {
     #[test]
     fn test_meta_arith() {
         let mut xs = State::boot().unwrap();
-        xs.eval("1 ok: with-meta 1.0 +").unwrap();
+        xs.eval("1 \"ok\" with-meta 1.0 +").unwrap();
         assert_eq!(Ok(Cell::Real(2.0)), xs.pop_data());
-        xs.eval("2 ok: with-meta 1 +").unwrap();
+        xs.eval("2 [ ] with-meta 1 +").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
     }
 

@@ -458,15 +458,14 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
 
 fn bitstr_meta(len: usize, bo: Option<Xbyteorder>, signed: bool) -> Cell {
     let mut v = Xvec::new();
-    v.push_back_mut(Cell::new_key("len"));
     v.push_back_mut(Cell::from(len));
     if bo == Some(Xbyteorder::Big) {
-        v.push_back_mut(Cell::new_key("big"));
-        v.push_back_mut(TRUE);
+        let s = Xstr::from("big");
+        v.push_back_mut(Cell::Str(s));
     }
     if signed {
-        v.push_back_mut(Cell::new_key("signed"));
-        v.push_back_mut(TRUE);
+        let s = Xstr::from("signed");
+        v.push_back_mut(Cell::Str(s));
     }
     Cell::from(v)
 }

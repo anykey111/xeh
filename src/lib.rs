@@ -92,14 +92,6 @@ pub mod c_api {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_key(x: *const Xcell) -> bool {
-        match *x {
-            Xcell::Key(_) => true,
-            _ => false
-        }
-    }
-
-    #[no_mangle]
     pub unsafe extern "C" fn xeh_is_vector(x: *const Xcell) -> bool {
         match *x {
             Xcell::Vector(_) => true,

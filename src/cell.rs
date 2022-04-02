@@ -51,7 +51,6 @@ pub enum Cell {
     Int(Xint),
     Real(Xreal),
     Str(Xstr),
-    Key(Xstr),
     Vector(Xvec),
     Fun(Xfn),
     Bitstr(Xbitstr),
@@ -82,7 +81,6 @@ impl fmt::Debug for Cell {
             },
             Cell::Real(r) => write!(f, "{:0.1}", r),
             Cell::Str(s) => write!(f, "{}", s),
-            Cell::Key(k) => write!(f, "{}", k),
             Cell::Vector(v) => {
                 f.write_str("[ ")?;
                 for x in v {
@@ -130,7 +128,6 @@ impl PartialEq for Cell {
             (Cell::Bitstr(a), Cell::Bitstr(b)) => a == b,
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
-            (Cell::Key(a), Cell::Key(b)) => a == b,
             _ => false,
         }
     }
@@ -144,7 +141,6 @@ impl PartialOrd for Cell {
             (Cell::Int(a), Cell::Int(b)) => a.partial_cmp(b),
             (Cell::Real(a), Cell::Real(b)) => a.partial_cmp(b),
             (Cell::Str(a), Cell::Str(b)) => a.partial_cmp(b),
-            (Cell::Key(a), Cell::Key(b)) => a.partial_cmp(b),
             _ => None,
         }
     }
@@ -165,7 +161,6 @@ impl Cell {
             Cell::Int{..} => "int",
             Cell::Real{..} => "real",
             Cell::Str{..} => "str",
-            Cell::Key{..} => "key",
             Cell::Vector{..} => "vec",
             Cell::Fun{..} => "fun",
             Cell::Bitstr{..} => "bitstr",
@@ -178,13 +173,6 @@ impl Cell {
         match self.value() {
             Cell::Nil | Cell::Int(0) => false,
             _ => true,
-        }
-    }
-
-    pub fn is_key(&self) -> bool {
-        match self.value() {
-            Cell::Key(_) => true,
-            _ => false,
         }
     }
 
@@ -269,10 +257,6 @@ impl Cell {
             Cell::Bitstr(s) => Ok(s.clone()),
             _ => Err(Xerr::TypeError),
         }
-    }
-
-    pub fn new_key(k: &str) -> Cell {
-        Cell::Key(Xstr::from(k))
     }
 
     pub fn new_str(k: &str) -> Cell {
