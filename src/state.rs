@@ -561,13 +561,13 @@ impl State {
         }
     }
 
-    pub fn start_reverse_debugging(&mut self) {
+    pub fn start_recording(&mut self) {
         if self.reverse_log.is_none() {
             self.reverse_log = Some(Vec::default());
         }
     }
 
-    pub fn stop_reverse_debugging(&mut self) {
+    pub fn stop_recording(&mut self) {
         self.reverse_log = None;
     }
 
@@ -689,11 +689,10 @@ impl State {
         self.defword("set", core_word_set)?;
         self.defword("nth", core_word_nth)?;
         self.defword("get", core_word_get)?;
-        //self.defword(".", core_word_get_by_key)?;
         self.defword("assoc", core_word_assoc)?;
         self.defword("sort", core_word_sort)?;
         self.defword("sort-by-key", core_word_sort_by_key)?;
-        self.defword("rev", core_word_rev)?;
+        self.defword("reverse", core_word_reverse)?;
         self.defword("dup", |xs| xs.dup_data())?;
         self.defword("drop", |xs| xs.drop_data())?;
         self.defword("swap", |xs| xs.swap_data())?;
@@ -1793,7 +1792,7 @@ fn core_word_sort_by_key(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(sorted))
 }
 
-fn core_word_rev(xs: &mut State) -> Xresult {
+fn core_word_reverse(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
     let v = xs.pop_data()?.to_vector()?;
     let rv = Xvec::from_iter(v.iter().rev().cloned());
@@ -1824,10 +1823,6 @@ fn core_word_exit(xs: &mut State) -> Xresult {
     xs.about_to_stop = true;
     let code = xs.pop_data()?.to_isize()?;
     Err(Xerr::Exit(code))
-}
-
-fn core_word_display_top(xs: &mut State) -> Xresult {
-    core_word_println(xs)
 }
 
 fn core_word_display_stack(xs: &mut State) -> Xresult {
@@ -2220,7 +2215,7 @@ mod tests {
     #[test]
     fn test_rev() {
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 1 2 3 ] rev").unwrap();
+        xs.eval("[ 1 2 3 ] reverse").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(3));
         v.push_back_mut(Cell::Int(2));
@@ -2272,7 +2267,7 @@ mod tests {
     fn test_reverse_next() {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.rnext());
-        xs.start_reverse_debugging();
+        xs.start_recording();
         xs.compile(r#"
         100 4 /
         3 *
@@ -2314,7 +2309,7 @@ mod tests {
     fn test_reverse_vec() {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
-        xs.start_reverse_debugging();
+        xs.start_recording();
         xs.compile("[ 3 0 do i loop ] len").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
@@ -2336,7 +2331,7 @@ mod tests {
              xs.data_stack.clone(),
              xs.return_stack.clone());
         let mut xs = State::boot().unwrap();
-        xs.start_reverse_debugging();
+        xs.start_recording();
         xs.compile(r#"
        : tower-of-hanoi
             local aux

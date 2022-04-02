@@ -97,7 +97,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     }
     xs.load_help()?;
     if args.debug {
-        xs.start_reverse_debugging();
+        xs.start_recording();
     }
     for filename in args.sources.iter() {
         xs.compile_file(filename)?;
