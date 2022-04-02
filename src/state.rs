@@ -685,7 +685,7 @@ impl State {
         self.defword("i", core_word_counter_i)?;
         self.defword("j", core_word_counter_j)?;
         self.defword("k", core_word_counter_k)?;
-        self.defword("len", core_word_len)?;
+        self.defword("length", core_word_length)?;
         self.defword("set", core_word_set)?;
         self.defword("nth", core_word_nth)?;
         self.defword("get", core_word_get)?;
@@ -1684,7 +1684,7 @@ fn core_word_counter_k(xs: &mut State) -> Xresult {
     counter_value(xs, 2)
 }
 
-fn core_word_len(xs: &mut State) -> Xresult {
+fn core_word_length(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(x) => xs.push_data(Cell::from(x.len())),
         Cell::Str(x) => xs.push_data(Cell::from(x.len())),
@@ -2004,14 +2004,14 @@ mod tests {
     #[test]
     fn test_length() {
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 1 2 3 ] len").unwrap();
+        xs.eval("[ 1 2 3 ] length").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.eval("\"12345\" len").unwrap();
+        xs.eval("\"12345\" length").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("len");
+        let res = xs.eval("length");
         assert_eq!(Err(Xerr::StackUnderflow), res);
-        let res = xs.eval("1 len");
+        let res = xs.eval("1 length");
         assert_eq!(Err(Xerr::TypeError), res);
     }
 
@@ -2310,7 +2310,7 @@ mod tests {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
         xs.start_recording();
-        xs.compile("[ 3 0 do i loop ] len").unwrap();
+        xs.compile("[ 3 0 do i loop ] length").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
             while xs.ip() != xs.code.len() {
