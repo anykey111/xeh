@@ -21,8 +21,8 @@ macro_rules! def_data_word {
         $xs.defword(concat!("i", $n, "le"), |xs| read_signed(xs, $n, LITTLE))?;
         $xs.defword(concat!("i", $n, "be"), |xs| read_signed(xs, $n, BIG))?;
         $xs.defword(concat!("u", $n, "!"), |xs| pack_int(xs, $n))?;
-        $xs.defword(concat!("u", $n, "le>"), |xs| pack_int_bo(xs, $n, LITTLE))?;
-        $xs.defword(concat!("u", $n, "be>"), |xs| pack_int_bo(xs, $n, BIG))?;
+        $xs.defword(concat!("u", $n, "le!"), |xs| pack_int_bo(xs, $n, LITTLE))?;
+        $xs.defword(concat!("u", $n, "be!"), |xs| pack_int_bo(xs, $n, BIG))?;
         $xs.defword(concat!("i", $n, "!"), |xs| pack_int(xs, $n))?;
         $xs.defword(concat!("i", $n, "le!"), |xs| pack_int_bo(xs, $n, LITTLE))?;
         $xs.defword(concat!("i", $n, "be!"), |xs| pack_int_bo(xs, $n, BIG))?;
@@ -61,8 +61,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("native-endian", |xs| set_byteorder(xs, NATIVE))?;
-    xs.defword("?", bin_match)?;
-    
+    xs.defword("magic-bytes", bin_match)?;
+
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
     def_data_word!(xs, 32);
@@ -505,12 +505,12 @@ mod tests {
     fn test_bitstring_match() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
-        match xs.eval("\"124\" ?") {
+        match xs.eval("\"124\" magic-bytes") {
             Err(Xerr::BitMatchError(ctx)) => assert_eq!(16, ctx.2),
             other => panic!("{:?}", other),
         };
-        xs.eval("\"123\" ?").unwrap();
-        match xs.eval("[ 0 ] ?") {
+        xs.eval("\"123\" magic-bytes").unwrap();
+        match xs.eval("[ 0 ] magic-bytes") {
             Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
             other => panic!("{:?}", other),
         }
