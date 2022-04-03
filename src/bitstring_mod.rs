@@ -198,6 +198,19 @@ pub fn print_dump(xs: &mut Xstate, rows: usize, ncols: usize) -> Xresult {
     bitstr_dump_range(xs, start..end, ncols)
 }
 
+pub fn byte_to_dump_char(x: u8, use_braille: bool) -> char {
+    if use_braille {
+        crate::braille_dump::TAB[x as usize]
+    } else {
+        let c = std::char::from_u32(x as u32).unwrap();
+        if c.is_ascii_graphic() {
+            c
+        } else {
+            '.'
+        }
+    }
+}
+
 fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
     let mut input = bitstr_input(xs)?.clone();
     let marker = input.start();
@@ -211,27 +224,23 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
     let mut ascii  = String::new();
     let mut it = part.iter8();
     while pos < part.end() {
-        write_dump_position(&mut buf, pos, part.end());
+        write_dump_position(&mut buf, pos);
         buf.push(':');
         for _ in 0..ncols {
             if let Some((x, nbits)) = it.next() {
                 buf.push(if pos <= marker && marker <= (pos + nbits as usize) { '*' } else { ' ' });
                 write!(buf, "{:02x}", x).unwrap();
                 pos += nbits as usize;
-                let c = std::char::from_u32(x as u32).unwrap();
-                if c.is_ascii_graphic() {
-                    ascii.push(c);
-                } else {
-                    ascii.push('.');
-                }
+                ascii.push(byte_to_dump_char(x, true));
             } else {
                 hex.push_str("  ");
+                ascii.push(' ');
             }
         }
         buf.push_str(&hex);
-        buf.push_str(" | ");
+        buf.push_str(" |");
         buf.push_str(&ascii);
-        buf.push('\n');
+        buf.push_str("|\n");
         xs.print(&buf);
         buf.clear();
         hex.clear();
@@ -240,20 +249,11 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
     OK
 }
     
-fn write_dump_position(buf: &mut String, start: usize, end: usize) {
+fn write_dump_position(buf: &mut String, start: usize) {
     let pos = start / 8;
-    let max = end / 8;
-    if max <= 0xff {
-        write!(buf, "{:02x}", pos).unwrap();
-    } else if max <= 0xffff {
-        write!(buf, "{:04x}", pos).unwrap();
-    } else if max <= 0xffffff {
-        write!(buf, "{:06x}", pos).unwrap();
-    } else {
-        write!(buf, "{:08x}", pos).unwrap();
-    }
+    write!(buf, "{:05x}", pos).unwrap();
     if start % 8 > 0 {
-        write!(buf, ".{}", start % 8).unwrap();
+        write!(buf, ",{}", start % 8).unwrap();
     }
 }
 
