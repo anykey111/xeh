@@ -238,9 +238,9 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
             }
         }
         buf.push_str(&hex);
-        buf.push_str(" |");
+        buf.push_str("  ");
         buf.push_str(&ascii);
-        buf.push_str("|\n");
+        buf.push_str("\n");
         xs.print(&buf);
         buf.clear();
         hex.clear();
