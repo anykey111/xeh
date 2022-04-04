@@ -1,6 +1,6 @@
 big-endian
 
-[ "NES" 0x1a ] ?
+[ "NES" 0x1a ] magic-bytes
 u8 var prg-len
 u8 var chr-len
 u8 var flags6
@@ -14,7 +14,7 @@ flags6 0b100 band if
   512
 else
   0
-then bytes var tainer-data
+endif bytes var tainer-data
 
 offset var prg-offset
 prg-len 16384 * bytes var prg-data
@@ -24,12 +24,12 @@ chr-len 8192 * bytes var chr-data
 ( 8 8 * ) var tile-len
 
 : nes-tile-read
-  [ tile-len for 1 uint loop ] local plane1
-  [ tile-len for 1 uint loop ] local plane2
+  [ tile-len 0 do 1 uint loop ] local plane1
+  [ tile-len 0 do 1 uint loop ] local plane2
   [
-    tile-len for
-      plane1 I nth
-      plane2 I nth 1 bshl
+    tile-len 0 do
+      plane1 i get
+      plane2 i get 1 bshl
       bor
     loop
   ]
@@ -39,13 +39,13 @@ chr-len 8192 * bytes var chr-data
   8 * local screen-y
   8 * local screen-x
   local tile
-  tile-len for
+  tile-len 0 do
     # set palette index
-    tile I nth d2-color!
+    tile i get d2-color!
     # x
-    screen-x I 8 rem +
+    screen-x i 8 rem +
     # y
-    screen-y I 8 / +
+    screen-y i 8 / +
     d2-data!
   loop
 ;
@@ -54,10 +54,10 @@ chr-len 8192 * bytes var chr-data
   256 256 d2-resize
   [ 0xffE0E0E0 0xffC0C0C0 0xffA0A0A0 0xff808080 ] d2-palette!
   remain ( 16 8 * ) / local ntiles
-  ntiles for
+  ntiles 0 do
     nes-tile-read
-    I 16 rem
-    I 16 /
+    i 16 rem
+    i 16 /
     nes-tile-draw
   loop
 ;
