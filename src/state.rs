@@ -674,7 +674,7 @@ impl State {
         self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
-        self.def_immediate(":=", core_word_setvar)?;
+        self.def_immediate("->", core_word_setvar)?;
         self.def_immediate("nil", core_word_nil)?;
         self.def_immediate("(", core_word_nested_begin)?;
         self.def_immediate(")", core_word_nested_end)?;
@@ -1922,7 +1922,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 var x begin x while 0 := x repeat").unwrap();
+        xs.eval("1 var x begin x while 0 -> x repeat").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin endif repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));
@@ -2067,7 +2067,7 @@ mod tests {
         xs.defvar("Y", Cell::Nil).unwrap();
         xs.eval("4 var Z").unwrap();
         let z = xs.defvar("Z", Cell::Nil).unwrap();
-        xs.eval("10 := Z").unwrap();
+        xs.eval("10 -> Z").unwrap();
         assert_eq!(Ok(&Cell::Int(10)), xs.get_var(z));
     }
 
