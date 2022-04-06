@@ -198,16 +198,12 @@ pub fn print_dump(xs: &mut Xstate, rows: usize, ncols: usize) -> Xresult {
     bitstr_dump_range(xs, start..end, ncols)
 }
 
-pub fn byte_to_dump_char(x: u8, use_braille: bool) -> char {
-    if use_braille {
-        crate::braille_dump::TAB[x as usize]
+pub fn byte_to_dump_char(x: u8) -> char {
+    let c = std::char::from_u32(x as u32).unwrap();
+    if c.is_ascii_graphic() {
+        c
     } else {
-        let c = std::char::from_u32(x as u32).unwrap();
-        if c.is_ascii_graphic() {
-            c
-        } else {
-            '.'
-        }
+        '.'
     }
 }
 
@@ -231,7 +227,7 @@ fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresul
                 buf.push(if pos <= marker && marker <= (pos + nbits as usize) { '*' } else { ' ' });
                 write!(buf, "{:02x}", x).unwrap();
                 pos += nbits as usize;
-                ascii.push(byte_to_dump_char(x, true));
+                ascii.push(byte_to_dump_char(x));
             } else {
                 hex.push_str("  ");
                 ascii.push(' ');

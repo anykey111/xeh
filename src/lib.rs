@@ -1,6 +1,6 @@
 mod arith;
 pub mod bitstring;
-mod bitstring_mod;
+pub mod bitstring_mod;
 pub mod cell;
 pub mod error;
 pub mod lex;
@@ -10,7 +10,6 @@ pub mod repl;
 pub mod state;
 mod file;
 pub mod d2_plugin;
-mod braille_dump;
 
 pub mod prelude {
     pub use std::convert::TryInto;

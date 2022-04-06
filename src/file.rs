@@ -5,16 +5,22 @@ use crate::prelude::*;
 use std::fs::File;
 use std::{fs::OpenOptions, io::BufWriter, io::Write};
 
+pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
+    Xerr::IOError {
+        filename,
+        reason: Xstr::from(e.to_string()),
+    }
+}
+
+
 #[cfg(feature = "mmap")]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     let file = File::open(&path).map_err(|e| {
-        xs.log_error(format!("{}: {}", path, e));
-        Xerr::IOError
+        ioerror_with_path(Xstr::from(path), &e)
     })?;
     let (mm, slice) = unsafe {
         let mm = Mmap::map(&file).map_err(|e| {
-            xs.log_error(format!("{}: {}", path, e));
-            Xerr::IOError
+            ioerror_with_path(Xstr::from(path), &e)
         })?;
         let ptr = mm.as_ptr();
         let slice = std::slice::from_raw_parts(ptr, mm.len());
@@ -28,13 +34,11 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     use std::io::Read;
     let mut file = File::open(path).map_err(|e| {
-        xs.log_error(format!("{}: {}", path, e));
-        Xerr::IOError
+        ioerror_with_path(Xstr::from(path), &e)
     })?;
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).map_err(|e| {
-        xs.log_error(format!("{}: {}", path, e));
-        Xerr::IOError
+        ioerror_with_path(Xstr::from(path), &e)
     })?;
     xs.set_binary_input(Xbitstr::from(buf))
 }
@@ -51,20 +55,17 @@ pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
             .open(path.as_str())
     };
     let mut file = open().map_err(|e| {
-        xs.log_error(format!("{}: {}", path, e));
-        Xerr::IOError
+        ioerror_with_path(path.clone(), &e)
     })?;
     if s.is_bytestring() {
         file.write_all(s.slice()).map_err(|e| {
-            xs.log_error(format!("{}: {}", path, e));
-            Xerr::IOError
+            ioerror_with_path(path.clone(), &e)
         })?;
     } else {
         let mut buf = BufWriter::new(file);
         for x in s.iter8() {
             buf.write_all(&[x.0]).map_err(|e| {
-                xs.log_error(format!("{}: {}", path, e));
-                Xerr::IOError
+                ioerror_with_path(path.clone(), &e)
             })?;
         }
     }
