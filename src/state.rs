@@ -1485,10 +1485,10 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_begin(xs: &mut State) -> Xresult {
-    let name = xs.next_name()?;
-    let start = xs.code_origin();
     // jump over function body
+    let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(0))?;
+    let name = xs.next_name()?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
     let dict_idx = xs.dict_insert(DictEntry::new(
