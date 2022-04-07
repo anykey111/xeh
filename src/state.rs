@@ -226,7 +226,7 @@ impl State {
                 }).map(|e| e.name.as_str()).unwrap_or_default();
                 format!("nativecall {:#x} # {}" , x.0 as usize, name)
             },
-            Opcode::Unresolved(name) => format!("unresolved {:?}", &name),
+            Opcode::Resolve(name) => format!("resolve    {:?}", &name),
             Opcode::Ret => format!("ret"),
             Opcode::JumpIf(offs) => format!("jumpif     #{:#05x}", jumpaddr(ip, offs)),
             Opcode::JumpIfNot(offs) => format!("jumpifnot  {:#05x}", jumpaddr(ip, offs)),
@@ -426,7 +426,7 @@ impl State {
     fn code_emit_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
             None =>
-                self.code_emit(Opcode::Unresolved(Xstr::from(name.as_str()))),
+                self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
 
             Some(Entry::Variable(a)) => {
                 let a = *a;
@@ -850,23 +850,26 @@ impl State {
                 let frame = self.pop_return()?;
                 self.set_ip(frame.return_to)
             }
-            Opcode::Unresolved(ref name) => match self.dict_entry(&name) {
+            Opcode::Resolve(ref name) => match self.dict_entry(&name) {
                 None => Err(Xerr::UnknownWord(name.clone())),
                 Some(Entry::Variable(a)) => {
                     let a = *a;
-                    self.backpatch(ip, Opcode::Load(a))
+                    self.backpatch(ip, Opcode::Load(a))?;
+                    self.fetch_and_run()
                 }
                 Some(Entry::Function {
                     xf: Xfn::Interp(x), ..
                 }) => {
                     let x = *x;
-                    self.backpatch(ip, Opcode::Call(x))
+                    self.backpatch(ip, Opcode::Call(x))?;
+                    self.fetch_and_run()
                 }
                 Some(Entry::Function {
                     xf: Xfn::Native(x), ..
                 }) => {
                     let x = *x;
-                    self.backpatch(ip, Opcode::NativeCall(x))
+                    self.backpatch(ip, Opcode::NativeCall(x))?;
+                    self.fetch_and_run()
                 }
             },
             Opcode::LoadInt(n) => {
@@ -936,7 +939,9 @@ impl State {
 
     pub fn next(&mut self) -> Xresult {
         if self.ip() < self.code.len() {
-            self.fetch_and_run()?;
+            if let Err(e) = self.fetch_and_run() {
+                self.last_error = Some(self.error_context(e));
+            }
         }
         OK
     }
