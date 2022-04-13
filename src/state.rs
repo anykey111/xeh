@@ -696,12 +696,12 @@ impl State {
         self.defword("<", core_word_less_then)?;
         self.defword("=", core_word_eq)?;
         self.defword("rem", core_word_rem)?;
-        self.defword("band", core_word_bitand)?;
-        self.defword("bor", core_word_bitor)?;
-        self.defword("bxor", core_word_bitxor)?;
-        self.defword("bshl", core_word_bitshl)?;
-        self.defword("bshr", core_word_bitshr)?;
-        self.defword("bnot", core_word_bitnot)?;
+        self.defword("and", core_word_bitand)?;
+        self.defword("or", core_word_bitor)?;
+        self.defword("xor", core_word_bitxor)?;
+        self.defword("shl", core_word_bitshl)?;
+        self.defword("shr", core_word_bitshr)?;
+        self.defword("not", core_word_bitnot)?;
         self.defword("random", core_word_random)?;
         self.defword("round", core_word_round)?;
         self.defword("assert", core_word_assert)?;
