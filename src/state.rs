@@ -810,7 +810,7 @@ impl State {
     }
 
     pub fn run(&mut self) -> Xresult {
-        while self.ip() < self.code.len() {
+        while self.is_running() {
             self.fetch_and_run()?;
         }
         OK
@@ -938,7 +938,7 @@ impl State {
     }
 
     pub fn next(&mut self) -> Xresult {
-        if self.ip() < self.code.len() {
+        if self.is_running() {
             if let Err(e) = self.fetch_and_run() {
                 self.last_error = Some(self.error_context(e));
             }
@@ -1071,6 +1071,10 @@ impl State {
 
     pub fn ip(&self) -> usize {
         self.ctx.ip
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.ip() < self.code.len()
     }
 
     pub fn bytecode(&self) -> &[Opcode] {
