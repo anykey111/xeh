@@ -32,6 +32,7 @@ pub enum Xerr {
     BitstrParseError(Xstr, usize),
     UnalignedBitstr,
     InvalidFloatLength(usize),
+    FromUtf8Error,
     // Stop interpreter execution
     Exit(isize),
 }
@@ -91,6 +92,9 @@ impl fmt::Debug for Xerr {
             }
             Xerr::BitstrParseError(_, pos) => {
                 writeln!(f, "char parse error at offset {}", pos)
+            }
+            Xerr::FromUtf8Error => {
+                writeln!(f, "utf8 parse error")
             }
         }
     }

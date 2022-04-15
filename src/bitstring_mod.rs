@@ -65,6 +65,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bin>bitstr", bin_to_bitstr)?;
     xs.defword("bitstr>bin", bitstr_to_bin)?;
     xs.defword(">bitstr", to_bitstring)?;
+    xs.defword("bitstr>utf8", bitstr_to_utf8)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("native-endian", |xs| set_byteorder(xs, NATIVE))?;
@@ -345,6 +346,14 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let s = bitstring_from(val)?;
     xs.push_data(Cell::Bitstr(s))
+}
+
+fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
+    let bs = xs.pop_data()?.to_bitstring()?;
+    match String::from_utf8(bs.to_bytes()) {
+        Ok(s) => xs.push_data(Cell::from(s)),
+        Err(_) => Err(Xerr::FromUtf8Error),
+    }
 }
 
 pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
@@ -727,6 +736,15 @@ mod tests {
     }
 
     #[test]
+    fn test_bitstr_to_utf8() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" \"just text\" >bitstr bitstr>utf8").unwrap();
+        assert_eq!(Ok(Xstr::from("just text")), xs.pop_data().unwrap().to_string());
+        let res = xs.eval(" [ \"just  text\" 0xff 0xff 0xff ] >bitstr bitstr>utf8");
+        assert!(res.is_err());
+    }
+
+    #[test]
     fn test_bitstr_to_bin() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(" \"faee\" hex>bitstr bitstr>hex").unwrap();
@@ -762,6 +780,9 @@ mod tests {
         xs.eval(" [ 0b101 ] >bitstr [ 0b110 ] >bitstr bitstr-xor").unwrap();
         let res = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(res.to_bytes(), vec![0b101 ^ 0b110]);
+        xs.eval(" [ 0xaa 0xbb 0xcc ] >bitstr [ 0x11 ] >bitstr bitstr-xor").unwrap();
+        let res = xs.pop_data().unwrap().to_bitstring().unwrap();
+        assert_eq!(res.to_bytes(), vec![0xaa ^ 0x11, 0xbb ^ 0x11, 0xcc ^ 0x11]);
     }
 
     #[test]
