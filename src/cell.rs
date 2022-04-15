@@ -349,6 +349,12 @@ impl From<&str> for Cell {
     }
 }
 
+impl From<String> for Cell {
+    fn from(x: String) -> Self {
+        Cell::Str(Xstr::from(x))
+    }
+}
+
 use std::convert::TryInto;
 
 impl TryInto<f64> for Cell {

@@ -57,6 +57,13 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("mb>", to_num_mbytes)?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-invert", bitstring_invert)?;
+    xs.defword("bitstr-and", bitstring_and)?;
+    xs.defword("bitstr-or", bitstring_or)?;
+    xs.defword("bitstr-xor", bitstring_xor)?;
+    xs.defword("hex>bitstr", hex_to_bitstr)?;
+    xs.defword("bitstr>hex", bitstr_to_hex)?;
+    xs.defword("bin>bitstr", bin_to_bitstr)?;
+    xs.defword("bitstr>bin", bitstr_to_bin)?;
     xs.defword(">bitstr", to_bitstring)?;
     xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
@@ -283,6 +290,56 @@ fn bitstring_invert(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_bitstring()?;
     xs.push_data(Cell::Bitstr(s.invert()))
 }
+
+fn bitstring_zip_with(xs: &mut Xstate, op: fn(u8, u8) -> u8) -> Xresult {
+    let sb = xs.pop_data()?.to_bitstring()?;
+    let sa = xs.pop_data()?.to_bitstring()?;
+    let mut tmp = BitvecBuilder::default();
+    for (a, b) in sa.bits().zip(sb.bits().cycle()) {
+        tmp.append_bit(op(a, b));
+    }
+    let res = Cell::Bitstr(tmp.finish());
+    xs.push_data(res)
+}
+
+fn bitstring_and(xs: &mut Xstate) -> Xresult {
+    bitstring_zip_with(xs, std::ops::BitAnd::bitand)
+}
+
+fn bitstring_or(xs: &mut Xstate) -> Xresult {
+    bitstring_zip_with(xs, std::ops::BitOr::bitor)
+}
+
+fn bitstring_xor(xs: &mut Xstate) -> Xresult {
+    bitstring_zip_with(xs, std::ops::BitXor::bitxor)
+}
+
+fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
+    let s = xs.pop_data()?.to_string()?;
+    match Bitstring::from_hex_str(&s) {
+        Ok(bs) => xs.push_data(Cell::from(bs)),
+        Err(pos) => Err(Xerr::BitstrParseError(s, pos)),
+    }
+}
+
+fn bitstr_to_hex(xs: &mut Xstate) -> Xresult {
+    let bs = xs.pop_data()?.to_bitstring()?;
+    xs.push_data(Cell::from(bs.to_hex_string()))
+}
+
+fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
+    let s = xs.pop_data()?.to_string()?;
+    match Bitstring::from_bin_str(&s) {
+        Ok(bs) => xs.push_data(Cell::from(bs)),
+        Err(pos) => Err(Xerr::BitstrParseError(s, pos)),
+    }
+}
+
+fn bitstr_to_bin(xs: &mut Xstate) -> Xresult {
+    let bs = xs.pop_data()?.to_bitstring()?;
+    xs.push_data(Cell::from(bs.to_bin_string()))
+}
+
 
 fn to_bitstring(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
@@ -670,6 +727,44 @@ mod tests {
     }
 
     #[test]
+    fn test_bitstr_to_bin() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" \"faee\" hex>bitstr bitstr>hex").unwrap();
+        assert_eq!(Ok(Xstr::from("faee")), xs.pop_data().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_bitstr_to_hex() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" \"1100\" bin>bitstr bitstr>bin").unwrap();
+        assert_eq!(Ok(Xstr::from("1100")), xs.pop_data().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_bitstr_and() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" [ 0b1001 ] >bitstr [ 0b0011 ] >bitstr bitstr-and").unwrap();
+        let res = xs.pop_data().unwrap().to_bitstring().unwrap();
+        assert_eq!(res.to_bytes(), vec![0b1001 & 0b0011]);
+    }
+
+    #[test]
+    fn test_bitstr_or() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" [ 0b101 ] >bitstr [ 0b011 ] >bitstr bitstr-or").unwrap();
+        let res = xs.pop_data().unwrap().to_bitstring().unwrap();
+        assert_eq!(res.to_bytes(), vec![0b101 | 0b011]);
+    }
+
+    #[test]
+    fn test_bitstr_xor() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval(" [ 0b101 ] >bitstr [ 0b110 ] >bitstr bitstr-xor").unwrap();
+        let res = xs.pop_data().unwrap().to_bitstring().unwrap();
+        assert_eq!(res.to_bytes(), vec![0b101 ^ 0b110]);
+    }
+
+    #[test]
     fn  test_bitstr_pack() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval("255 u8!").unwrap();
@@ -681,3 +776,4 @@ mod tests {
         
     }
 }
+

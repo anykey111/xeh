@@ -48,6 +48,31 @@ impl fmt::Debug for Bitstring {
     }
 }
 
+#[derive(Default)]
+pub struct BitvecBuilder {
+    len: usize,
+    data: Vec<u8>,
+}
+
+impl BitvecBuilder {
+    pub fn append_bit(&mut self, val: u8) {
+        assert!(val <= 1);
+        let idx = self.len / 8;
+        if self.data.len() == idx {
+            self.data.push(val << 7);
+        } else {
+            self.data[idx] |= val <<  (7 - (self.len % 8));
+        }
+        self.len += 1;
+    }
+
+    pub fn finish(self) -> Bitstring {
+        let mut res = Bitstring::from(self.data);
+        res.range.end = self.len;
+        res
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Bitstring {
     pub (crate) range: BitstringRange,
@@ -60,31 +85,16 @@ impl Bitstring {
     }
 
     pub fn from_bin_str(s: &str) -> Result<Bitstring, usize> {
-        let mut n = 0;
-        let mut buf = Vec::new();
+        let mut tmp = BitvecBuilder::default();
         for (pos, c) in s.chars().enumerate() {
-            let idx = n / 8;
             match c {
                 '_' | ' ' => continue,
-                '0' => {
-                    if buf.len() == idx {
-                        buf.push(0);
-                    }
-                    n += 1;
-                }
-                '1' => {
-                    if buf.len() == idx {
-                        buf.push(0);
-                    }
-                    buf[idx] |= 1u8 << (7 - (n % 8));
-                    n += 1;
-                }
+                '0' => tmp.append_bit(0),
+                '1' => tmp.append_bit(1),
                 _ => return Err(pos),
             }
         }
-        let mut result = Bitstring::from(buf);
-        result.range.end = n;
-        Ok(result)
+        Ok(tmp.finish())
     }
 
     pub fn to_bin_string(&self) -> String {
@@ -437,6 +447,7 @@ impl From<Vec<u8>> for Bitstring {
     }
 }
 
+#[derive(Clone)]
 pub struct Bits<'a> {
     pos: usize,
     bs: &'a Bitstring,

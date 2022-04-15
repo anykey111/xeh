@@ -29,6 +29,7 @@ pub enum Xerr {
     BitReadError(Box<(Xbitstr, usize)>),
     BitSeekError(Box<(Xbitstr, usize)>),
     BitMatchError(Box<(Xbitstr, Xbitstr, usize)>),
+    BitstrParseError(Xstr, usize),
     UnalignedBitstr,
     InvalidFloatLength(usize),
     // Stop interpreter execution
@@ -87,6 +88,9 @@ impl fmt::Debug for Xerr {
                     write!(f, " {:02X}", x)?
                 }
                 writeln!(f, " ] pattern at {}", pat.start() + at)
+            }
+            Xerr::BitstrParseError(_, pos) => {
+                writeln!(f, "char parse error at offset {}", pos)
             }
         }
     }
