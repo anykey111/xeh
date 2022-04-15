@@ -59,21 +59,28 @@ impl Bitstring {
         Self::default()
     }
 
-    pub fn from_str_bin(s: &str) -> Result<Bitstring, char> {
+    pub fn from_bin_str(s: &str) -> Result<Bitstring, usize> {
         let mut n = 0;
         let mut buf = Vec::new();
-        buf.resize_with(s.len(), || 0u8);
-        for c in s.chars() {
-            let i = 7 - (n % 8);
+        for (pos, c) in s.chars().enumerate() {
+            let idx = n / 8;
             match c {
                 '_' | ' ' => continue,
-                '0' => n += 1,
-                '1' => {
-                    buf[n / 8] |= 1u8 << i;
+                '0' => {
+                    if buf.len() == idx {
+                        buf.push(0);
+                    }
                     n += 1;
                 }
-                c => return Err(c),
-            };
+                '1' => {
+                    if buf.len() == idx {
+                        buf.push(0);
+                    }
+                    buf[idx] |= 1u8 << (7 - (n % 8));
+                    n += 1;
+                }
+                _ => return Err(pos),
+            }
         }
         let mut result = Bitstring::from(buf);
         result.range.end = n;
@@ -83,6 +90,40 @@ impl Bitstring {
     pub fn to_bin_string(&self) -> String {
         let mut s = String::with_capacity(self.len());
         s.extend(self.bits().map(|x| if x > 0 { '1' } else { '0' }));
+        return s;
+    }
+
+    pub fn from_hex_str(s: &str) -> Result<Bitstring, usize> {
+        let mut n = 0;
+        let mut buf = Vec::new();
+        for (pos, c) in s.chars().enumerate() {
+            if c == '_' || c == ' ' {
+                continue;
+            }
+            let val = c.to_digit(16).ok_or_else(|| pos)? as u8;
+            let idx = n / 8;
+            if buf.len() == idx {
+                buf.push(val << 4);
+            } else {
+                buf[idx] |= val;
+            }
+            n += 4;
+        }
+        let mut result = Bitstring::from(buf);
+        result.range.end = n;
+        Ok(result)
+    }
+
+    pub fn to_hex_string(&self) -> String {
+        let mut s = String::with_capacity(self.len() / 4 + 1);
+        for (val, len) in self.iter8() {
+            if len > 4 {
+                let c = char::from_digit(val as u32 >> 4, 16).unwrap();
+                s.push(c);
+            }
+            let c = char::from_digit(val as u32 & 0xf, 16).unwrap();
+            s.push(c);
+        }
         return s;
     }
 
@@ -535,7 +576,7 @@ mod tests {
         let b = s.read(4).unwrap();
         assert_eq!(b.append(&a).to_bytes(), vec![0x31]);
 
-        let mut s = Bitstring::from_str_bin("0_1000000_0_0111011_0_1111000").unwrap();
+        let mut s = Bitstring::from_bin_str("0_1000000_0_0111011_0_1111000").unwrap();
         s.read(1).unwrap();
         let a = s.read(7).unwrap();
         let a_bits: Vec<_> = a.bits().collect();
@@ -567,20 +608,20 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let f = Bitstring::from_str_bin("1111").unwrap();
+        let f = Bitstring::from_bin_str("1111").unwrap();
         let res  = Bitstring::from(vec![0xaa, 0xbb])
                     .insert(4, &f).unwrap()
                     .insert(16, &f).unwrap();
         assert_eq!(vec![0xaf, 0xab, 0xfb], res.to_bytes());
-        let z5 = Bitstring::from_str_bin("00000").unwrap();
-        let res = Bitstring::from_str_bin("111111").unwrap()
+        let z5 = Bitstring::from_bin_str("00000").unwrap();
+        let res = Bitstring::from_bin_str("111111").unwrap()
             .insert(3, &z5).unwrap();
-        assert_eq!(Bitstring::from_str_bin("11100000111").unwrap(), res);
+        assert_eq!(Bitstring::from_bin_str("11100000111").unwrap(), res);
     }
 
     #[test]
     fn test_invert() {
-        let mut a = Bitstring::from_str_bin("01111111_01111111").unwrap();
+        let mut a = Bitstring::from_bin_str("01111111_01111111").unwrap();
         let b = a.clone().invert();
         assert_eq!("1000000010000000", b.to_bin_string().as_str());
         assert_eq!("0111111101111111", b.invert().to_bin_string().as_str());
@@ -695,11 +736,27 @@ mod tests {
     }
 
     #[test]
-    fn test_from_str_bin() {
+    fn test_from_bin_str() {
         let s = "10111001001";
-        let bs1 = Bitstring::from_str_bin(s).unwrap();
-        assert_eq!(s.len(), bs1.len());
-        assert_eq!(s, bs1.to_bin_string().as_str());
+        let bs = Bitstring::from_bin_str(s).unwrap();
+        assert_eq!(bs.len(), s.len());
+        assert_eq!(s, bs.to_bin_string().as_str());
+        assert_eq!(Err(7), Bitstring::from_bin_str("11_11_02"));
+        let bs = Bitstring::from_bin_str("1 1 1 1 1 1 1").unwrap();
+        assert_eq!(*bs.data, vec![0xfe]);
+    }
+
+    #[test]
+    fn test_from_hex_str() {
+        let s = "fe1";
+        let bs = Bitstring::from_hex_str(s).unwrap();
+        assert_eq!(bs.len(), 12);
+        assert_eq!(bs.to_bytes(), vec![0xfe, 0x1]);
+        assert_eq!(bs.to_hex_string(), s);
+        let bs = Bitstring::from_hex_str("f f 00 E _ E 11").unwrap();
+        assert_eq!(bs.len(), 32);
+        assert_eq!(bs.to_bytes(), vec![0xff, 0x00, 0xee,0x11]);
+        assert_eq!(Err(1), Bitstring::from_hex_str("FX"));
     }
 
     #[test]
