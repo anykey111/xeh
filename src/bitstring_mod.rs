@@ -7,7 +7,6 @@ use crate::prelude::*;
 #[derive(Default, Clone)]
 pub struct BitstrMod {
     big_endian: Xref,
-    dump_start: Xref,
     input: Xref,
     input_deck: Xref,
 }
@@ -43,9 +42,8 @@ macro_rules! def_data_word_real {
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrMod::default();
     m.big_endian = xs.defvar("big-endian?", ZERO)?;
-    m.dump_start = xs.defvar("bitstr/dump-start", Cell::Int(0))?;
-    m.input = xs.defvar("bitstr/input", Cell::empty_bitstr())?;
-    m.input_deck = xs.defvar("bitstr/input-deck", Cell::empty_vec())?;
+    m.input = xs.defvar("bitstr-input", Cell::empty_bitstr())?;
+    m.input_deck = xs.defvar("bitstr-input-deck", Cell::empty_vec())?;
     xs.bitstr_mod = m;
 
     xs.defword("bits", bin_read_bitstring)?;
@@ -177,27 +175,16 @@ fn remain_bin(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::Int(n))
 }
 
-fn dump_start(xs: &mut Xstate) -> Xresult1<usize> {
-    xs.get_var(xs.bitstr_mod.dump_start)?.to_usize()
-}
-
-fn dump_start_move(xs: &mut Xstate, pos: usize) -> Xresult {
-    xs.set_var(xs.bitstr_mod.dump_start, Cell::from(pos))?;
-    OK
-}
-
 fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
     let start = xs.pop_data()?.to_usize()?;
     let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end, 8)?;
-    dump_start_move(xs, end)
+    bitstr_dump_range(xs, start..end, 8)
 }
 
 fn bitstr_dump(xs: &mut Xstate) -> Xresult {
-    let start = dump_start(xs)?;
+    let start = bitstr_input(xs)?.start();
     let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end, 8)?;
-    dump_start_move(xs, end)
+    bitstr_dump_range(xs, start..end, 8)
 }
 
 pub fn print_dump(xs: &mut Xstate, rows: usize, ncols: usize) -> Xresult {
@@ -653,14 +640,14 @@ mod tests {
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("bitstr/input").unwrap();
+        xs.eval("bitstr-input").unwrap();
         let s = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(vec![7], s.to_bytes());
-        xs.eval("bitstr-close bitstr/input").unwrap();
+        xs.eval("bitstr-close bitstr-input").unwrap();
         let s2 = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(0, s2.len());
         assert_eq!(Err(Xerr::ControlFlowError), xs.eval("bitstr-close"));
-        xs.eval("bitstr/input").unwrap();
+        xs.eval("bitstr-input").unwrap();
         let empty = xs.pop_data().unwrap().to_bitstring().unwrap(); 
         assert_eq!(0, empty.len());
     }
