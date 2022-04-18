@@ -188,19 +188,19 @@ pub struct State {
 
 impl State {
     
-    pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
+    pub fn fmt_cell(&self, val: &Cell) -> Xresult1<String> {
         let prefix = self
             .get_var(self.fmt_prefix)
             .map(|val| val.is_true())
             .unwrap_or(false);
         let s= match self.get_var(self.fmt_base)? {
-            Cell::Int(2) if prefix => format!("{:#2?}", val),
-            Cell::Int(2)  => format!("{:2?}", val),
-            Cell::Int(8) if prefix => format!("{:#8?}", val),
-            Cell::Int(8)  => format!("{:8?}", val),
-            Cell::Int(16) if prefix => format!("{:#16?}", val),
-            Cell::Int(16) => format!("{:16?}", val),
-            _ => format!("{:10?}", val),
+            Cell::Int(2) if prefix => format!("{:#.2?}", val),
+            Cell::Int(2)  => format!("{:.2?}", val),
+            Cell::Int(8) if prefix => format!("{:#.8?}", val),
+            Cell::Int(8)  => format!("{:.8?}", val),
+            Cell::Int(16) if prefix => format!("{:#.16?}", val),
+            Cell::Int(16) => format!("{:.16?}", val),
+            _ => format!("{:.10?}", val),
         };
         Ok(s)
     }
@@ -1758,7 +1758,7 @@ fn core_word_exit(xs: &mut State) -> Xresult {
 fn core_word_display_stack(xs: &mut State) -> Xresult {
     let mut buf = String::new();
     for x in xs.data_stack.iter().rev() {
-        let s = xs.format_cell(x)?;
+        let s = xs.fmt_cell(x)?;
         buf.push_str(&s);
         buf.push_str("\n");
     }
@@ -1773,7 +1773,7 @@ fn core_word_println(xs: &mut State) -> Xresult {
 
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    let s = xs.format_cell(&val)?;
+    let s = xs.fmt_cell(&val)?;
     xs.print(&s);
     OK
 }
