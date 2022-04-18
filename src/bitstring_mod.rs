@@ -42,8 +42,8 @@ macro_rules! def_data_word_real {
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrMod::default();
     m.big_endian = xs.defvar("big-endian?", ZERO)?;
-    m.input = xs.defvar("bitstr-input", Cell::empty_bitstr())?;
-    m.input_deck = xs.defvar("bitstr-input-deck", Cell::empty_vec())?;
+    m.input = xs.defvar("bitstr-input", Cell::from(Xbitstr::default()))?;
+    m.input_deck = xs.defvar("bitstr-input-deck", Cell::from(Xvec::new()))?;
     xs.bitstr_mod = m;
 
     xs.defword("bits", bin_read_bitstring)?;

@@ -715,6 +715,7 @@ impl State {
         self.defword("load", core_word_load)?;
         self.defword("tag", core_word_get_tag)?;
         self.defword("with-tag", core_word_with_tag)?;
+        self.defword("add-tag", core_word_add_tag)?;
         self.defword("HEX", core_word_hex)?;
         self.defword("DEC", core_word_decimal)?;
         self.defword("OCT", core_word_octal)?;
@@ -1819,6 +1820,12 @@ fn core_word_get_tag(xs: &mut State) -> Xresult {
 fn core_word_with_tag(xs: &mut State) -> Xresult {
     let tag = xs.pop_data()?;
     let val = xs.pop_data()?.with_tag(tag);
+    xs.push_data(val)
+}
+
+fn core_word_add_tag(xs: &mut State) -> Xresult {
+    let tag = xs.pop_data()?;
+    let val = xs.pop_data()?.multi_tag(tag);
     xs.push_data(val)
 }
 

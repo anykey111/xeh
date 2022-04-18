@@ -57,7 +57,7 @@ pub enum Cell {
     WithTag(std::rc::Rc<WithTag>),
 }
 
-use std::fmt::{self};
+use std::fmt;
 
 impl fmt::Debug for XfnPtr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -103,7 +103,7 @@ impl fmt::Debug for Cell {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
             },
-            Cell::WithTag(mc) => mc.value.fmt(f),
+            Cell::WithTag(rc) => rc.value.value().fmt(f)
         }
     }
 }
@@ -188,9 +188,30 @@ impl Cell {
         }))
     }
 
+    pub fn multi_tag(self, new_tag: Cell) -> Cell {
+        match self {
+            Cell::WithTag(rc) => {
+                let tags = match &rc.tag {
+                    Cell::Vector(v) => v.push_back(new_tag),
+                    c => {
+                        let mut v = Xvec::new();
+                        v.push_back_mut(c.clone());
+                        v.push_back_mut(new_tag);
+                        v
+                    }
+                };
+                rc.value.clone().with_tag(Cell::from(tags))
+            },
+            _ => {
+                let tags = Xvec::new().push_back(new_tag);
+                self.with_tag(Cell::from(tags))
+            }
+        }
+    }
+
     pub fn value(&self) -> &Cell {
         match self {
-            Cell::WithTag(rc) => &rc.value,
+            Cell::WithTag(rc) => rc.value.value(),
             _ => self,
         }
     }
@@ -256,18 +277,6 @@ impl Cell {
             Cell::Bitstr(s) => Ok(s.clone()),
             _ => Err(Xerr::TypeError),
         }
-    }
-
-    pub fn new_str(k: &str) -> Cell {
-        Cell::Str(Xstr::from(k))
-    }
-
-    pub fn empty_bitstr() -> Cell {
-        Cell::Bitstr(Xbitstr::default())
-    }
-
-    pub fn empty_vec() -> Cell {
-        Cell::Vector(Xvec::default())
     }
 
     pub fn from_any<T>(val: T) -> Self
@@ -438,6 +447,33 @@ mod tests {
         assert_eq!(&a, &b);
         let c = b.with_tag(ONE.clone());
         assert_eq!(&a, &c);
+    }
+
+    #[test]
+    fn test_with_tag() {
+        let tag_a = Cell::from("a");
+        let c = ONE.with_tag(tag_a.clone());
+        assert_eq!(Some(&tag_a), c.tag());
+        assert_eq!(ONE, c);
+    }
+
+    #[test]
+    fn test_multi_tag() {
+        let tag_a = Cell::from("a");
+        let tag_b = Cell::from("b");
+        let c = ONE.with_tag(tag_a.clone()).multi_tag(tag_b.clone());
+        let tags = Xvec::new().push_back(tag_a).push_back(tag_b);
+        assert_eq!(Some(&Cell::from(tags)), c.tag());
+        assert_eq!(ONE, c);
+    }
+
+    #[test]
+    fn test_multi_tag2() {
+        let tag_a = Cell::from("a");
+        let c = ZERO.multi_tag(tag_a.clone());
+        let tags = Xvec::new().push_back(tag_a);
+        assert_eq!(Some(&Cell::from(tags)), c.tag());
+        assert_eq!(ZERO, c);
     }
 
 }
