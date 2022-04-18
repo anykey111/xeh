@@ -713,8 +713,8 @@ impl State {
         self.defword("newline", core_word_newline)?;
         self.defword("file-write", crate::file::core_word_file_write)?;
         self.defword("load", core_word_load)?;
-        self.defword("meta", core_word_meta)?;
-        self.defword("with-meta", core_word_with_meta)?;
+        self.defword("tag", core_word_get_tag)?;
+        self.defword("with-tag", core_word_with_tag)?;
         self.defword("HEX", core_word_hex)?;
         self.defword("DEC", core_word_decimal)?;
         self.defword("OCT", core_word_octal)?;
@@ -1811,14 +1811,14 @@ fn core_word_load(xs: &mut State) -> Xresult {
     xs.compile_file(&path)
 }
 
-fn core_word_meta(xs: &mut State) -> Xresult {
-    let val = xs.top_data().and_then(|x| x.meta()).unwrap_or(&NIL).clone();
+fn core_word_get_tag(xs: &mut State) -> Xresult {
+    let val = xs.top_data().and_then(|x| x.tag()).unwrap_or(&NIL).clone();
     xs.push_data(val)
 }
 
-fn core_word_with_meta(xs: &mut State) -> Xresult {
-    let meta = xs.pop_data()?;
-    let val = xs.pop_data()?.with_meta(meta);
+fn core_word_with_tag(xs: &mut State) -> Xresult {
+    let tag = xs.pop_data()?;
+    let val = xs.pop_data()?.with_tag(tag);
     xs.push_data(val)
 }
 
@@ -2256,11 +2256,11 @@ mod tests {
     }
 
     #[test]
-    fn test_meta() {
+    fn test_tag() {
         let mut xs = State::boot().unwrap();
-        xs.eval(" 123 \"test\" with-meta").unwrap();
+        xs.eval(" 123 \"test\" with-tag").unwrap();
         assert_eq!(xs.top_data(), Some(&Cell::Int(123)));
-        xs.eval("meta").unwrap();
+        xs.eval("tag").unwrap();
         assert_eq!(xs.top_data(), Some(&Cell::Str(Xstr::from("test"))));
     }
 

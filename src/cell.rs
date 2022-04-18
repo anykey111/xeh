@@ -10,10 +10,9 @@ pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
 pub type Xbitstr = crate::bitstring::Bitstring;
 pub type Xcell = Cell;
-pub type Xmeta = std::rc::Rc<XcellWithMeta>;
 
-pub struct XcellWithMeta {
-    meta: Cell,
+pub struct WithTag {
+    tag: Cell,
     value: Cell,
 }
 
@@ -55,7 +54,7 @@ pub enum Cell {
     Fun(Xfn),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
-    WithMeta(Xmeta),
+    WithTag(std::rc::Rc<WithTag>),
 }
 
 use std::fmt::{self};
@@ -104,7 +103,7 @@ impl fmt::Debug for Cell {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
             },
-            Cell::WithMeta(mc) => mc.value.fmt(f),
+            Cell::WithTag(mc) => mc.value.fmt(f),
         }
     }
 }
@@ -165,7 +164,7 @@ impl Cell {
             Cell::Fun{..} => "fun",
             Cell::Bitstr{..} => "bitstr",
             Cell::AnyRc{..} => "any",
-            Cell::WithMeta{..} => "meta",
+            Cell::WithTag{..} => "tag",
         }
     }
 
@@ -176,22 +175,22 @@ impl Cell {
         }
     }
 
-    pub fn meta(&self) -> Option<&Cell> {
+    pub fn tag(&self) -> Option<&Cell> {
         match self {
-            Cell::WithMeta(mc) => Some(&mc.meta),
+            Cell::WithTag(rc) => Some(&rc.tag),
             _ => None,
         }
     }
 
-    pub fn with_meta(self, meta: Cell) -> Cell {
-        Cell::WithMeta(Xmeta::new(XcellWithMeta{
-            meta, value: self
+    pub fn with_tag(self, tag: Cell) -> Cell {
+        Cell::WithTag(std::rc::Rc::new(WithTag{
+            tag, value: self
         }))
     }
 
     pub fn value(&self) -> &Cell {
         match self {
-            Cell::WithMeta(rc) => &rc.value,
+            Cell::WithTag(rc) => &rc.value,
             _ => self,
         }
     }
@@ -427,17 +426,17 @@ mod tests {
         let a = Cell::from(33u8);
         let b = Cell::from(33u8);
         assert_eq!(&a, &b);
-        let c = b.with_meta(ZERO.clone());
+        let c = b.with_tag(ZERO.clone());
         assert_eq!(&a, &c);
         let a = Cell::from(32.0);
         let b = Cell::from(32.0);
         assert_eq!(&a, &b);
-        let c = b.with_meta(ONE.clone());
+        let c = b.with_tag(ONE.clone());
         assert_eq!(&a, &c);
         let a = Cell::from("asd");
         let b = Cell::from("asd");
         assert_eq!(&a, &b);
-        let c = b.with_meta(ONE.clone());
+        let c = b.with_tag(ONE.clone());
         assert_eq!(&a, &c);
     }
 
