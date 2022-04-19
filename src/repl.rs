@@ -64,7 +64,7 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
 }
 
 pub struct XcmdArgs {
-    pub debug: bool,
+    pub reverse_debug: bool,
     pub binary_path: Option<String>,
     pub sources: Vec<String>,
     pub eval: Option<String>,
@@ -74,20 +74,17 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     let mut opts = Options::new();
     opts.optopt("i", "", "input binary file ", "path");
     opts.optopt("e", "", "evaluate expression", "expression");
-    opts.optflag("d", "", "enable debugging");
+    opts.optflag("r", "", "reverse debugging");
     let it = std::env::args().skip(1);
     let matches = opts.parse(it).map_err(|e| {
         eprintln!("getopts: {}", e);
         Xerr::InputParseError
     })?;
-    let debug = matches.opt_present("d");
-    let binary_path = matches.opt_str("i");
-    let eval = matches.opt_str("e");
     Ok(XcmdArgs {
-        debug,
-        binary_path,
+        reverse_debug: matches.opt_present("r"),
+        binary_path: matches.opt_str("i"),
+        eval: matches.opt_str("e"),
         sources: matches.free,
-        eval,
     })
 }
 
@@ -96,7 +93,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         crate::file::load_binary(xs, path)?;
     }
     xs.load_help()?;
-    if args.debug {
+    if args.reverse_debug {
         xs.start_recording();
     }
     for filename in args.sources.iter() {

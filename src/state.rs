@@ -244,7 +244,7 @@ impl State {
         }
     }
 
-    fn error_context(&self, err: Xerr) -> ErrorContext {
+    pub fn error_context(&self, err: Xerr) -> ErrorContext {
         let is_lex_error = err == Xerr::ControlFlowError
             || err == Xerr::InputIncomplete
             || err == Xerr::ExpectingName
