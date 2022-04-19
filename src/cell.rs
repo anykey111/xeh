@@ -209,6 +209,14 @@ impl Cell {
         }
     }
 
+    pub fn find_tagged(&self, tag: &Cell) -> Option<&Cell> {
+        match self.tag()? {
+            Cell::Vector(v) => v.iter().find_map(|c| c.find_tagged(tag)),
+            t if t == tag => Some(self),
+            _ => None,
+        }
+    }
+
     pub fn value(&self) -> &Cell {
         match self {
             Cell::WithTag(rc) => rc.value.value(),
@@ -476,4 +484,18 @@ mod tests {
         assert_eq!(ZERO, c);
     }
 
+    #[test]
+    fn test_find_tagged() {
+        let color_name = Cell::from("red");
+        let color_tag = Cell::from("color");
+        let comment_text = Cell::from("some text");
+        let comment_tag = Cell::from("comment");
+        let tag1 = comment_text.clone().with_tag(comment_tag.clone());
+        let tag2 = color_name.clone().with_tag(color_tag.clone());
+        let val = ONE.multi_tag(tag1).multi_tag(tag2);
+        assert_eq!(Some(&comment_text), val.find_tagged(&comment_tag));
+        assert_eq!(Some(&color_name), val.find_tagged(&color_tag));
+        assert_eq!(None, val.find_tagged(&color_name));
+        assert_eq!(None, val.find_tagged(&comment_text));
+    }
 }

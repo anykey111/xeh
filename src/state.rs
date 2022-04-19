@@ -715,7 +715,9 @@ impl State {
         self.defword("load", core_word_load)?;
         self.defword("tag", core_word_get_tag)?;
         self.defword("with-tag", core_word_with_tag)?;
-        self.defword("add-tag", core_word_add_tag)?;
+        self.defword("multi-tag", core_word_multi_tag)?;
+        self.defword("find-tagged", core_word_find_tagged)?;
+        self.defword(".", core_word_find_tagged)?;
         self.defword("HEX", core_word_hex)?;
         self.defword("DEC", core_word_decimal)?;
         self.defword("OCT", core_word_octal)?;
@@ -1736,7 +1738,7 @@ fn core_word_assert(xs: &mut State) -> Xresult {
     if xs.pop_data()?.is_true() {
         OK
     } else {
-        Err(Xerr::DebugAssertion)
+        Err(Xerr::AssertFailed)
     }
 }
 
@@ -1746,7 +1748,7 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
     if a == b {
         OK
     } else {
-        Err(Xerr::DebugAssertion)
+        Err(Xerr::AssertEqFailed(a, b))
     }
 }
 
@@ -1823,10 +1825,16 @@ fn core_word_with_tag(xs: &mut State) -> Xresult {
     xs.push_data(val)
 }
 
-fn core_word_add_tag(xs: &mut State) -> Xresult {
+fn core_word_multi_tag(xs: &mut State) -> Xresult {
     let tag = xs.pop_data()?;
     let val = xs.pop_data()?.multi_tag(tag);
     xs.push_data(val)
+}
+
+fn core_word_find_tagged(xs: &mut State) -> Xresult {
+    let tag = xs.pop_data()?;
+    let result = xs.pop_data()?.find_tagged(&tag).unwrap_or(&NIL).clone();
+    xs.push_data(result)
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use crate::prelude::{Xbitstr, Xstr};
+use crate::prelude::{Xbitstr, Xstr,Cell};
 
 use std::fmt;
 
@@ -23,7 +23,8 @@ pub enum Xerr {
     ReadonlyAddress,
     IOError { filename: Xstr, reason: Xstr, },
     OutOfBounds,
-    DebugAssertion,
+    AssertFailed,
+    AssertEqFailed(Cell, Cell),
     InternalError,
     // bitstring errors
     BitReadError(Box<(Xbitstr, usize)>),
@@ -59,7 +60,12 @@ impl fmt::Debug for Xerr {
             Xerr::ReadonlyAddress => f.write_str("ReadonlyAddress"),
             Xerr::IOError { filename, reason } => writeln!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds => f.write_str("OutOfBounds"),
-            Xerr::DebugAssertion => f.write_str("DebugAssertion"),
+            Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
+            Xerr::AssertEqFailed(a, b) => {
+                writeln!(f, "assertion failed, two top stack values not equals")?;
+                writeln!(f, "[0] {:?}", a)?;
+                writeln!(f, "[1] {:?}", b)
+            },
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::UnalignedBitstr => f.write_str("UnalignedBitstr"),
             Xerr::InvalidFloatLength{..} => f.write_str("InvalidFloatLength"),
