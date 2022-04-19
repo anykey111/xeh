@@ -324,11 +324,15 @@ impl State {
     }
 
     pub fn compile_file(&mut self, path: &str) -> Xresult {
+        self.build_file(path, ContextMode::Compile)
+    }
+
+    fn build_file(&mut self, path: &str, mode: ContextMode) -> Xresult {
         let buf =     std::fs::read_to_string(path).map_err(|e| {
             crate::file::ioerror_with_path(Xstr::from(path), &e)
         })?;
         let src = self.add_source(Xstr::from(buf), Some(path));
-        self.build_source(src, ContextMode::Compile)
+        self.build_source(src, mode)
     }
 
     pub fn compile(&mut self, source: &str) -> Xresult {
@@ -2273,10 +2277,7 @@ mod tests {
     #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
-        xs.eval(" 123 \"test\" with-tag").unwrap();
-        assert_eq!(xs.top_data(), Some(&Cell::Int(123)));
-        xs.eval("tag").unwrap();
-        assert_eq!(xs.top_data(), Some(&Cell::Str(Xstr::from("test"))));
+        xs.eval(include_str!("test-tag.xs")).unwrap();
     }
 
     #[test]
