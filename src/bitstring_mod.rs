@@ -8,7 +8,7 @@ use crate::prelude::*;
 pub struct BitstrMod {
     big_endian: Xref,
     input: Xref,
-    input_deck: Xref,
+    stash: Xref,
 }
 
 macro_rules! def_data_word {
@@ -43,7 +43,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrMod::default();
     m.big_endian = xs.defvar("big-endian?", ZERO)?;
     m.input = xs.defvar("bitstr-input", Cell::from(Xbitstr::default()))?;
-    m.input_deck = xs.defvar("bitstr-input-deck", Cell::from(Xvec::new()))?;
+    m.stash = xs.defvar("binary-stash", Cell::from(Xvec::new()))?;
     xs.bitstr_mod = m;
 
     xs.defword("bits", bin_read_bitstring)?;
@@ -99,8 +99,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("find", find_bin)?;
     xs.defword("dump", bitstr_dump)?;
     xs.defword("dump-at", bitstr_dump_at)?;
-    xs.defword("bitstr-open", bitstr_open)?;
-    xs.defword("bitstr-close", bitstr_close)?;
+    xs.defword("open-bitstr", bitstr_open)?;
+    xs.defword("close-bitstr", bitstr_close)?;
     OK
 }
 
@@ -250,19 +250,19 @@ fn write_dump_position(buf: &mut String, start: usize) {
 
 pub(crate) fn bitstr_open(xs: &mut Xstate) -> Xresult {
     let new_bin = bitstring_from(xs.pop_data()?)?;
-    let old = xs.set_var(xs.bitstr_mod.input, Cell::from(new_bin))?;
-    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.to_vector()?;
-    deck.push_back_mut(old);
-    xs.set_var(xs.bitstr_mod.input_deck, Cell::from(deck))?;
+    let curr_bin = xs.set_var(xs.bitstr_mod.input, Cell::from(new_bin))?;
+    let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
+    let new_stash = stash.push_back(curr_bin);
+    xs.set_var(xs.bitstr_mod.stash, Cell::from(new_stash))?;
     OK
 }
 
 fn bitstr_close(xs: &mut Xstate) -> Xresult {
-    let mut deck = xs.get_var(xs.bitstr_mod.input_deck)?.to_vector()?;
-    let bin = deck.last().ok_or_else(|| Xerr::ControlFlowError)?.clone();
-    deck.drop_last_mut();
-    xs.set_var(xs.bitstr_mod.input_deck, Cell::from(deck))?;
-    xs.set_var(xs.bitstr_mod.input, bin)?;
+    let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
+    let prev_bin = stash.last().ok_or_else(|| Xerr::OutOfBounds)?.clone();
+    let new_stash = stash.drop_last().unwrap();
+    xs.set_var(xs.bitstr_mod.stash, Cell::from(new_stash))?;
+    xs.set_var(xs.bitstr_mod.input, prev_bin)?;
     OK
 }
 
@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn test_int_uint() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 0xff 0xff ] bitstr-open 8 uint 8 int").unwrap();
+        xs.eval("[ 0xff 0xff ] open-bitstr 8 uint 8 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
@@ -630,6 +630,7 @@ mod tests {
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(include_str!("test-binary-input.xs")).unwrap();
+        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("drop-binary"));
     }
 
     #[test]
@@ -689,7 +690,7 @@ mod tests {
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 33 55 77 ] bitstr-open [ 77 ] find").unwrap();
+        xs.eval("[ 33 55 77 ] open-bitstr [ 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
         xs.eval("[ 55 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
@@ -698,7 +699,7 @@ mod tests {
         xs.eval("[ 56 ] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
         assert_eq!(Err(Xerr::UnalignedBitstr), xs.eval("5 seek [ 56 ] find"));
-        xs.eval("[ 0x31 0x32 0x33 ] bitstr-open \"23\" find").unwrap();
+        xs.eval("[ 0x31 0x32 0x33 ] open-bitstr \"23\" find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 
