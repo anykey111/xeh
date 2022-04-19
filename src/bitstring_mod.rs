@@ -629,27 +629,7 @@ mod tests {
     #[test]
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(
-            "
-        [ 1 5 7 ] bitstr-open u8
-        [ 3 ] bitstr-open u8
-        bitstr-close
-        u8",
-        )
-        .unwrap();
-        assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
-        assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("bitstr-input").unwrap();
-        let s = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(vec![7], s.to_bytes());
-        xs.eval("bitstr-close bitstr-input").unwrap();
-        let s2 = xs.pop_data().unwrap().to_bitstring().unwrap();
-        assert_eq!(0, s2.len());
-        assert_eq!(Err(Xerr::ControlFlowError), xs.eval("bitstr-close"));
-        xs.eval("bitstr-input").unwrap();
-        let empty = xs.pop_data().unwrap().to_bitstring().unwrap(); 
-        assert_eq!(0, empty.len());
+        xs.eval(include_str!("test-binary-input.xs")).unwrap();
     }
 
     #[test]
