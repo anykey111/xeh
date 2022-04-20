@@ -384,62 +384,6 @@ impl From<String> for Cell {
     }
 }
 
-use std::convert::TryInto;
-
-impl TryInto<f64> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<f64, Self::Error> {
-        match self {
-            Cell::Real(r) => Ok(r),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-}
-
-impl TryInto<f32> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<f32, Self::Error> {
-        let r: f64 = self.try_into()?;
-        Ok(r as f32)
-    }
-}
-
-impl TryInto<Xint> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<Xint, Self::Error> {
-        match self {
-            Cell::Int(i) => Ok(i),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-}
-
-impl TryInto<usize> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<usize, Self::Error> {
-        let i: Xint = self.try_into()?;
-        Ok(i as usize)
-    }
-}
-
-impl TryInto<isize> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<isize, Self::Error> {
-        let i: Xint = self.try_into()?;
-        Ok(i as isize)
-    }
-}
-
-impl TryInto<bool> for Cell {
-    type Error = Xerr;
-    fn try_into(self) -> Result<bool, Self::Error> {
-        Ok(match self {
-            Cell::Nil | Cell::Int(0) => false,
-            _ => true,
-        })
-    }
-}
-
 pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
