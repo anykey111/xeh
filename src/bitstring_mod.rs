@@ -244,8 +244,7 @@ fn write_dump_position(buf: &mut String, start: usize) {
     }
 }
 
-pub(crate) fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
-    let s = bitstring_from(xs.pop_data()?)?;
+pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstring) -> Xresult {
     let old_offset = xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
     let old_input = xs.set_var(xs.bitstr_mod.input, Cell::from(s))?;
     let stash = xs.get_var(xs.bitstr_mod.stash)?
@@ -253,6 +252,11 @@ pub(crate) fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
         .push_back(old_input.with_tag(old_offset));
     xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))?;
     OK
+}
+
+fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
+    let s = bitstring_from(xs.pop_data()?)?;
+    open_bitstr(xs, s)
 }
 
 fn word_close_bitstr(xs: &mut Xstate) -> Xresult {

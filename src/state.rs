@@ -314,9 +314,8 @@ impl State {
         self.console.as_mut()
     }
 
-    pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
-        self.push_data(Cell::Bitstr(bin))?;
-        bitstring_mod::word_open_bitstr(self)
+    pub fn set_binary_input(&mut self, s: Xbitstr) -> Xresult {
+        bitstring_mod::open_bitstr(self, s)
     }
 
     pub fn compile_file(&mut self, path: &str) -> Xresult {
