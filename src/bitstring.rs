@@ -418,30 +418,20 @@ impl Bitstring {
         s
     }
 
-    pub fn match_with(&self, other: &Bitstring) -> Result<(), usize> {
+    pub fn eq_with(&self, other: &Bitstring) -> bool {
         if self.len() != other.len() {
-            Err(self.len().min(other.len()))
+            false
         } else if self.is_bytestring() && other.is_bytestring() {
-            let a = self.slice();
-            let b = other.slice();
-            if let Some(pos) = a.iter().zip(b.iter()).position(|(a, b)| a != b) {
-                Err(pos * 8)
-            } else {
-                Ok(())
-            }
+            self.slice() == other.slice()
         } else {
-            if let Some(pos) = self.iter8().zip(other.iter8()).position(|(a, b)| a.0 != b.0) {
-                Err(pos * 8)
-            } else {
-                Ok(())
-            }
-        }
+            self.iter8().eq(other.iter8())
+        } 
     }
 }
 
 impl PartialEq for Bitstring {
     fn eq(&self, other: &Bitstring) -> bool {
-        self.match_with(other).is_ok()
+        self.eq_with(other)
     }
 }
 
@@ -850,6 +840,24 @@ mod tests {
         let s = Bitstring::from(vec![0b11000000]);
         let res: Vec<_> = s.bits().collect();
         assert_eq!(vec![1, 1, 0, 0, 0, 0, 0, 0], res);
+    }
+
+    #[test]
+    fn test_eq_with() {
+        let a = Bitstring::from(vec![0x12, 0x34]);
+        let b = Bitstring::from(vec![0x12, 0x34]);
+        assert!(a.eq_with(&b));
+        let c = a.seek(8).unwrap();
+        let d = Bitstring::from(vec![0x34]);
+        assert!(c.eq_with(&d));
+        assert!(!c.eq_with(&a));
+        let s1 = Bitstring::from_bin_str("1000 1000 111").unwrap();
+        let s2 = s1.clone();
+        assert!(s1.eq_with(&s2));
+        let s3 = Bitstring::from_bin_str("1000 1000 1111").unwrap();
+        assert!(!s1.eq_with(&s3));
+        let s4 = Bitstring::from_bin_str("1000 1000 011").unwrap();
+        assert!(!s1.eq_with(&s4));
     }
 
     #[test]

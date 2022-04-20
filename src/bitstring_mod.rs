@@ -63,7 +63,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("kb>", to_num_kbytes)?;
     xs.defword("mb>", to_num_mbytes)?;
     xs.defword("bitstr-append", bitstring_append)?;
-    xs.defword("bitstr-invert", bitstring_invert)?;
+    xs.defword("bitstr-not", word_bitstr_not)?;
     xs.defword("bitstr-and", bitstring_and)?;
     xs.defword("bitstr-or", bitstring_or)?;
     xs.defword("bitstr-xor", bitstring_xor)?;
@@ -279,7 +279,7 @@ fn bitstring_append(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::Bitstr(result))
 }
 
-fn bitstring_invert(xs: &mut Xstate) -> Xresult {
+fn word_bitstr_not(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_bitstring()?;
     xs.push_data(Cell::Bitstr(s.invert()))
 }
@@ -400,7 +400,8 @@ fn word_magic(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(val)?;
     let n = pat.len();
     let s = peek_bits(xs, n)?;
-    if let Err(pos) = s.match_with(&pat) {
+    if !s.eq_with(&pat) {
+        let pos = s.bits().zip(pat.bits()).position(|(a, b)| a != b).unwrap_or(0);
         let err = Box::new((s, pat, pos));
         return Err(Xerr::BitMatchError(err));
     }
@@ -560,11 +561,11 @@ mod tests {
     }
 
     #[test]
-    fn test_bitstring_match() {
+    fn test_magic() {
         let mut xs = Xstate::boot().unwrap();
-        xs.set_binary_input(Xbitstr::from(vec![0x31, 0x32, 0x33])).unwrap();
+        xs.set_binary_input(Xbitstr::from("123")).unwrap();
         match xs.eval("\"124\" magic-bytes") {
-            Err(Xerr::BitMatchError(ctx)) => assert_eq!(16, ctx.2),
+            Err(Xerr::BitMatchError(ctx)) => assert_eq!(21, ctx.2),
             other => panic!("{:?}", other),
         };
         xs.eval("\"123\" magic-bytes").unwrap();
@@ -572,6 +573,13 @@ mod tests {
             Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
             other => panic!("{:?}", other),
         }
+        let res = xs.eval(" \"111111\" bin>bitstr open-bitstr \"11101\" bin>bitstr magic-bytes");
+        match &res {
+            Err(Xerr::BitMatchError(ctx)) => assert_eq!(3, ctx.2),
+            other => panic!("{:?}", other),
+        }
+        assert_eq!(format!("{:?}", res.err().unwrap()),
+        "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3\n");
     }
 
     #[test]

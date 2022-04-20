@@ -71,18 +71,18 @@ impl fmt::Debug for Xerr {
             Xerr::InvalidFloatLength{..} => f.write_str("InvalidFloatLength"),
             Xerr::Exit{..} => f.write_str("Exit"),
             Xerr::BitReadError(ctx) => {
-                writeln!(f, " trying to read {} bits while only {} remain",
+                writeln!(f, "trying to read {} bits while only {} remain",
                     ctx.1, ctx.0.len())
             }
             Xerr::BitSeekError(ctx) => {
-                writeln!(f, " position {} is beyond of available limit {}",
+                writeln!(f, "position {} is beyond of available limit {}",
                     ctx.1, ctx.0.end())
             }
             Xerr::BitMatchError(ctx) => {
                 let src = &ctx.0;
                 let pat = &ctx.1;
                 let at = ctx.2;
-                writeln!(f, " source bits are differ from pattern at offset {}", at)?;
+                writeln!(f, "source bits are differ from pattern at offset {}", at)?;
                 write!(f, " [")?;
                 let (_, src_diff) = src.split_at(at).unwrap();
                 for (x, _) in src_diff.iter8().take(8) {
