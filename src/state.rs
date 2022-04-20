@@ -314,13 +314,9 @@ impl State {
         self.console.as_mut()
     }
 
-    pub fn print_dump(&mut self, nrows: usize, ncols: usize) -> Xresult {
-        crate::bitstring_mod::print_dump(self, nrows, ncols)
-    }
-
     pub fn set_binary_input(&mut self, bin: Xbitstr) -> Xresult {
         self.push_data(Cell::Bitstr(bin))?;
-        bitstring_mod::bitstr_open(self)
+        bitstring_mod::word_open_bitstr(self)
     }
 
     pub fn compile_file(&mut self, path: &str) -> Xresult {

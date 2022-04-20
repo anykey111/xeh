@@ -280,6 +280,13 @@ impl Cell {
         }
     }
 
+    pub fn bitstr(&self) -> Xresult1<&Xbitstr> {
+        match self.value() {
+            Cell::Bitstr(s) => Ok(s),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn to_bitstring(&self) -> Xresult1<Xbitstr> {
         match self.value() {
             Cell::Bitstr(s) => Ok(s.clone()),
@@ -304,6 +311,12 @@ impl From<usize> for Cell {
 impl From<isize> for Cell {
     fn from(x: isize) -> Self {
         Cell::Int(x as Xint)
+    }
+}
+
+impl From<i128> for Cell {
+    fn from(x: i128) -> Self {
+        Cell::Int(x)
     }
 }
 
@@ -432,7 +445,6 @@ pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
 pub const TRUE: Cell = ONE;
 pub const FALSE: Cell = ZERO;
-
 
 #[cfg(test)]
 mod tests {

@@ -7,6 +7,7 @@ use crate::prelude::*;
 #[derive(Default, Clone)]
 pub struct BitstrMod {
     big_endian: Xref,
+    offset: Xref,
     input: Xref,
     stash: Xref,
 }
@@ -41,15 +42,23 @@ macro_rules! def_data_word_real {
 
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrMod::default();
+    let empty = Cell::from(Xbitstr::new());
     m.big_endian = xs.defvar("big-endian?", ZERO)?;
-    m.input = xs.defvar("bitstr-input", Cell::from(Xbitstr::default()))?;
+    m.input = xs.defvar("current-bitstr", empty)?;
+    m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar("binary-stash", Cell::from(Xvec::new()))?;
     xs.bitstr_mod = m;
-
-    xs.defword("bits", bin_read_bitstring)?;
-    xs.defword("bytes", bin_read_bytes)?;
-    xs.defword("kbytes", bin_read_kbytes)?;
-    xs.defword("mbytes", bin_read_mbytes)?;
+    xs.defword("open-bitstr", word_open_bitstr)?;
+    xs.defword("close-bitstr", word_close_bitstr)?;
+    xs.defword("seek", word_seek)?;
+    xs.defword("remain", word_remain)?;
+    xs.defword("find", find_bin)?;
+    xs.defword("dump", word_dump)?;
+    xs.defword("dump-at", word_dump_at)?;
+    xs.defword("bits", word_bits)?;
+    xs.defword("bytes", word_bytes)?;
+    xs.defword("kbytes", word_kbytes)?;
+    xs.defword("mbytes", word_mbytes)?;
     xs.defword("b>", to_num_bytes)?;
     xs.defword("kb>", to_num_kbytes)?;
     xs.defword("mb>", to_num_mbytes)?;
@@ -67,7 +76,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("native-endian", |xs| set_byteorder(xs, NATIVE))?;
-    xs.defword("magic-bytes", bin_match)?;
+    xs.defword("magic-bytes", word_magic)?;
 
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -93,14 +102,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         let n = xs.pop_data()?.to_usize()?;
         pack_int(xs, n)
     })?;
-    xs.defword("seek", seek_bin)?;
-    xs.defword("offset", offset_bin)?;
-    xs.defword("remain", remain_bin)?;
-    xs.defword("find", find_bin)?;
-    xs.defword("dump", bitstr_dump)?;
-    xs.defword("dump-at", bitstr_dump_at)?;
-    xs.defword("open-bitstr", bitstr_open)?;
-    xs.defword("close-bitstr", bitstr_close)?;
     OK
 }
 
@@ -136,7 +137,7 @@ fn box_read_error(s: Bitstring, n: usize) -> Xerr {
 
 fn find_bin(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(xs.pop_data()?)?;
-    let s = bitstr_input(xs)?;
+    let s = rest_bits(xs)?;
     if !(pat.is_bytestring() && s.is_bytestring()) {
         return Err(Xerr::UnalignedBitstr);
     }
@@ -148,49 +149,51 @@ fn find_bin(xs: &mut Xstate) -> Xresult {
     }
 }
 
-fn seek_bin(xs: &mut Xstate) -> Xresult {
-    let pos = xs.pop_data()?.to_usize()?;
-    let mut s = bitstr_input(xs)?.clone();
-    if s.seek(pos).is_none() {
-        Err(Xerr::BitSeekError(Box::new((s, pos))))
+fn current_input(xs: &Xstate) -> Xresult1<&Xbitstr> {
+    xs.get_var(xs.bitstr_mod.input)?.bitstr()
+}
+
+fn current_offset(xs: &Xstate) -> Xresult1<usize> {
+    xs.get_var(xs.bitstr_mod.offset)?.to_usize()
+}
+
+fn move_offset_checked(xs: &mut Xstate, pos: usize) -> Xresult {
+    let s = current_input(xs)?;
+    if s.start() <= pos && pos <= s.end() {
+        xs.set_var(xs.bitstr_mod.offset, Cell::from(pos))?;
+        OK
     } else {
-        xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(s)).map(|_| ())
+        Err(Xerr::BitSeekError(Box::new((s.clone(), pos))))
     }
 }
 
-fn bitstr_input(xs: &mut Xstate) -> Xresult1<&Bitstring> {
-    match xs.get_var(xs.bitstr_mod.input)? {
-        Cell::Bitstr(bs) => Ok(bs),
-        _ => Err(Xerr::TypeError),
-    }
+fn word_seek(xs: &mut Xstate) -> Xresult {
+    let pos = xs.pop_data()?.to_usize()?;
+    move_offset_checked(xs, pos)
 }
 
-fn offset_bin(xs: &mut Xstate) -> Xresult {
-    let offs = bitstr_input(xs)?.start() as Xint;
-    xs.push_data(Cell::Int(offs))
+fn word_remain(xs: &mut Xstate) -> Xresult {
+    let s = current_input(xs)?;
+    let offset = current_offset(xs)?;
+    let res= Cell::from(s.end().max(offset) - offset);
+    xs.push_data(res)
 }
 
-fn remain_bin(xs: &mut Xstate) -> Xresult {
-    let n = bitstr_input(xs)?.len() as Xint;
-    xs.push_data(Cell::Int(n))
-}
-
-fn bitstr_dump_at(xs: &mut Xstate) -> Xresult {
+fn word_dump_at(xs: &mut Xstate) -> Xresult {
     let start = xs.pop_data()?.to_usize()?;
-    let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end, 8)
+    dump_bitstr_at(xs, start, 8)
 }
 
-fn bitstr_dump(xs: &mut Xstate) -> Xresult {
-    let start = bitstr_input(xs)?.start();
-    let end = start + 16 * 8 * 8;
-    bitstr_dump_range(xs, start..end, 8)
+fn word_dump(xs: &mut Xstate) -> Xresult {
+    let start = current_offset(xs)?;
+    dump_bitstr_at(xs, start, 8)
 }
 
-pub fn print_dump(xs: &mut Xstate, rows: usize, ncols: usize) -> Xresult {
-    let start = bitstr_input(xs)?.start();
-    let end = start + (rows * ncols * 8);
-    bitstr_dump_range(xs, start..end, ncols)
+fn dump_bitstr_at(xs: &mut Xstate, start: usize, ncols: usize) -> Xresult {
+    let s = current_input(xs)?;
+    let end = s.end().min(start + 16 * ncols * 8);
+    let ss = s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds)?;
+    dump_bitstr(xs, &ss, ncols)
 }
 
 pub fn byte_to_dump_char(x: u8) -> char {
@@ -202,25 +205,18 @@ pub fn byte_to_dump_char(x: u8) -> char {
     }
 }
 
-fn bitstr_dump_range(xs: &mut Xstate, r: BitstringRange, ncols: usize) -> Xresult {
-    let mut input = bitstr_input(xs)?.clone();
-    let marker = input.start();
-    if input.seek(r.start).is_none() {
-        return Err(Xerr::BitSeekError(Box::new((input, r.start))));
-    }
-    let part = input.read(r.len().min(input.len())).unwrap();
+fn dump_bitstr(xs: &mut Xstate, s: &Bitstring, ncols: usize) -> Xresult {
     let mut buf = String::new();
-    let mut pos = part.start();
+    let mut pos = s.start();
     let mut hex  = String::new();
     let mut ascii  = String::new();
-    let mut it = part.iter8();
-    while pos < part.end() {
+    let mut it = s.iter8();
+    while pos < s.end() {
         write_dump_position(&mut buf, pos);
         buf.push(':');
         for _ in 0..ncols {
             if let Some((x, nbits)) = it.next() {
-                buf.push(if pos <= marker && marker <= (pos + nbits as usize) { '*' } else { ' ' });
-                write!(buf, "{:02x}", x).unwrap();
+                write!(buf, " {:02x}", x).unwrap();
                 pos += nbits as usize;
                 ascii.push(byte_to_dump_char(x));
             } else {
@@ -248,21 +244,26 @@ fn write_dump_position(buf: &mut String, start: usize) {
     }
 }
 
-pub(crate) fn bitstr_open(xs: &mut Xstate) -> Xresult {
-    let new_bin = bitstring_from(xs.pop_data()?)?;
-    let curr_bin = xs.set_var(xs.bitstr_mod.input, Cell::from(new_bin))?;
-    let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
-    let new_stash = stash.push_back(curr_bin);
-    xs.set_var(xs.bitstr_mod.stash, Cell::from(new_stash))?;
+pub(crate) fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
+    let s = bitstring_from(xs.pop_data()?)?;
+    let old_offset = xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
+    let old_input = xs.set_var(xs.bitstr_mod.input, Cell::from(s))?;
+    let stash = xs.get_var(xs.bitstr_mod.stash)?
+        .vec()?
+        .push_back(old_input.with_tag(old_offset));
+    xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))?;
     OK
 }
 
-fn bitstr_close(xs: &mut Xstate) -> Xresult {
+fn word_close_bitstr(xs: &mut Xstate) -> Xresult {
     let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
-    let prev_bin = stash.last().ok_or_else(|| Xerr::OutOfBounds)?.clone();
-    let new_stash = stash.drop_last().unwrap();
-    xs.set_var(xs.bitstr_mod.stash, Cell::from(new_stash))?;
-    xs.set_var(xs.bitstr_mod.input, prev_bin)?;
+    let last = stash.last().ok_or_else(|| Xerr::OutOfBounds)?;
+    let offset = last.tag().unwrap_or(&ZERO).clone();
+    let input = last.value().clone();
+    let stash = stash.drop_last().unwrap();
+    xs.set_var(xs.bitstr_mod.offset, offset)?;
+    xs.set_var(xs.bitstr_mod.input, input)?;
+    xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))?;
     OK
 }
 
@@ -374,12 +375,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
 }
 
 fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
-    let n = xs.pop_data()?.to_int()?;
-    Ok(n as usize)
-}
-
-fn set_rest(xs: &mut Xstate, rest: Bitstring) -> Xresult {
-    xs.set_var(xs.bitstr_mod.input, Cell::Bitstr(rest)).map(|_| ())
+    xs.pop_data()?.to_usize()
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Xbyteorder) -> Xresult {
@@ -395,35 +391,36 @@ fn default_byteorder(xs: &mut Xstate) -> Xresult1<Xbyteorder> {
     }
 }
 
-fn bin_match(xs: &mut Xstate) -> Xresult {
+fn word_magic(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let pat = bitstring_from(val)?;
-    let (s, rest) = read_bitstring(xs, pat.len())?;
+    let n = pat.len();
+    let s = peek_bits(xs, n)?;
     if let Err(pos) = s.match_with(&pat) {
         let err = Box::new((s, pat, pos));
         return Err(Xerr::BitMatchError(err));
     }
-    set_rest(xs, rest)
+    move_offset_checked(xs, s.end())
 }
 
 fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
-    let (s, rest) = read_bitstring(xs, n)?;
-    let val = Cell::Bitstr(s).with_tag(bitstr_tag(n, None, false));
-    xs.push_data(val)?;
-    set_rest(xs, rest)
+    let s = peek_bits(xs, n)?;
+    move_offset_checked(xs, s.end())?;
+    let val = Cell::from(s).with_tag(bitstr_tag(n, None, false));
+    xs.push_data(val)
 }
 
-fn bin_read_bytes(xs: &mut Xstate) -> Xresult {
+fn word_bytes(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n * 8)
 }
 
-fn bin_read_kbytes(xs: &mut Xstate) -> Xresult {
+fn word_kbytes(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n * 8 * 1024)
 }
 
-fn bin_read_mbytes(xs: &mut Xstate) -> Xresult {
+fn word_mbytes(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n * 8 * 1024 * 1024)
 }
@@ -443,40 +440,48 @@ fn to_num_mbytes(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(n * 8 * 1024 * 1024))
 }
 
-fn bin_read_bitstring(xs: &mut Xstate) -> Xresult {
+fn word_bits(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n)
 }
 
-fn read_bitstring(xs: &mut Xstate, n: usize) -> Xresult1<(Xbitstr, Xbitstr)> {
-    let mut rest = bitstr_input(xs)?.clone();
-    if let Some(s) = rest.read(n as usize) {
-        Ok((s, rest))
+fn rest_bits(xs: &mut Xstate) -> Xresult1<Xbitstr> {
+    let rest = xs.get_var(xs.bitstr_mod.input)?.bitstr()?.clone();
+    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
+    rest.seek(start).ok_or_else(||Xerr::OutOfBounds)
+}
+
+fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
+    let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
+    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
+    let end = start + n;
+    if let Some(ss) = s.substr(start, end) {
+        Ok(ss)
     } else {
-        Err(box_read_error(rest, n))
+        Err(box_read_error(s.clone(), n))
     }
 }
 
 fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (s, rest) = read_bitstring(xs, n)?;
+    let s = peek_bits(xs, n)?;
     if s.len() > (Xint::BITS - 1) as usize {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_uint(bo) as Xint;
-    let val = Cell::Int(x).with_tag(bitstr_tag(n, Some(bo), false));
-    xs.push_data(val)?;
-    set_rest(xs, rest)
+    move_offset_checked(xs, s.end())?;
+    let val = Cell::from(x).with_tag(bitstr_tag(n, Some(bo), false));
+    xs.push_data(val)    
 }
 
 fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (s, rest) = read_bitstring(xs, n)?;
+    let s = peek_bits(xs, n)?;
     if s.len() > Xint::BITS as usize {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_int(bo);
-    let val = Cell::Int(x).with_tag(bitstr_tag(n, Some(bo), true));
+    let val = Cell::from(x).with_tag(bitstr_tag(n, Some(bo), true));
     xs.push_data(val)?;
-    set_rest(xs, rest)
+    move_offset_checked(xs, s.start() + n)
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
@@ -495,14 +500,14 @@ fn read_float_n(xs: &mut Xstate, n: usize) -> Xresult {
 }
 
 fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
-    let (s, rest) = read_bitstring(xs, n)?;
+    let s = peek_bits(xs, n)?;
     let val = match n {
         32 => s.to_f32(bo) as Xreal,
         64 => s.to_f64(bo) as Xreal,
         n => return Err(Xerr::InvalidFloatLength(n)),
     };
     xs.push_data(Cell::from(val).with_tag(bitstr_tag(n, Some(bo), true)))?;
-    set_rest(xs, rest)
+    move_offset_checked(xs, s.start() + n)
 }
 
 fn bitstr_tag(len: usize, bo: Option<Xbyteorder>, signed: bool) -> Cell {
@@ -630,7 +635,7 @@ mod tests {
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(include_str!("test-binary-input.xs")).unwrap();
-        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("drop-binary"));
+        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("close-bitstr"));
     }
 
     #[test]

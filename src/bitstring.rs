@@ -153,10 +153,11 @@ impl Bitstring {
         (self.range.start % 8 == 0) && (self.range.end % 8 == 0)
     }
 
-    pub fn seek(&mut self, pos: usize) -> Option<usize> {
-        if pos <= self.end() {
-            self.range.start = pos;
-            Some(pos)
+    pub fn seek(&self, pos: usize) -> Option<Bitstring> {
+        if self.range.start <= pos && pos <= self.range.end {
+            let mut s = self.clone();
+            s.range.start = pos;
+            Some(s)
         } else {
             None
         }
@@ -171,6 +172,27 @@ impl Bitstring {
         result.range.end = pos;
         self.range.start = pos;
         Some(result)
+    }
+
+    pub fn peek(&self, num_bits: usize) -> Option<Bitstring> {
+        let end = self.start() + num_bits;
+        if self.range.start <= end && end <= self.range.end {
+            let mut s = self.clone();
+            s.range.end = end;
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn substr(&self, start: usize, end: usize) -> Option<Bitstring> {
+        if start <= end && self.range.start <= start && end <= self.range.end {
+            let mut s = self.clone();
+            s.range = start..end;
+            Some(s)
+        } else {
+            None
+        }
     }
 
     pub fn split_at(&self, bit_index: usize) -> Option<(Bitstring, Bitstring)> {
@@ -618,6 +640,36 @@ mod tests {
     }
 
     #[test]
+    fn test_seek() {
+        let s = Bitstring::from(vec![0x12, 0x34]);
+        assert_eq!(vec![0x34], s.seek(8).unwrap().to_bytes());
+        assert_eq!(&s, &s.seek(0).unwrap());
+        assert_eq!(Bitstring::new(), s.seek(16).unwrap());
+        assert_eq!(None, s.seek(17));
+    }
+
+    #[test]
+    fn test_peek() {
+        let s = Bitstring::from(vec![0x12, 0x34, 0x56]);
+        assert_eq!(vec![0x12], s.peek(8).unwrap().to_bytes());
+        assert_eq!(None, s.peek(25));
+        assert_eq!(Bitstring::new(), s.peek(0).unwrap());
+        assert_eq!(&s, &s.peek(24).unwrap());
+    }
+
+    #[test]
+    fn test_substr() {
+        let s = Bitstring::from(vec![0x12, 0x34, 0x56]);
+        assert_eq!(vec![0x34], s.substr(8, 16).unwrap().to_bytes());
+        assert_eq!(&s, &s.substr(0, 24).unwrap());
+        assert_eq!(None, s.substr(0, 25));
+        assert_eq!(None, s.substr(24, 0));
+        assert_eq!(Bitstring::new(), s.substr(0, 0).unwrap());
+        
+        
+    }
+
+    #[test]
     fn test_insert() {
         let f = Bitstring::from_bin_str("1111").unwrap();
         let res  = Bitstring::from(vec![0xaa, 0xbb])
@@ -808,8 +860,8 @@ mod tests {
         assert_eq!(Some((0xbc, 8)), it.next());
         assert_eq!(None, it.next());
         // unaligned
-        let mut b = Bitstring::from(vec![0xab, 0xcd]);
-        b.seek(4).unwrap();
+        let s = Bitstring::from(vec![0xab, 0xcd]);
+        let b = s.seek(4).unwrap();
         let mut it = b.iter8();
         assert_eq!(Some((0xbc, 8)), it.next());
         assert_eq!(Some((0xd, 4)), it.next());
