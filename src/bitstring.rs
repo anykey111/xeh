@@ -17,7 +17,7 @@ pub const NATIVE: Xbyteorder = LITTLE;
 #[cfg(target_endian = "big")]
 pub const NATIVE: Xbyteorder = BIG;
 
-pub type BitstringRange = Range<usize>;
+type BitstringRange = Range<usize>;
 
 fn upper_bound_index(num_bits: usize) -> usize {
     let n = if (num_bits % 8) > 0 { 1 } else { 0 };
@@ -75,7 +75,7 @@ impl BitvecBuilder {
 
 #[derive(Clone, Default)]
 pub struct Bitstring {
-    pub (crate) range: BitstringRange,
+    range: BitstringRange,
     data: Rc<CowBytes>,
 }
 

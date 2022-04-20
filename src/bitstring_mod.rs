@@ -52,7 +52,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("close-bitstr", word_close_bitstr)?;
     xs.defword("seek", word_seek)?;
     xs.defword("remain", word_remain)?;
-    xs.defword("find", find_bin)?;
+    xs.defword("find", word_find)?;
     xs.defword("dump", word_dump)?;
     xs.defword("dump-at", word_dump_at)?;
     xs.defword("bits", word_bits)?;
@@ -135,7 +135,7 @@ fn box_read_error(s: Bitstring, n: usize) -> Xerr {
     Xerr::BitReadError(Box::new((s, n)))
 }
 
-fn find_bin(xs: &mut Xstate) -> Xresult {
+fn word_find(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(xs.pop_data()?)?;
     let s = rest_bits(xs)?;
     if !(pat.is_bytestring() && s.is_bytestring()) {
