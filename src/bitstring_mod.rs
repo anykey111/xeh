@@ -474,7 +474,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     }
     let x = s.to_uint(bo) as Xint;
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo, false));
+    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo));
     xs.push_data(val)    
 }
 
@@ -485,7 +485,7 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     }
     let x = s.to_int(bo);
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo, true));
+    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo));
     xs.push_data(val)
 }
 
@@ -515,17 +515,13 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(n, bo)))
 }
 
-fn bitstr_int_tag(len: usize, bo: Xbyteorder, signed: bool) -> Cell {
+fn bitstr_int_tag(len: usize, bo: Xbyteorder) -> Cell {
     let mut v = Xvec::new();
     v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
-    if signed {
-        v.push_back_mut(Cell::from("int"));
+    if bo == BIG {
+        v.push_back_mut(Cell::from("big"));
     } else {
-        v.push_back_mut(Cell::from("uint"));
-    }
-    if bo == Xbyteorder::Big {
-        let s = Xstr::from("be");
-        v.push_back_mut(Cell::Str(s));
+        v.push_back_mut(Cell::from("little"));
     }
     Cell::from(v)
 }
@@ -601,7 +597,7 @@ mod tests {
             xs.eval("u8").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::Int(1), val.value());
-            assert_eq!(&bitstr_int_tag(8, NATIVE, false), val.tag().unwrap());
+            assert_eq!(&bitstr_int_tag(8, NATIVE), val.tag().unwrap());
         }
         {
             xs.eval("2 bytes").unwrap();
@@ -621,7 +617,7 @@ mod tests {
         {
             xs.eval("big-endian 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_int_tag(2, BIG, true), val.tag().unwrap());
+            assert_eq!(&bitstr_int_tag(2, BIG), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
