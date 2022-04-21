@@ -176,7 +176,7 @@ pub struct State {
     ctx: Context,
     nested: Vec<Context>,
     pub reverse_log: Option<Vec<ReverseStep>>,
-    console: Option<String>,
+    stdout: Option<String>,
     last_error: Option<ErrorContext>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrMod,
@@ -288,34 +288,34 @@ impl State {
     }
 
     pub fn print(&mut self, msg: &str) {
-        #[cfg(not(feature = "stdio"))]
-        if let Some(out) = self.console.as_mut() {
+        if let Some(out) = self.stdout.as_mut() {
             out.push_str(msg);
-        }
-        #[cfg(feature = "stdio")]
-        if let Some(out) = self.console.as_mut() {
-            out.push_str(msg)
         } else {
-            eprint!("{}", msg);
+            #[cfg(feature = "stdio")]
+            print!("{}", msg);
         }
     }
 
-    pub fn capture_stdout(&mut self) {
-        if self.console.is_none() {
-            self.console = Some(String::new());
+    pub fn intercept_stdout(&mut self, yes: bool) {
+        if yes {
+            if self.stdout.is_none() {
+                self.stdout = Some(String::new());
+            }
+        } else {
+            self.stdout = None;
         }
     }
 
     pub fn read_stdout(&mut self) -> Option<String> {
-        self.console.as_mut().map(|s| {
+        self.stdout.as_mut().map(|s| {
             let result = s.clone();
             s.clear();
             result
         })
     }
 
-    pub fn console(&mut self) -> Option<&mut String> {
-        self.console.as_mut()
+    pub fn stdout(&mut self) -> Option<&mut String> {
+        self.stdout.as_mut()
     }
 
     pub fn set_binary_input(&mut self, s: Xbitstr) -> Xresult {
@@ -535,9 +535,7 @@ impl State {
     pub fn boot() -> Xresult1<State> {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
-        {
-            xs.console = Some(String::new());
-        }
+        xs.intercept_stdout(true);
         xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::bitstring_mod::load(&mut xs)?;
@@ -2042,7 +2040,7 @@ mod tests {
     #[test]
     fn test_fmt_base() {
         let mut xs = State::boot().unwrap();
-        xs.capture_stdout();
+        xs.intercept_stdout(true);
         xs.eval("HEX 255 print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
         xs.eval("DEC 13 print").unwrap();
@@ -2057,7 +2055,7 @@ mod tests {
     #[test]
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
-        xs.capture_stdout();
+        xs.intercept_stdout(true);
         xs.eval("255 HEX print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
         xs.eval("255 NO-PREFIX HEX print").unwrap();
@@ -2291,7 +2289,6 @@ mod tests {
         assert_eq!(lines[3], "---^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         let lines = errlines(&xs);
         assert_eq!(lines[0], "unknown word z");
@@ -2300,7 +2297,6 @@ mod tests {
         assert_eq!(lines[3], "^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         let lines = errlines(&xs);
         assert_eq!(lines[0], "unknown word q");
@@ -2309,7 +2305,6 @@ mod tests {
         assert_eq!(lines[3], "-^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         let res = xs.eval("[\n10 loop\n]");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines = errlines(&xs);
@@ -2319,7 +2314,6 @@ mod tests {
         assert_eq!(lines[3], "---^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines = errlines(&xs);
@@ -2329,7 +2323,6 @@ mod tests {
         assert_eq!(lines[3], "--^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         let res = xs.eval("\"src/test-location1.xs\" load");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let lines = errlines(&xs);
@@ -2339,7 +2332,6 @@ mod tests {
         assert_eq!(lines[3], "--^");
 
         let mut xs = State::boot().unwrap();
-        xs.console = Some(String::new());
         xs.eval(": test3 0 get ;").unwrap();
         let res = xs.eval("[ ] test3");
         assert_eq!(Err(Xerr::OutOfBounds), res);
@@ -2372,12 +2364,11 @@ mod tests {
     #[test]
     fn test_doc_help() {
         let mut xs = State::boot().unwrap();
-        xs.capture_stdout();
+        xs.intercept_stdout(true);
         xs.compile(": ff ; ( \"test-help\" \"ff\" doc )").unwrap();
         assert_eq!(xs.help("ff"), Some(&Xstr::from("test-help")));
         xs.eval("\"ff\" help").unwrap();
-        assert_eq!(xs.console(), Some(&mut String::from("test-help")));
-
+        assert_eq!(xs.read_stdout(), Some("test-help".to_string()));
     }
 
     #[test]
