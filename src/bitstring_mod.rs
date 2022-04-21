@@ -75,7 +75,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstr>utf8", bitstr_to_utf8)?;
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
-    xs.defword("native", |xs| set_byteorder(xs, NATIVE))?;
     xs.defword("expect", word_expect)?;
 
     def_data_word!(xs, 8);
@@ -612,12 +611,6 @@ mod tests {
             xs.eval("big 2 int").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&bitstr_int_tag(2, BIG), val.tag().unwrap());
-            assert_eq!(&Cell::Int(0), val.value());
-        }
-        {
-            xs.eval("native 2 int").unwrap();
-            let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_int_tag(2, NATIVE), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
