@@ -312,8 +312,8 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstr_to_hex(xs: &mut Xstate) -> Xresult {
-    let bs = xs.pop_data()?.to_bitstring()?;
-    xs.push_data(Cell::from(bs.to_hex_string()))
+    let bs = xs.pop_data()?;
+    xs.push_data(Cell::from(bs.bitstr()?.to_hex_string()))
 }
 
 fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
@@ -337,8 +337,8 @@ fn to_bitstring(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
-    let bs = xs.pop_data()?.to_bitstring()?;
-    match String::from_utf8(bs.to_bytes()) {
+    let bs = xs.pop_data()?;
+    match String::from_utf8(bs.bitstr()?.to_bytes()) {
         Ok(s) => xs.push_data(Cell::from(s)),
         Err(_) => Err(Xerr::FromUtf8Error),
     }

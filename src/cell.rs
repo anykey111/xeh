@@ -238,6 +238,13 @@ impl Cell {
         }
     }
 
+    pub fn str(&self) -> Xresult1<&str> {
+        match self.value() {
+            Cell::Str(s) => Ok(s.as_str()),
+            _ => Err(Xerr::TypeError),
+        }
+    }
+
     pub fn to_string(&self) -> Xresult1<Xstr> {
         match self.value() {
             Cell::Str(s) => Ok(s.clone()),
