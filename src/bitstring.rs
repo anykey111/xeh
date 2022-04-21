@@ -3,19 +3,19 @@ use std::ops::Range;
 use std::rc::Rc;
 
 #[derive(PartialEq, Clone, Copy)]
-pub enum Xbyteorder {
+pub enum Byteorder {
     Little,
     Big,
 }
 
-pub const LITTLE: Xbyteorder = Xbyteorder::Little;
-pub const BIG: Xbyteorder = Xbyteorder::Big;
+pub const LITTLE: Byteorder = Byteorder::Little;
+pub const BIG: Byteorder = Byteorder::Big;
 
 #[cfg(target_endian = "little")]
-pub const NATIVE: Xbyteorder = LITTLE;
+pub const NATIVE: Byteorder = LITTLE;
 
 #[cfg(target_endian = "big")]
-pub const NATIVE: Xbyteorder = BIG;
+pub const NATIVE: Byteorder = BIG;
 
 type BitstringRange = Range<usize>;
 
@@ -207,7 +207,7 @@ impl Bitstring {
         Some((left, right))
     }
 
-    pub fn to_int(&self, order: Xbyteorder) -> i128 {
+    pub fn to_int(&self, order: Byteorder) -> i128 {
         let val = self.to_uint(order);
         let len = self.len() as u32;
         let sign_bit = 1 << (len - 1);
@@ -221,7 +221,7 @@ impl Bitstring {
         }
     }
 
-    pub fn to_uint(&self, order: Xbyteorder) -> u128 {
+    pub fn to_uint(&self, order: Byteorder) -> u128 {
         let mut acc: u128 = 0;
         let mut pos = self.start();
         let end = self.end();
@@ -241,7 +241,7 @@ impl Bitstring {
         acc
     }
 
-    pub fn from_int(val: i128, num_bits: usize, order: Xbyteorder) -> Bitstring {
+    pub fn from_int(val: i128, num_bits: usize, order: Byteorder) -> Bitstring {
         let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
         if order == BIG {
             let mut i = num_bits;
@@ -266,7 +266,7 @@ impl Bitstring {
         }
     }
 
-    pub fn to_f32(&self, order: Xbyteorder) -> f32 {
+    pub fn to_f32(&self, order: Byteorder) -> f32 {
         let mut it = self.iter8();
         let mut buf = [0u8; 4];
         for x in buf.iter_mut() {
@@ -279,7 +279,7 @@ impl Bitstring {
         }
     }
 
-    pub fn to_f64(&self, order: Xbyteorder) -> f64 {
+    pub fn to_f64(&self, order: Byteorder) -> f64 {
         let mut it = self.iter8();
         let mut buf = [0u8; 8];
         for x in buf.iter_mut() {
@@ -292,7 +292,7 @@ impl Bitstring {
         }
     }
 
-    pub fn from_f32(val: f32, order: Xbyteorder) -> Bitstring {
+    pub fn from_f32(val: f32, order: Byteorder) -> Bitstring {
         let bytes = if order == BIG {
             val.to_be_bytes()
         } else {
@@ -301,7 +301,7 @@ impl Bitstring {
         Bitstring::from(bytes.to_vec())
     }
 
-    pub fn from_f64(val: f64, order: Xbyteorder) -> Bitstring {
+    pub fn from_f64(val: f64, order: Byteorder) -> Bitstring {
         let bytes = if order == BIG {
             val.to_be_bytes()
         } else {

@@ -73,9 +73,9 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstr>bin", bitstr_to_bin)?;
     xs.defword(">bitstr", to_bitstring)?;
     xs.defword("bitstr>utf8", bitstr_to_utf8)?;
-    xs.defword("big-endian", |xs| set_byteorder(xs, BIG))?;
-    xs.defword("little-endian", |xs| set_byteorder(xs, LITTLE))?;
-    xs.defword("native-endian", |xs| set_byteorder(xs, NATIVE))?;
+    xs.defword("big", |xs| set_byteorder(xs, BIG))?;
+    xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
+    xs.defword("native", |xs| set_byteorder(xs, NATIVE))?;
     xs.defword("magic-bytes", word_magic)?;
 
     def_data_word!(xs, 8);
@@ -86,12 +86,12 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     def_data_word_real!(xs, 64);
     xs.defword("int", |xs| {
         let n = take_length(xs)?;
-        let bo = default_byteorder(xs)?;
+        let bo = current_byteorder(xs)?;
         read_signed(xs, n, bo)
     })?;
     xs.defword("uint", |xs| {
         let n = take_length(xs)?;
-        let bo = default_byteorder(xs)?;
+        let bo = current_byteorder(xs)?;
         read_unsigned(xs, n, bo)
     })?;
     xs.defword("int!", |xs| {
@@ -105,18 +105,18 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     OK
 }
 
-fn pack_int_bo(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+fn pack_int_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = xs.pop_data()?.to_int()?;
     let s = Bitstring::from_int(val, n, bo);
     xs.push_data(Cell::Bitstr(s))
 }
 
 fn pack_int(xs: &mut Xstate, n: usize) -> Xresult {
-    let bo = default_byteorder(xs)?;
+    let bo = current_byteorder(xs)?;
     pack_int_bo(xs, n, bo)
 }
 
-fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = xs.pop_data()?.to_real()?;
     let s = match n {
         32 => Bitstring::from_f32(val as f32, bo),
@@ -127,7 +127,7 @@ fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
 }
 
 fn pack_float(xs: &mut Xstate, n: usize) -> Xresult {
-    let bo = default_byteorder(xs)?;
+    let bo = current_byteorder(xs)?;
     pack_float_bo(xs, n, bo)
 }
 
@@ -382,12 +382,12 @@ fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
     xs.pop_data()?.to_usize()
 }
 
-fn set_byteorder(xs: &mut Xstate, bo: Xbyteorder) -> Xresult {
-    xs.set_var(xs.bitstr_mod.big_endian, if bo == LITTLE { ZERO } else { ONE })
-        .map(|_| ())
+fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
+    xs.set_var(xs.bitstr_mod.big_endian, if bo == LITTLE { ZERO } else { ONE })?;
+    OK
 }
 
-fn default_byteorder(xs: &mut Xstate) -> Xresult1<Xbyteorder> {
+fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
     if xs.get_var(xs.bitstr_mod.big_endian)? == &ZERO {
         Ok(LITTLE)
     } else {
@@ -467,7 +467,7 @@ fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
     }
 }
 
-fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let s = peek_bits(xs, n)?;
     if s.len() > (Xint::BITS - 1) as usize {
         return Err(Xerr::IntegerOverflow);
@@ -478,7 +478,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     xs.push_data(val)    
 }
 
-fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let s = peek_bits(xs, n)?;
     if s.len() > Xint::BITS as usize {
         return Err(Xerr::IntegerOverflow);
@@ -490,21 +490,21 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
-    let bo = default_byteorder(xs)?;
+    let bo = current_byteorder(xs)?;
     read_signed(xs, n, bo)
 }
 
 fn read_unsigned_n(xs: &mut Xstate, n: usize) -> Xresult {
-    let bo = default_byteorder(xs)?;
+    let bo = current_byteorder(xs)?;
     read_unsigned(xs, n, bo)
 }
 
 fn read_float_n(xs: &mut Xstate, n: usize) -> Xresult {
-    let bo = default_byteorder(xs)?;
+    let bo = current_byteorder(xs)?;
     read_float(xs, n, bo)
 }
 
-fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
+fn read_float(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let s = peek_bits(xs, n)?;
     let val = match n {
         32 => s.to_f32(bo) as Xreal,
@@ -515,7 +515,7 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(n, bo)))
 }
 
-fn bitstr_int_tag(len: usize, bo: Xbyteorder) -> Cell {
+fn bitstr_int_tag(len: usize, bo: Byteorder) -> Cell {
     let mut v = Xvec::new();
     v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
     if bo == BIG {
@@ -526,10 +526,10 @@ fn bitstr_int_tag(len: usize, bo: Xbyteorder) -> Cell {
     Cell::from(v)
 }
 
-fn bitstr_real_tag(len: usize, bo: Xbyteorder) -> Cell {
+fn bitstr_real_tag(len: usize, bo: Byteorder) -> Cell {
     let mut v = Xvec::new();
     v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
-    if bo == Xbyteorder::Big {
+    if bo == Byteorder::Big {
         let s = Xstr::from("be");
         v.push_back_mut(Cell::Str(s));
     }
@@ -615,9 +615,21 @@ mod tests {
             assert_eq!(2, s.len());
         }
         {
-            xs.eval("big-endian 2 int").unwrap();
+            xs.eval("big 2 int").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&bitstr_int_tag(2, BIG), val.tag().unwrap());
+            assert_eq!(&Cell::Int(0), val.value());
+        }
+        {
+            xs.eval("native 2 int").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&bitstr_int_tag(2, NATIVE), val.tag().unwrap());
+            assert_eq!(&Cell::Int(0), val.value());
+        }
+        {
+            xs.eval("little 2 int").unwrap();
+            let val = xs.pop_data().unwrap();
+            assert_eq!(&bitstr_int_tag(2, LITTLE), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
@@ -783,7 +795,7 @@ mod tests {
         xs.eval("255 u8!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![255]));
-        xs.eval("big-endian 123 32 int!").unwrap();
+        xs.eval("big 123 32 int!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstring().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
         
