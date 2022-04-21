@@ -411,7 +411,7 @@ fn word_magic(xs: &mut Xstate) -> Xresult {
 fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
     let s = peek_bits(xs, n)?;
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(s).with_tag(bitstr_tag(n, None, false));
+    let val = Cell::from(s);
     xs.push_data(val)
 }
 
@@ -474,7 +474,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
     }
     let x = s.to_uint(bo) as Xint;
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_tag(n, Some(bo), false));
+    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo, false));
     xs.push_data(val)    
 }
 
@@ -484,9 +484,9 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
         return Err(Xerr::IntegerOverflow);
     }
     let x = s.to_int(bo);
-    let val = Cell::from(x).with_tag(bitstr_tag(n, Some(bo), true));
-    xs.push_data(val)?;
-    move_offset_checked(xs, s.start() + n)
+    move_offset_checked(xs, s.end())?;
+    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo, true));
+    xs.push_data(val)
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
@@ -511,19 +511,30 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Xbyteorder) -> Xresult {
         64 => s.to_f64(bo) as Xreal,
         n => return Err(Xerr::InvalidFloatLength(n)),
     };
-    xs.push_data(Cell::from(val).with_tag(bitstr_tag(n, Some(bo), true)))?;
-    move_offset_checked(xs, s.start() + n)
+    move_offset_checked(xs, s.end())?;
+    xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(n, bo)))
 }
 
-fn bitstr_tag(len: usize, bo: Option<Xbyteorder>, signed: bool) -> Cell {
+fn bitstr_int_tag(len: usize, bo: Xbyteorder, signed: bool) -> Cell {
     let mut v = Xvec::new();
-    v.push_back_mut(Cell::from(len));
-    if bo == Some(Xbyteorder::Big) {
-        let s = Xstr::from("big");
+    v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
+    if signed {
+        v.push_back_mut(Cell::from("int"));
+    } else {
+        v.push_back_mut(Cell::from("uint"));
+    }
+    if bo == Xbyteorder::Big {
+        let s = Xstr::from("be");
         v.push_back_mut(Cell::Str(s));
     }
-    if signed {
-        let s = Xstr::from("signed");
+    Cell::from(v)
+}
+
+fn bitstr_real_tag(len: usize, bo: Xbyteorder) -> Cell {
+    let mut v = Xvec::new();
+    v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
+    if bo == Xbyteorder::Big {
+        let s = Xstr::from("be");
         v.push_back_mut(Cell::Str(s));
     }
     Cell::from(v)
@@ -583,19 +594,19 @@ mod tests {
     }
 
     #[test]
-    fn test_bitstring_tags() {
+    fn test_bitstr_tags() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
         {
             xs.eval("u8").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::Int(1), val.value());
-            assert_eq!(&bitstr_tag(8, None, false), val.tag().unwrap());
+            assert_eq!(&bitstr_int_tag(8, NATIVE, false), val.tag().unwrap());
         }
         {
             xs.eval("2 bytes").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_tag(16, None, false), val.tag().unwrap());
+            assert_eq!(None, val.tag());
             let s = val.value().to_bitstring().unwrap();
             assert_eq!(16, s.len());
             assert_eq!(vec![2, 3], s.to_bytes());
@@ -603,14 +614,14 @@ mod tests {
         {        
             xs.eval("2 bits").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_tag(2, None, false), val.tag().unwrap());
+            assert_eq!(None, val.tag());
             let s = val.value().to_bitstring().unwrap();
             assert_eq!(2, s.len());
         }
         {
             xs.eval("big-endian 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_tag(2, Some(BIG), true), val.tag().unwrap());
+            assert_eq!(&bitstr_int_tag(2, BIG, true), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
@@ -619,7 +630,7 @@ mod tests {
             xs.eval("f64be").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::from(f),  val.value());
-            assert_eq!(&bitstr_tag(64, Some(BIG), true), val.tag().unwrap());
+            assert_eq!(&bitstr_real_tag(64, BIG), val.tag().unwrap());
         }
     }
 
