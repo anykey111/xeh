@@ -46,7 +46,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     m.big_endian = xs.defvar("big-endian?", ZERO)?;
     m.input = xs.defvar("current-bitstr", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
-    m.stash = xs.defvar("binary-stash", Cell::from(Xvec::new()))?;
+    m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
     xs.bitstr_mod = m;
     xs.defword("open-bitstr", word_open_bitstr)?;
     xs.defword("close-bitstr", word_close_bitstr)?;

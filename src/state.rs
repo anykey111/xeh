@@ -570,6 +570,11 @@ impl State {
         Ok(Xref::Heap(a))
     }
 
+    pub fn defvar_anonymous(&mut self, val: Cell) -> Xresult1<Xref> {
+        let a = self.alloc_cell(val)?;
+        Ok(Xref::Heap(a))
+    }
+
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
