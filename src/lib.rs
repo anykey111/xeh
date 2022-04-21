@@ -9,6 +9,7 @@ mod opcodes;
 pub mod repl;
 pub mod state;
 mod file;
+mod fmt_flags;
 pub mod d2_plugin;
 
 pub mod prelude {

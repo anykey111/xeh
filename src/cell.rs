@@ -1,4 +1,5 @@
 use crate::error::{Xerr, Xresult, Xresult1};
+use crate::fmt_flags::FmtFlags;
 use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
@@ -67,15 +68,16 @@ impl fmt::Debug for XfnPtr {
 
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let flags = f.width().map(|n| FmtFlags::from_raw(n)).unwrap_or_default();
         match self {
             Cell::Nil => write!(f, "nil"),
-            Cell::Int(n) => match f.precision().unwrap_or(10) {
-                2 if f.alternate() => write!(f, "{:#b}", n),
+            Cell::Int(n) => match flags.base() {
+                2 if flags.show_prefix() => write!(f, "{:#b}", n),
                 2 => write!(f, "{:b}", n),
-                8 if f.alternate() => write!(f, "{:#o}", n),
+                8 if flags.show_prefix() => write!(f, "{:#o}", n),
                 8 => write!(f, "{:o}", n),
-                16 if f.alternate() => write!(f, "{:#X}", n),
-                16 => write!(f, "{:X}", n),
+                16 if flags.show_prefix() => write!(f, "{:#x}", n),
+                16 => write!(f, "{:x}", n),
                 _ => write!(f, "{}", n),
             },
             Cell::Real(r) => write!(f, "{:0.1}", r),
@@ -103,7 +105,12 @@ impl fmt::Debug for Cell {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
                 Err(_) => write!(f, "any"),
             },
-            Cell::WithTag(rc) => rc.value.value().fmt(f)
+            Cell::WithTag(rc) if flags.show_tags() => {
+                rc.value.fmt(f)?;
+                f.write_str(" @")?;
+                rc.tag.fmt(f)
+            },
+            Cell::WithTag(rc) => rc.value.fmt(f),
         }
     }
 }
