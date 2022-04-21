@@ -76,7 +76,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("native", |xs| set_byteorder(xs, NATIVE))?;
-    xs.defword("expect", word_exact)?;
+    xs.defword("expect", word_expect)?;
 
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -131,10 +131,6 @@ fn pack_float(xs: &mut Xstate, n: usize) -> Xresult {
     pack_float_bo(xs, n, bo)
 }
 
-fn box_read_error(s: Bitstring, n: usize) -> Xerr {
-    Xerr::BitReadError(Box::new((s, n)))
-}
-
 fn word_find(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(xs.pop_data()?)?;
     let s = rest_bits(xs)?;
@@ -163,7 +159,7 @@ fn move_offset_checked(xs: &mut Xstate, pos: usize) -> Xresult {
         xs.set_var(xs.bitstr_mod.offset, Cell::from(pos))?;
         OK
     } else {
-        Err(Xerr::BitSeekError(Box::new((s.clone(), pos))))
+        Err(Xerr::SeekError { src: s.clone(), offset: pos })
     }
 }
 
@@ -311,7 +307,7 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_string()?;
     match Bitstring::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => Err(Xerr::BitstrParseError(s, pos)),
+        Err(pos) => Err(Xerr::RuntimeParseError(s, pos)),
     }
 }
 
@@ -324,7 +320,7 @@ fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_string()?;
     match Bitstring::from_bin_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => Err(Xerr::BitstrParseError(s, pos)),
+        Err(pos) => Err(Xerr::RuntimeParseError(s, pos)),
     }
 }
 
@@ -395,15 +391,13 @@ fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
     }
 }
 
-fn word_exact(xs: &mut Xstate) -> Xresult {
+fn word_expect(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let pat = bitstring_from(val)?;
-    let n = pat.len();
-    let s = peek_bits(xs, n)?;
+    let s = peek_bits(xs, pat.len())?;
     if !s.eq_with(&pat) {
         let pos = s.bits().zip(pat.bits()).position(|(a, b)| a != b).unwrap_or(0);
-        let err = Box::new((s, pat, pos));
-        return Err(Xerr::BitMatchError(err));
+        return Err(Xerr::MatchError { src: s, expect: pat, fail_pos: pos });
     }
     move_offset_checked(xs, s.end())
 }
@@ -463,7 +457,7 @@ fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
     if let Some(ss) = s.substr(start, end) {
         Ok(ss)
     } else {
-        Err(box_read_error(s.clone(), n))
+        Err(Xerr::ReadError { src: s.clone(), len: n })
     }
 }
 
@@ -572,17 +566,17 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("123")).unwrap();
         match xs.eval("\"124\" expect") {
-            Err(Xerr::BitMatchError(ctx)) => assert_eq!(21, ctx.2),
+            Err(Xerr::MatchError{ fail_pos, ..}) => assert_eq!(21, fail_pos),
             other => panic!("{:?}", other),
         };
         xs.eval("\"123\" expect").unwrap();
         match xs.eval("[ 0 ] expect") {
-            Err(Xerr::BitReadError(ctx)) => assert_eq!(8, ctx.1),
+            Err(Xerr::ReadError { len,.. }) => assert_eq!(8, len),
             other => panic!("{:?}", other),
         }
         let res = xs.eval(" \"111111\" bin>bitstr open-bitstr \"11101\" bin>bitstr expect");
         match &res {
-            Err(Xerr::BitMatchError(ctx)) => assert_eq!(3, ctx.2),
+            Err(Xerr::MatchError{ fail_pos, ..}) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
         }
         assert_eq!(format!("{:?}", res.err().unwrap()),
@@ -701,7 +695,7 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![100, 200])).unwrap();
         match xs.eval("100 seek") {
-            Err(Xerr::BitSeekError(ctx)) => assert_eq!(100, ctx.1),
+            Err(Xerr::SeekError{offset,..}) => assert_eq!(100, offset),
             other => panic!("{:?}", other),
         }
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] seek"));

@@ -81,7 +81,7 @@ impl fmt::Debug for Cell {
                 _ => write!(f, "{}", n),
             },
             Cell::Real(r) => write!(f, "{:0.1}", r),
-            Cell::Str(s) => write!(f, "{}", s),
+            Cell::Str(s) => write!(f, "{}", s.as_str()),
             Cell::Vector(v) => {
                 f.write_str("[ ")?;
                 for x in v {

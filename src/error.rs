@@ -27,10 +27,10 @@ pub enum Xerr {
     AssertEqFailed(Cell, Cell),
     InternalError,
     // bitstring errors
-    BitReadError(Box<(Xbitstr, usize)>),
-    BitSeekError(Box<(Xbitstr, usize)>),
-    BitMatchError(Box<(Xbitstr, Xbitstr, usize)>),
-    BitstrParseError(Xstr, usize),
+    ReadError { src: Xbitstr, len: usize },
+    SeekError { src: Xbitstr, offset: usize },
+    MatchError { src: Xbitstr, expect: Xbitstr, fail_pos: usize },
+    RuntimeParseError(Xstr, usize),
     UnalignedBitstr,
     InvalidFloatLength(usize),
     FromUtf8Error,
@@ -70,33 +70,29 @@ impl fmt::Debug for Xerr {
             Xerr::UnalignedBitstr => f.write_str("UnalignedBitstr"),
             Xerr::InvalidFloatLength{..} => f.write_str("InvalidFloatLength"),
             Xerr::Exit{..} => f.write_str("Exit"),
-            Xerr::BitReadError(ctx) => {
-                writeln!(f, "trying to read {} bits while only {} remain",
-                    ctx.1, ctx.0.len())
+            Xerr::ReadError { src, len } => {
+                writeln!(f, "trying to read {} bits while only {} remain", len, src.len())
             }
-            Xerr::BitSeekError(ctx) => {
-                writeln!(f, "position {} is beyond of available limit {}",
-                    ctx.1, ctx.0.end())
+            Xerr::SeekError { src, offset } => {
+                writeln!(f, "position {} is beyond of available limit {}..{}", offset, src.start(), src.end())
             }
-            Xerr::BitMatchError(ctx) => {
-                let src = &ctx.0;
-                let pat = &ctx.1;
-                let at = ctx.2;
-                writeln!(f, "source bits are differ from pattern at offset {}", at)?;
+            Xerr::MatchError { src, expect, fail_pos} => {
+                let fail_pos = *fail_pos;
+                writeln!(f, "source bits are differ from pattern at offset {}", fail_pos)?;
                 write!(f, " [")?;
-                let (_, src_diff) = src.split_at(at).unwrap();
+                let (_, src_diff) = src.split_at(fail_pos).unwrap();
                 for (x, _) in src_diff.iter8().take(8) {
                     write!(f, " {:02X}", x)?;
                 }
-                writeln!(f, " ] source at {}", src.start() + at)?;
+                writeln!(f, " ] source at {}", src.start() + fail_pos)?;
                 write!(f, " [")?;
-                let (_, pat_diff) = pat.split_at(at).unwrap();
+                let (_, pat_diff) = expect.split_at(fail_pos).unwrap();
                 for (x, _) in pat_diff.iter8().take(8){
                     write!(f, " {:02X}", x)?
                 }
-                writeln!(f, " ] pattern at {}", pat.start() + at)
+                writeln!(f, " ] pattern at {}", expect.start() + fail_pos)
             }
-            Xerr::BitstrParseError(_, pos) => {
+            Xerr::RuntimeParseError(_, pos) => {
                 writeln!(f, "char parse error at offset {}", pos)
             }
             Xerr::FromUtf8Error => {
