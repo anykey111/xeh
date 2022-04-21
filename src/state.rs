@@ -188,7 +188,7 @@ pub struct State {
 
 impl State {
     
-    pub fn fmt_cell(&self, val: &Cell) -> Xresult1<String> {
+    pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
         let flags = self
             .get_var(self.fmt_flags)
             .map(|val| FmtFlags::from(val))?;
@@ -1773,7 +1773,7 @@ fn core_word_exit(xs: &mut State) -> Xresult {
 fn core_word_display_stack(xs: &mut State) -> Xresult {
     let mut buf = String::new();
     for x in xs.data_stack.iter().rev() {
-        let s = xs.fmt_cell(x)?;
+        let s = xs.format_cell(x)?;
         buf.push_str(&s);
         buf.push_str("\n");
     }
@@ -1788,7 +1788,7 @@ fn core_word_println(xs: &mut State) -> Xresult {
 
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    let s = xs.fmt_cell(&val)?;
+    let s = xs.format_cell(&val)?;
     xs.print(&s);
     OK
 }
