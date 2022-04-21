@@ -11,19 +11,12 @@ pub fn run(xs: &mut Xstate) -> Xresult {
 fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
     let cmd = line.trim();
     if cmd == ".next" {
-        let _ = xs.next();
-        // if let Some(s) = xs.current_line() {
-        //     eprintln!("{}", s);
-        // }
+        xs.next()
     } else if cmd == ".rnext" {
-        let _ = xs.rnext();
-        // if let Some(s) = xs.current_line() {
-        //     eprintln!("{}", s);
-        // }
+        xs.rnext()
     } else {
-        xs.eval(line)?;
+        xs.eval(line)
     }
-    OK
 }
 
 fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
@@ -40,7 +33,9 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                let _ = eval_line(xs, &line);
+                if let Err(e) = eval_line(xs, &line) {
+                    eprintln!("{}", xs.pretty_error(&e))
+                }
             }
             Err(ReadlineError::Interrupted) => {
                 eprintln!("CTRL-C");

@@ -234,7 +234,20 @@ impl State {
         }
     }
 
-    pub fn error_context(&self, err: Xerr) -> ErrorContext {
+    pub fn pretty_error(&self, e: &Xerr) -> String {
+        if let Some(cte) = self.last_error() {
+            // compile-eval error
+            return format!("{:?}\n{:?}", cte.err, cte.location);
+        }
+        if let Some(rte) = self.error_context(e.clone()) {
+            // runtime error
+            return format!("{:?}\n{:?}", rte.err, rte.location);
+        }
+        // error without context
+        format!("{:?}", e)
+    }
+
+    fn error_context(&self, err: Xerr) -> Option<ErrorContext> {
         let is_lex_error = err == Xerr::ControlFlowError
             || err == Xerr::InputIncomplete
             || err == Xerr::ExpectingName
@@ -242,13 +255,13 @@ impl State {
         let token = if is_lex_error || self.ctx.mode == ContextMode::Compile {
             self.ctx.source.as_ref().and_then(|x| x.last_token())
         } else {
-            self.debug_map.get(self.ip()).expect("opcode").clone()
+            self.debug_map.get(self.ip()).cloned()?
         };
-        let location = self.error_location(token.unwrap());
-        ErrorContext { err, location }
+        let location = self.error_location(token?)?;
+        Some(ErrorContext { err, location })
     }
 
-    fn error_location(&self, token: Xsubstr) -> TokenLocation {
+    fn error_location(&self, token: Xsubstr) -> Option<TokenLocation> {
         let tok_start = token.range().start;
         let par = token.parent();
         let mut it = par.char_indices();
@@ -275,16 +288,15 @@ impl State {
         let name = self.sources
                     .iter()
                     .find(|x| &x.buf == token.parent())
-                    .map(|x| x.name.as_str())
-                    .unwrap();
+                    .map(|x| x.name.as_str())?;
         let whole_line = token.parent().substr(start..end);
-        TokenLocation {
+        Some(TokenLocation {
             line,
             col,
             token,
             filename: name.to_owned(),
             whole_line,
-        }
+        })
     }
 
     pub fn print(&mut self, msg: &str) {
@@ -380,8 +392,7 @@ impl State {
         let result = self.build();
         if let Err(e) = result.as_ref() {
             if self.last_error.is_none() {
-                let errctx = self.error_context(e.clone());
-                self.last_error = Some(errctx);
+                self.last_error = self.error_context(e.clone());
             }
             while self.nested.len() > depth {
                 self.context_close()?;
@@ -936,7 +947,7 @@ impl State {
 
     pub fn current_location(&self) -> Option<TokenLocation> {
         let dbg = self.debug_map.get(self.ip())?;
-        dbg.as_ref().map(|token| {
+        dbg.as_ref().and_then(|token| {
             self.error_location(token.clone())
         })
     }
@@ -944,7 +955,7 @@ impl State {
     pub fn next(&mut self) -> Xresult {
         if self.is_running() {
             if let Err(e) = self.fetch_and_run() {
-                self.last_error = Some(self.error_context(e));
+                self.last_error = self.error_context(e);
             }
         }
         OK

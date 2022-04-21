@@ -9,8 +9,8 @@ fn run() -> Xresult {
     let args = xeh::repl::parse_args()?;
     let res = xeh::repl::run_with_args(&mut xs, args);
     if let Err(e) = &res {
-        let ec = xs.last_error().cloned().unwrap_or_else(|| xs.error_context(e.clone()));
-        eprintln!("{:?}\n{:?}", ec.err, ec.location);
+        let errstr = xs.pretty_error(e);
+        eprintln!("{:?}", errstr);
     }
     res
 }
