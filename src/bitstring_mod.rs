@@ -43,7 +43,7 @@ macro_rules! def_data_word_real {
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrMod::default();
     let empty = Cell::from(Xbitstr::new());
-    m.big_endian = xs.defvar("big-endian?", ZERO)?;
+    m.big_endian = xs.defvar("big?", ZERO)?;
     m.input = xs.defvar("current-bitstr", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
