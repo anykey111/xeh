@@ -1716,13 +1716,18 @@ fn vector_relative_index(v: &Xvec, index: isize) -> Xresult1<usize> {
     if index >= 0 {
         Ok(index as usize)
     } else {
-        v.len().checked_sub(index.abs() as usize).ok_or(Xerr::OutOfBounds)
+        let rel_index = index.abs() as usize;
+        if rel_index > v.len() {
+            Ok(v.len() - (rel_index % v.len()))
+        } else {
+            Ok(v.len() - rel_index)
+        }
     }
 }
 
 fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
     let new_index = vector_relative_index(v, index)?;
-    v.get(new_index).ok_or(Xerr::OutOfBounds)
+    v.get(new_index).ok_or_else(|| Xerr::OutOfBounds(new_index))
 }
 
 fn core_word_get(xs: &mut State) -> Xresult {
@@ -2030,8 +2035,13 @@ mod tests {
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
         xs.eval("[ 11 22 33 ] -2 get").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("[ 1 2 3 ] 100 get"));
-        assert_eq!(Err(Xerr::OutOfBounds), xs.eval("[ 1 2 3 ] -100 get"));
+        assert_eq!(Err(Xerr::OutOfBounds(100)), xs.eval("[ 1 2 3 ] 100 get"));
+        assert_eq!(OK, xs.eval("[ 1 2 3 ] -2 get"));
+        assert_eq!(Cell::from(2isize), xs.pop_data().unwrap());
+        assert_eq!(OK, xs.eval("[ 1 2 3 ] -1 get"));
+        assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
+        assert_eq!(OK, xs.eval("[ 1 2 3 ] -4 get"));
+        assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 ] \"0\" get"));
     }
 
@@ -2083,7 +2093,7 @@ mod tests {
     fn test_immediate() {
         let mut xs = State::boot().unwrap();
         let res = xs.compile(": f [ ] 0 get immediate ; f");
-        assert_eq!(Err(Xerr::OutOfBounds), res);
+        assert_eq!(Err(Xerr::OutOfBounds(0)), res);
     }
 
     #[test]
@@ -2345,9 +2355,9 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval(": test3 0 get ;").unwrap();
         let res = xs.eval("[ ] test3");
-        assert_eq!(Err(Xerr::OutOfBounds), res);
+        assert_eq!(Err(Xerr::OutOfBounds(0)), res);
         let lines = errlines(&xs);
-        assert_eq!(lines[0], "OutOfBounds");
+        assert_eq!(lines[0], "index 0 out of bounds");
         assert_eq!(lines[1], "<buffer#0>:1:11");
         assert_eq!(lines[2], ": test3 0 get ;");
         assert_eq!(lines[3], "----------^");

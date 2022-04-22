@@ -22,7 +22,7 @@ pub enum Xerr {
     InvalidAddress,
     ReadonlyAddress,
     IOError { filename: Xstr, reason: Xstr, },
-    OutOfBounds,
+    OutOfBounds(usize),
     AssertFailed,
     AssertEqFailed(Cell, Cell),
     InternalError,
@@ -59,7 +59,7 @@ impl fmt::Debug for Xerr {
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::ReadonlyAddress => f.write_str("ReadonlyAddress"),
             Xerr::IOError { filename, reason } => writeln!(f, "{}: {}", filename, reason),
-            Xerr::OutOfBounds => f.write_str("OutOfBounds"),
+            Xerr::OutOfBounds(index) => writeln!(f, "index {} out of bounds", index),
             Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
             Xerr::AssertEqFailed(a, b) => {
                 writeln!(f, "assertion failed, two top stack values not equals")?;
@@ -74,7 +74,7 @@ impl fmt::Debug for Xerr {
                 writeln!(f, "trying to read {} bits while only {} remain", len, src.len())
             }
             Xerr::SeekError { src, offset } => {
-                writeln!(f, "position {} is beyond of available limit {}..{}", offset, src.start(), src.end())
+                writeln!(f, "bitstr offset {} out of range {}..{}", offset, src.start(), src.end())
             }
             Xerr::MatchError { src, expect, fail_pos} => {
                 let fail_pos = *fail_pos;
