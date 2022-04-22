@@ -345,13 +345,6 @@ impl Bitstring {
         }
     }
 
-    pub fn iter8_unleashed<'a>(&'a self, start: usize) -> Iter8<'a> {
-        Iter8 {
-            pos: start,
-            bs: self,
-        }
-    }
-
     pub fn detach(self) -> Bitstring {
         if Rc::strong_count(&self.data) == 1 {
             self
