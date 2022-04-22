@@ -91,8 +91,9 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if args.reverse_debug {
         xs.start_recording();
     }
-    for filename in args.sources.iter() {
-        xs.compile_file(filename)?;
+    for path in args.sources.iter() {
+        let buf = crate::file::read_source_file(path)?;
+        xs.compile_with_path(&buf, path)?;
     }
     if !args.sources.is_empty() {
         let _ = xs.run()?;

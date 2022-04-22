@@ -5,11 +5,14 @@ use std::fmt;
 #[derive(PartialEq, Clone)]
 pub enum Xerr {
     UnknownWord(Xstr),
+    //start: compile time errors
     InputIncomplete,
     InputParseError,
+    ControlFlowError,
+    ExpectingName,
+    //end: compile time errors
     IntegerOverflow,
     DivisionByZero,
-    ControlFlowError,
     StackUnderflow,
     ReturnStackUnderflow,
     LoopStackUnderflow,
@@ -17,7 +20,6 @@ pub enum Xerr {
     StackNotBalanced,
     TypeError,
     RecusriveDefinition,
-    ExpectingName,
     NotFound,
     InvalidAddress,
     ReadonlyAddress,
@@ -36,6 +38,18 @@ pub enum Xerr {
     FromUtf8Error,
     // Stop interpreter execution
     Exit(isize),
+}
+
+impl Xerr {
+    pub fn is_compile_time_error(&self) -> bool {
+        match self {
+            Xerr::InputIncomplete
+            | Xerr::InputParseError
+            | Xerr::ControlFlowError
+            | Xerr::ExpectingName => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Debug for Xerr {

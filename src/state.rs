@@ -157,8 +157,8 @@ impl fmt::Debug for TokenLocation {
 
 #[derive(Clone)]
 pub struct ErrorContext {
-    pub err: Xerr,
-    pub location: TokenLocation,
+    err: Xerr,
+    location: Option<TokenLocation>,
 }
 
 #[derive(Default, Clone)]
@@ -235,33 +235,41 @@ impl State {
     }
 
     pub fn pretty_error(&self, e: &Xerr) -> String {
-        if let Some(cte) = self.last_error() {
-            // compile-eval error
-            return format!("{:?}\n{:?}", cte.err, cte.location);
-        }
-        if let Some(rte) = self.error_context(e.clone()) {
-            // runtime error
-            return format!("{:?}\n{:?}", rte.err, rte.location);
-        }
-        // error without context
+//        let ctx = self.last_error().or(self.error_context(e.clone()));
         format!("{:?}", e)
     }
 
-    fn error_context(&self, err: Xerr) -> Option<ErrorContext> {
-        let is_lex_error = err == Xerr::ControlFlowError
-            || err == Xerr::InputIncomplete
-            || err == Xerr::ExpectingName
-            || err ==Xerr::InputParseError;
-        let token = if is_lex_error || self.ctx.mode == ContextMode::Compile {
-            self.ctx.source.as_ref().and_then(|x| x.last_token())
-        } else {
-            self.debug_map.get(self.ip()).cloned()?
-        };
-        let location = self.error_location(token?)?;
-        Some(ErrorContext { err, location })
+    pub fn last_error(&self) -> Option<&ErrorContext> {
+        self.last_error.as_ref()
     }
 
-    fn error_location(&self, token: Xsubstr) -> Option<TokenLocation> {
+    fn clear_last_error(&mut self) {
+        self.last_error.take();
+    }
+
+    fn set_last_error_if_none(&mut self, e: &Xerr) {
+        if self.last_error.is_some() {
+            return;
+        }
+        let token = if e.is_compile_time_error() || self.ctx.mode == ContextMode::Compile {
+            // Context yet not finished, lets use last_token to find exact error location
+            self.ctx.source.as_ref().and_then(|x| x.last_token())
+        } else {
+            // error triggered by code execution
+            self.debug_map.get(self.ip()).cloned().and_then(|tok| tok)
+        };
+        let location = if let Some(tok) = token {
+            self.token_location(tok)
+        } else {
+            None
+        };
+        self.last_error = Some(ErrorContext { 
+            err: e.clone(),
+            location,
+        });
+    }
+
+    fn token_location(&self, token: Xsubstr) -> Option<TokenLocation> {
         let tok_start = token.range().start;
         let par = token.parent();
         let mut it = par.char_indices();
@@ -334,39 +342,30 @@ impl State {
         bitstring_mod::open_bitstr(self, s)
     }
 
-    pub fn compile_file(&mut self, path: &str) -> Xresult {
-        self.build_file(path, ContextMode::Compile)
+    pub fn compile_with_path(&mut self, s: &str, path: &str) -> Xresult {
+        let src = self.intern_source(s.into(), Some(path));
+        self.build0(src,  ContextMode::Compile)
     }
 
-    fn build_file(&mut self, path: &str, mode: ContextMode) -> Xresult {
-        let buf =     std::fs::read_to_string(path).map_err(|e| {
-            crate::file::ioerror_with_path(Xstr::from(path), &e)
-        })?;
-        let src = self.add_source(Xstr::from(buf), Some(path));
-        self.build_source(src, mode)
+    pub fn compile(&mut self, s: &str) -> Xresult {
+        self.compile_xstr(s.into())
     }
 
-    pub fn compile(&mut self, source: &str) -> Xresult {
-        self.compile_xstr(source.into())
+    fn compile_xstr(&mut self, s: Xstr) -> Xresult {
+        let src = self.intern_source(s, None);
+        self.build0(src,  ContextMode::Compile)
     }
 
-    pub fn compile_xstr(&mut self, source: Xstr) -> Xresult {
-        let src = self.add_source(source, None);
-        self.build_source(src, ContextMode::Compile)?;
-        OK
+    pub fn eval(&mut self, s: &str) -> Xresult {
+        self.evalxstr(s.into())
     }
 
-    pub fn eval(&mut self, source: &str) -> Xresult {
-        self.evalxstr(source.into())
+    fn evalxstr(&mut self, s: Xstr) -> Xresult {
+        let src = self.intern_source(s, None);
+        self.build0(src, ContextMode::Eval)
     }
 
-    pub fn evalxstr(&mut self, source: Xstr) -> Xresult {
-        let src = self.add_source(source, None);
-        self.build_source(src, ContextMode::Eval)?;
-        OK
-    }
-
-    fn add_source(&mut self, buf: Xstr, path: Option<&str>) -> Lex {
+    fn intern_source(&mut self, buf: Xstr, path: Option<&str>) -> Lex {
         let id = self.sources.len();
         let lex = Lex::new(buf.clone());
         let name = if let Some(name) = path {
@@ -381,19 +380,22 @@ impl State {
         lex
     }
 
-    pub fn last_error(&self) -> Option<&ErrorContext> {
-        self.last_error.as_ref()
+    fn build0(&mut self, src: Lex, mode: ContextMode) -> Xresult {
+        if let Err(e) = self.build1(src, mode) {
+            self.set_last_error_if_none(&e);
+            Err(e)
+        } else {
+            OK
+        }
     }
 
-    fn build_source(&mut self, src: Lex, mode: ContextMode) -> Xresult {
+    fn build1(&mut self, src: Lex, mode: ContextMode) -> Xresult {
         self.context_open(mode, Some(src));
         self.last_error.take();
         let depth = self.nested.len();
-        let result = self.build();
+        let result = self.build2();
         if let Err(e) = result.as_ref() {
-            if self.last_error.is_none() {
-                self.last_error = self.error_context(e.clone());
-            }
+            self.set_last_error_if_none(&e);
             while self.nested.len() > depth {
                 self.context_close()?;
             }
@@ -401,7 +403,7 @@ impl State {
         result
     }
 
-    fn build(&mut self) -> Xresult {
+    fn build2(&mut self) -> Xresult {
         loop {
             if self.ctx.mode != ContextMode::Compile
                 && !self.has_pending_flow()
@@ -555,8 +557,8 @@ impl State {
 
     pub fn load_help(&mut self) -> Xresult {
         let src = include_str!("../docs/help.xs").into();
-        let help_src = self.add_source(src, Some("docs/help.xs"));
-        self.build_source(help_src, ContextMode::Compile)
+        let help_src = self.intern_source(src, Some("docs/help.xs"));
+        self.build0(help_src, ContextMode::Compile)
     }
 
     pub fn start_recording(&mut self) {
@@ -948,14 +950,15 @@ impl State {
     pub fn current_location(&self) -> Option<TokenLocation> {
         let dbg = self.debug_map.get(self.ip())?;
         dbg.as_ref().and_then(|token| {
-            self.error_location(token.clone())
+            self.token_location(token.clone())
         })
     }
 
     pub fn next(&mut self) -> Xresult {
         if self.is_running() {
+            self.clear_last_error();
             if let Err(e) = self.fetch_and_run() {
-                self.last_error = self.error_context(e);
+                self.set_last_error_if_none(&e);
             }
         }
         OK
@@ -1826,7 +1829,8 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
 
 fn core_word_load(xs: &mut State) -> Xresult {
     let path = xs.pop_data()?.to_string()?;
-    xs.compile_file(&path)
+    let s = crate::file::read_source_file(&path)?;
+    xs.compile_with_path(&s, &path)
 }
 
 fn core_word_get_tag(xs: &mut State) -> Xresult {
