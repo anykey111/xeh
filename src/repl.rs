@@ -34,7 +34,7 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 if let Err(e) = eval_line(xs, &line) {
-                    eprintln!("{}", xs.pretty_error(&e))
+                    eprintln!("{}", xs.pretty_error().unwrap_or_else(|| format!("{:?}", e)));
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -92,11 +92,7 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
         xs.start_recording();
     }
     for path in args.sources.iter() {
-        let buf = crate::file::read_source_file(path)?;
-        xs.compile_with_path(&buf, path)?;
-    }
-    if !args.sources.is_empty() {
-        let _ = xs.run()?;
+        xs.eval_from_file(&path)?;
     }
     if let Some(s) = args.eval {
         xs.eval(&s)

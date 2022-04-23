@@ -8,6 +8,7 @@ use crate::opcodes::*;
 use crate::bitstring_mod::BitstrMod;
 
 use std::fmt;
+use std::fmt::Debug;
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,7 +71,7 @@ pub enum Special {
     VecStackStart(usize),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum ContextMode {
     // assemble bytecode
     Compile,
@@ -96,7 +97,6 @@ struct Context {
     ss_ptr: usize,
     ip: usize,
     mode: ContextMode,
-    source: Option<Lex>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -140,18 +140,17 @@ struct SourceBuf {
 
 #[derive(Clone)]
 pub struct TokenLocation {
-    pub token: Xsubstr,
-    pub line: usize,
-    pub col: usize,
-    pub filename: String,
-    pub whole_line: Xsubstr,
+    line: usize,
+    col: usize,
+    filename: String,
+    whole_line: Xsubstr,
 }
 
 impl fmt::Debug for TokenLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
         writeln!(f, "{}", self.whole_line)?;
-        writeln!(f, "{:->1$}", '^', self.col + 1)
+        write!(f, "{:->1$}", '^', self.col + 1)
     }
 }
 
@@ -168,6 +167,7 @@ pub struct State {
     code: Vec<Opcode>,
     debug_map: Vec<Option<Xsubstr>>,
     sources: Vec<SourceBuf>,
+    input: Vec<Lex>,
     data_stack: Vec<Cell>,
     return_stack: Vec<Frame>,
     flow_stack: Vec<Flow>,
@@ -228,45 +228,25 @@ impl State {
             Opcode::Load(a) => format!("load       {}", a),
             Opcode::LoadInt(i) => format!("loadint    {}", i),
             Opcode::LoadNil => format!("loadnil"),
+            Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
             Opcode::Store(a) => format!("store      {}", a),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
         }
     }
 
-    pub fn pretty_error(&self, e: &Xerr) -> String {
-//        let ctx = self.last_error().or(self.error_context(e.clone()));
-        format!("{:?}", e)
+    pub fn pretty_error(&self) -> Option<String> {
+        let ec = self.last_error()?;
+        let errmsg = if let Some(loc) = &ec.location {
+            format!("{:?}\n{:?}", ec.err, loc)
+        } else {
+            format!("{:?}", ec.err)
+        };
+        Some(errmsg)
     }
 
     pub fn last_error(&self) -> Option<&ErrorContext> {
         self.last_error.as_ref()
-    }
-
-    fn clear_last_error(&mut self) {
-        self.last_error.take();
-    }
-
-    fn set_last_error_if_none(&mut self, e: &Xerr) {
-        if self.last_error.is_some() {
-            return;
-        }
-        let token = if e.is_compile_time_error() || self.ctx.mode == ContextMode::Compile {
-            // Context yet not finished, lets use last_token to find exact error location
-            self.ctx.source.as_ref().and_then(|x| x.last_token())
-        } else {
-            // error triggered by code execution
-            self.debug_map.get(self.ip()).cloned().and_then(|tok| tok)
-        };
-        let location = if let Some(tok) = token {
-            self.token_location(tok)
-        } else {
-            None
-        };
-        self.last_error = Some(ErrorContext { 
-            err: e.clone(),
-            location,
-        });
     }
 
     fn token_location(&self, token: Xsubstr) -> Option<TokenLocation> {
@@ -301,7 +281,6 @@ impl State {
         Some(TokenLocation {
             line,
             col,
-            token,
             filename: name.to_owned(),
             whole_line,
         })
@@ -342,18 +321,19 @@ impl State {
         bitstring_mod::open_bitstr(self, s)
     }
 
-    pub fn compile_with_path(&mut self, s: &str, path: &str) -> Xresult {
-        let src = self.intern_source(s.into(), Some(path));
-        self.build0(src,  ContextMode::Compile)
-    }
-
     pub fn compile(&mut self, s: &str) -> Xresult {
-        self.compile_xstr(s.into())
+        self.context_open(ContextMode::Compile)?;
+        self.intern_source(s.into(), None)?;
+        self.build0()?;
+        self.context_close()
     }
 
-    fn compile_xstr(&mut self, s: Xstr) -> Xresult {
-        let src = self.intern_source(s, None);
-        self.build0(src,  ContextMode::Compile)
+    pub fn eval_from_file(&mut self, path: &str) -> Xresult {
+        let s = crate::file::read_source_file(path)?;
+        self.intern_source(s.into(), Some(path))?;
+        self.context_open(ContextMode::Eval)?;
+        self.build0()?;
+        self.context_close()
     }
 
     pub fn eval(&mut self, s: &str) -> Xresult {
@@ -361,11 +341,13 @@ impl State {
     }
 
     fn evalxstr(&mut self, s: Xstr) -> Xresult {
-        let src = self.intern_source(s, None);
-        self.build0(src, ContextMode::Eval)
+        self.intern_source(s, None)?;
+        self.context_open(ContextMode::Eval)?;
+        self.build0()?;
+        self.context_close()
     }
 
-    fn intern_source(&mut self, buf: Xstr, path: Option<&str>) -> Lex {
+    fn intern_source(&mut self, buf: Xstr, path: Option<&str>) -> Xresult {
         let id = self.sources.len();
         let lex = Lex::new(buf.clone());
         let name = if let Some(name) = path {
@@ -377,51 +359,32 @@ impl State {
             name,
             buf,
         });
-        lex
-    }
-
-    fn build0(&mut self, src: Lex, mode: ContextMode) -> Xresult {
-        if let Err(e) = self.build1(src, mode) {
-            self.set_last_error_if_none(&e);
-            Err(e)
-        } else {
+        self.input.push(lex);
             OK
         }
-    }
 
-    fn build1(&mut self, src: Lex, mode: ContextMode) -> Xresult {
-        self.context_open(mode, Some(src));
+    fn build0(&mut self) -> Xresult {
         self.last_error.take();
-        let depth = self.nested.len();
-        let result = self.build2();
-        if let Err(e) = result.as_ref() {
-            self.set_last_error_if_none(&e);
-            while self.nested.len() > depth {
-                self.context_close()?;
+        self.build1().map_err(|e| {
+            // build-time error
+            if self.last_error.is_none() {
+                let location = self.input.last()
+                    .and_then(|lex| lex.last_token())
+                    .and_then(|tok| self.token_location(tok));
+                self.last_error = Some(ErrorContext { err: e.clone(), location });
             }
-        }
-        result
+            e
+        })
     }
 
-    fn build2(&mut self) -> Xresult {
+    fn build1(&mut self) -> Xresult {
         loop {
-            if self.ctx.mode != ContextMode::Compile
-                && !self.has_pending_flow()
-                && self.ip() < self.code_origin()
-            {
-                self.run()?;
-            }
             match self.next_token()? {
                 Tok::EndOfInput => {
                     if self.has_pending_flow() {
                         break Err(Xerr::ControlFlowError);
                     }
-                    if self.ip() < self.code_origin() {
-                        if self.ctx.mode != ContextMode::Compile {
-                            self.run()?;
-                        }
-                    }
-                    break self.context_close();
+                    break OK;
                 }
                 Tok::Literal(val) => {
                     self.code_emit_value(val)?;
@@ -432,14 +395,14 @@ impl State {
                         .and_then(|ff| ff.locals.iter().rposition(|x| x == name.as_str())) {
                             self.code_emit(Opcode::LoadLocal(i))?;
                     } else {
-                        self.code_emit_word(name)?;
+                        self.build_word(name)?;
                     }
                 }
             }
         }
     }
 
-    fn code_emit_word(&mut self, name: Xsubstr) -> Xresult {
+    fn build_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
             None =>
                 self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
@@ -454,7 +417,7 @@ impl State {
                 ..
             }) => {
                 let xf = xf.clone();
-                self.call_fn(xf)
+                self.run_immediate(xf)
             }
             Some(Entry::Function {
                 immediate: false,
@@ -476,7 +439,7 @@ impl State {
     }
 
     fn next_name(&mut self) -> Xresult1<Xsubstr> {
-        if let Some(lex) = &mut self.ctx.source {
+        if let Some(lex) = &mut self.input.last_mut() {
             if let Tok::Word(name) = lex.next()? {
                 return Ok(name);
             }
@@ -485,14 +448,18 @@ impl State {
     }
 
     fn next_token(&mut self) -> Xresult1<Tok> {
-        if let Some(lex) = &mut self.ctx.source {
-            lex.next()
+        if let Some(lex) = self.input.last_mut() {
+            let tok = lex.next()?;
+            if tok == Tok::EndOfInput {
+                self.input.pop();
+            }
+            Ok(tok)
         } else {
             Ok(Tok::EndOfInput)
         }
     }
 
-    fn context_open(&mut self, mode: ContextMode, source: Option<Lex>) {
+    fn context_open(&mut self, mode: ContextMode) -> Xresult {
         let mut tmp = Context {
             ds_len: 0,
             cs_len: self.code.len(),
@@ -502,42 +469,38 @@ impl State {
             ss_ptr: self.special.len(),
             ip: self.code_origin(),
             mode,
-            source,
         };
-        if tmp.source.is_none() {
-            // take source form previous context
-            tmp.source = self.ctx.source.take();
-        }
         if tmp.mode == ContextMode::MetaEval {
             // set bottom stack limit for meta interpreter
             tmp.ds_len = self.data_stack.len();
         }
         std::mem::swap(&mut self.ctx, &mut tmp);
         self.nested.push(tmp);
+        OK
     }
 
     fn context_close(&mut self) -> Xresult {
-        let mut prev_ctx = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
-        if prev_ctx.source.is_none() {
-            // take source from current context
-            prev_ctx.source = self.ctx.source.take();
-        }
+        if self.ctx.mode != ContextMode::Compile {
+            self.run()?;
         if self.ctx.mode == ContextMode::MetaEval {
             // purge meta context code after evaluation
             self.code.truncate(self.ctx.cs_len);
+            }
+        }
+        let mut prev = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
+        if prev.mode == self.ctx.mode {
+            if self.ctx.mode == ContextMode::Eval {
+                // preserve current ip value
+                prev.ip = self.ctx.ip;
+            }
+        } else if self.ctx.mode == ContextMode::MetaEval {
             // emit meta-evaluation result
             while self.data_stack.len() > self.ctx.ds_len {
                 let val = self.pop_data()?;
                 self.code_emit_value(val)?;
             }
-        } else if self.ctx.mode == ContextMode::Eval {
-            // preserve current ip value
-            prev_ctx.ip = self.ctx.ip;
         }
-        // assert_eq!(prev_ctx.ls_len, self.loops.len());
-        // assert_eq!(prev_ctx.ss_ptr, self.special.len());
-        // assert_eq!(prev_ctx.rs_len, self.return_stack.len());
-        self.ctx = prev_ctx;
+        self.ctx = prev;
         OK
     }
 
@@ -557,8 +520,8 @@ impl State {
 
     pub fn load_help(&mut self) -> Xresult {
         let src = include_str!("../docs/help.xs").into();
-        let help_src = self.intern_source(src, Some("docs/help.xs"));
-        self.build0(help_src, ContextMode::Compile)
+        self.intern_source(src, Some("docs/help.xs"))?;
+        self.build0()
     }
 
     pub fn start_recording(&mut self) {
@@ -771,8 +734,8 @@ impl State {
             Cell::Int(i) => self.code_emit(Opcode::LoadInt(i)),
             Cell::Nil => self.code_emit(Opcode::LoadNil),
             val => {
-                let a = self.alloc_cell(val)?;
-                self.code_emit(Opcode::Load(a))
+                let c = CellBox::from(val);
+                self.code_emit(Opcode::LoadCell(c))
             }
         }
     }
@@ -780,11 +743,11 @@ impl State {
     fn code_emit(&mut self, op: Opcode) -> Xresult {
         let at = self.code.len();
         let len = self.debug_map.len();
-        let loc = self.ctx.source.as_ref().and_then(|x| x.last_token());
+        let loc = self.input.last().and_then(|x| x.last_token());
         if at < len {
-            self.debug_map[at] = loc.clone();
+            self.debug_map[at] = loc;
         } else if at == len {
-            self.debug_map.push(loc.clone());
+            self.debug_map.push(loc);
         } else {
             panic!("non-linear allocation {}/{}", at, len);
         }
@@ -809,12 +772,15 @@ impl State {
     }
 
     pub fn alloc_cell(&mut self, val: Cell) -> Xresult1<usize> {
+        if self.ctx.mode == ContextMode::MetaEval {
+            return Err(Xerr::ReadonlyAddress);
+        }
         let a = self.heap.len();
         self.heap.push(val);
         Ok(a)
     }
 
-    fn call_fn(&mut self, x: Xfn) -> Xresult {
+    fn run_immediate(&mut self, x: Xfn) -> Xresult {
         match x {
             Xfn::Native(x) => x.0(self),
             Xfn::Interp(x) => {
@@ -827,8 +793,17 @@ impl State {
     }
 
     pub fn run(&mut self) -> Xresult {
+        self.last_error.take();
         while self.is_running() {
-            self.fetch_and_run()?;
+            self.fetch_and_run().map_err(|e| {
+                if self.last_error.is_none() {
+                    let location = self.debug_map.get(self.ip())
+                        .and_then(|dbg| dbg.clone())
+                        .and_then(|tok| self.token_location(tok));
+                    self.last_error = Some(ErrorContext { err: e.clone(), location });
+                }
+                e
+            })?;
         }
         OK
     }
@@ -897,6 +872,11 @@ impl State {
                 self.push_data(Cell::Nil)?;
                 self.next_ip()
             }
+            Opcode::LoadCell(ref c) => {
+                let val = c.as_ref().clone();
+                self.push_data(val)?;
+                self.next_ip()
+            }
             Opcode::Load(a) => {
                 let val = self.heap[a].clone();
                 self.push_data(val)?;
@@ -947,19 +927,9 @@ impl State {
         }
     }
 
-    pub fn current_location(&self) -> Option<TokenLocation> {
-        let dbg = self.debug_map.get(self.ip())?;
-        dbg.as_ref().and_then(|token| {
-            self.token_location(token.clone())
-        })
-    }
-
     pub fn next(&mut self) -> Xresult {
         if self.is_running() {
-            self.clear_last_error();
-            if let Err(e) = self.fetch_and_run() {
-                self.set_last_error_if_none(&e);
-            }
+            self.fetch_and_run()?;
         }
         OK
     }
@@ -1075,6 +1045,7 @@ impl State {
     }
 
     fn jump_to(&mut self, offs: isize) -> Xresult {
+        debug_assert!(offs != 0);
         let new_ip = (self.ip() as isize + offs) as usize;
         self.set_ip(new_ip)
     }
@@ -1546,7 +1517,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
 }
 
 fn core_word_comment(xs: &mut State) -> Xresult {
-    if let Some(src) = xs.ctx.source.as_mut(){
+    if let Some(src) = xs.input.last_mut() {
         src.skip_line();
     }
     OK
@@ -1583,9 +1554,8 @@ fn core_word_variable(xs: &mut State) -> Xresult {
         return Err(Xerr::ControlFlowError);
     }
     let a = xs.alloc_cell(Cell::Nil)?;
-    xs.code_emit(Opcode::Store(a))?;
     xs.dict_insert(DictEntry::new(name, Entry::Variable(a)))?;
-    OK
+    xs.code_emit(Opcode::Store(a))
 }
 
 fn core_word_setvar(xs: &mut State) -> Xresult {
@@ -1601,16 +1571,11 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
 }
 
 fn core_word_nil(xs: &mut State) -> Xresult {
-    if xs.ctx.mode == ContextMode::Compile {
-        xs.code_emit(Opcode::LoadNil)
-    } else {
-        xs.push_data(Cell::Nil)
-    }
+    xs.code_emit(Opcode::LoadNil)
 }
 
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
-    xs.context_open(ContextMode::MetaEval, None);
-    OK
+    xs.context_open(ContextMode::MetaEval)
 }
 
 fn core_word_nested_end(xs: &mut State) -> Xresult {
@@ -1829,8 +1794,7 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
 
 fn core_word_load(xs: &mut State) -> Xresult {
     let path = xs.pop_data()?.to_string()?;
-    let s = crate::file::read_source_file(&path)?;
-    xs.compile_with_path(&s, &path)
+    xs.eval_from_file(&path)
 }
 
 fn core_word_get_tag(xs: &mut State) -> Xresult {
@@ -1859,6 +1823,16 @@ fn core_word_find_tagged(xs: &mut State) -> Xresult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! eval_ok {
+        ($xs:expr,$e:expr) => {
+            $xs.eval($e).map_err(|err| {
+                println!("*** error: {}", $xs.pretty_error().unwrap_or_default());
+                err
+            }).unwrap()
+        };
+    }
+
 
     #[test]
     fn test_jump_offset() {
@@ -2033,23 +2007,26 @@ mod tests {
      }
 
     #[test]
-    fn test_get_set() {
+    fn test_get() {
         let mut xs = State::boot().unwrap();
         xs.eval("[ 11 22 33 ] 2 get").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
         xs.eval("[ 11 22 33 ] -2 get").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::OutOfBounds(100)), xs.eval("[ 1 2 3 ] 100 get"));
-        assert_eq!(OK, xs.eval("[ 1 2 3 ] -2 get"));
+    }
+
+    #[test]
+    fn test_get_relative() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "[ 1 2 3 ] -2 get");
         assert_eq!(Cell::from(2isize), xs.pop_data().unwrap());
-        assert_eq!(OK, xs.eval("[ 1 2 3 ] -1 get"));
+        eval_ok!(xs, "[ 1 2 3 ] -1 get");
         assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
-        assert_eq!(OK, xs.eval("[ 1 2 3 ] -4 get"));
+        eval_ok!(xs, "[ 1 2 3 ] -4 get");
         assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ 1 ] \"0\" get"));
     }
-
-
 
     #[test]
     fn test_locals() {
@@ -2104,16 +2081,16 @@ mod tests {
     fn test_nested_interpreter() {
         let mut xs = State::boot().unwrap();
         xs.compile("( 3 5 * )").unwrap();
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
-        xs.eval("( 2 2 + )").unwrap();
+        eval_ok!(xs, "( 2 2 + )");
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        xs.eval("( 10 var x 2 var y ( x y * ) )").unwrap();
-        assert_eq!(Ok(Cell::Int(20)), xs.pop_data());
-        xs.eval("( 3 var n [ n 0 do i loop ] )").unwrap();
+        eval_ok!(xs, "10 var x  ( ( x nil assert-eq  ) )");
+        eval_ok!(xs, "(  [ x 0 do i loop ] )");
         let v = xs.pop_data().unwrap().to_vector().unwrap();
-        assert_eq!(3, v.len());
-        xs.eval(": f [ ( 3 3 * ) ] ; f 0 get").unwrap();
+        assert_eq!(10, v.len());
+        eval_ok!(xs, ": f [ ( 3 3 * ) ] ; f 0 get");
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
 
@@ -2301,70 +2278,65 @@ mod tests {
     #[test]
     fn test_error_location() {
         let mut xs = State::boot().unwrap();
-        let errlines = |xs:&State| -> Vec<String> {
-            let e = xs.last_error().unwrap();
-            let s = format!("{:?}\n{:?}", e.err, e.location);
-            s.lines().map(|s| s.to_owned()).collect()
-        };
         assert_eq!(Err(Xerr::UnknownWord(Xstr::from("x"))), xs.eval(" \r\n \r\n\n   x"));
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "unknown word x");
-        assert_eq!(lines[1], "<buffer#0>:4:4");
-        assert_eq!(lines[2], "   x");
-        assert_eq!(lines[3], "---^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "unknown word x\n",
+            "<buffer#0>:4:4\n",
+            "   x\n",
+            "---^"));
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "unknown word z");
-        assert_eq!(lines[1], "<buffer#0>:1:1");
-        assert_eq!(lines[2], "z");
-        assert_eq!(lines[3], "^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "unknown word z\n",
+            "<buffer#0>:1:1\n",
+            "z\n",
+            "^"));
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "unknown word q");
-        assert_eq!(lines[1], "<buffer#0>:2:2");
-        assert_eq!(lines[2], " q");
-        assert_eq!(lines[3], "-^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "unknown word q\n",
+            "<buffer#0>:2:2\n",
+            " q\n",
+            "-^"));
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("[\n10 loop\n]");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "ControlFlowError");
-        assert_eq!(lines[1], "<buffer#0>:2:4");
-        assert_eq!(lines[2], "10 loop");
-        assert_eq!(lines[3], "---^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "ControlFlowError\n",
+            "<buffer#0>:2:4\n",
+            "10 loop\n",
+            "---^"));
 
         let mut xs = State::boot().unwrap();
         let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "ControlFlowError");
-        assert_eq!(lines[1], "<buffer#0>:2:3");
-        assert_eq!(lines[2], "( loop )");
-        assert_eq!(lines[3], "--^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "ControlFlowError\n",
+            "<buffer#0>:2:3\n",
+            "( loop )\n",
+            "--^"));
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("\"src/test-location1.xs\" load");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "ControlFlowError");
-        assert_eq!(lines[1], "src/test-location2.xs:2:3");
-        assert_eq!(lines[2], "[ again ]");
-        assert_eq!(lines[3], "--^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "ControlFlowError\n",
+            "src/test-location2.xs:2:3\n",
+            "[ again ]\n",
+            "--^"));
 
         let mut xs = State::boot().unwrap();
         xs.eval(": test3 0 get ;").unwrap();
         let res = xs.eval("[ ] test3");
         assert_eq!(Err(Xerr::OutOfBounds(0)), res);
-        let lines = errlines(&xs);
-        assert_eq!(lines[0], "index 0 out of bounds");
-        assert_eq!(lines[1], "<buffer#0>:1:11");
-        assert_eq!(lines[2], ": test3 0 get ;");
-        assert_eq!(lines[3], "----------^");
+        assert_eq!(xs.pretty_error().unwrap(), concat!(
+            "index 0 out of bounds\n",
+            "<buffer#0>:1:11\n",
+            ": test3 0 get ;\n",
+            "----------^"));
     }
 
     #[test]

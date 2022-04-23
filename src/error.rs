@@ -5,12 +5,10 @@ use std::fmt;
 #[derive(PartialEq, Clone)]
 pub enum Xerr {
     UnknownWord(Xstr),
-    //start: compile time errors
     InputIncomplete,
     InputParseError,
     ControlFlowError,
     ExpectingName,
-    //end: compile time errors
     IntegerOverflow,
     DivisionByZero,
     StackUnderflow,
@@ -19,6 +17,7 @@ pub enum Xerr {
     SpecialStackUnderflow,
     StackNotBalanced,
     TypeError,
+    TypeError2(Cell, Cell),
     RecusriveDefinition,
     NotFound,
     InvalidAddress,
@@ -40,18 +39,6 @@ pub enum Xerr {
     Exit(isize),
 }
 
-impl Xerr {
-    pub fn is_compile_time_error(&self) -> bool {
-        match self {
-            Xerr::InputIncomplete
-            | Xerr::InputParseError
-            | Xerr::ControlFlowError
-            | Xerr::ExpectingName => true,
-            _ => false,
-        }
-    }
-}
-
 impl fmt::Debug for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -67,28 +54,30 @@ impl fmt::Debug for Xerr {
             Xerr::SpecialStackUnderflow => f.write_str("SpecialStackUnderflow"),
             Xerr::StackNotBalanced => f.write_str("StackNotBalanced"),
             Xerr::TypeError => f.write_str("TypeError"),
-            Xerr::RecusriveDefinition => f.write_str("RecusriveDefinition"),
+            Xerr::TypeError2(a, b) => write!(f, "unexpected types {:?} and {:?}",
+                a.value().type_name(), b.value().type_name()),
+            Xerr::RecusriveDefinition => f.write_str("recursive word definition"),
             Xerr::ExpectingName => f.write_str("ExpectingName"),
             Xerr::NotFound => f.write_str("NotFound"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::ReadonlyAddress => f.write_str("ReadonlyAddress"),
-            Xerr::IOError { filename, reason } => writeln!(f, "{}: {}", filename, reason),
-            Xerr::OutOfBounds(index) => writeln!(f, "index {} out of bounds", index),
+            Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
+            Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
             Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
             Xerr::AssertEqFailed(a, b) => {
                 writeln!(f, "assertion failed, two top stack values not equals")?;
                 writeln!(f, "[0] {:?}", a)?;
-                writeln!(f, "[1] {:?}", b)
+                write!(f,   "[1] {:?}", b)
             },
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::UnalignedBitstr => f.write_str("UnalignedBitstr"),
             Xerr::InvalidFloatLength{..} => f.write_str("InvalidFloatLength"),
             Xerr::Exit{..} => f.write_str("Exit"),
             Xerr::ReadError { src, len } => {
-                writeln!(f, "trying to read {} bits while only {} remain", len, src.len())
+                write!(f, "trying to read {} bits while only {} remain", len, src.len())
             }
             Xerr::SeekError { src, offset } => {
-                writeln!(f, "bitstr offset {} out of range {}..{}", offset, src.start(), src.end())
+                write!(f, "bitstr offset {} out of range {}..{}", offset, src.start(), src.end())
             }
             Xerr::MatchError { src, expect, fail_pos} => {
                 let fail_pos = *fail_pos;
@@ -104,13 +93,13 @@ impl fmt::Debug for Xerr {
                 for (x, _) in pat_diff.iter8().take(8){
                     write!(f, " {:02X}", x)?
                 }
-                writeln!(f, " ] pattern at {}", expect.start() + fail_pos)
+                write!(f, " ] pattern at {}", expect.start() + fail_pos)
             }
             Xerr::RuntimeParseError(_, pos) => {
-                writeln!(f, "char parse error at offset {}", pos)
+                write!(f, "char parse error at offset {}", pos)
             }
             Xerr::FromUtf8Error => {
-                writeln!(f, "utf8 parse error")
+                write!(f, "utf8 parse error")
             }
         }
     }

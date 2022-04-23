@@ -579,7 +579,7 @@ mod tests {
             other => panic!("{:?}", other),
         }
         assert_eq!(format!("{:?}", res.err().unwrap()),
-        "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3\n");
+        "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3");
     }
 
     #[test]

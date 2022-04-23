@@ -159,19 +159,29 @@ impl Ord for Cell {
 }
 impl Eq for Cell {}
 
+const NIL_TYPE_NAME: &str = "nil";
+const INT_TYPE_NAME: &str = "int";
+const REAL_TYPE_NAME: &str = "real";
+const STR_TYPE_NAME: &str = "str";
+const VEC_TYPE_NAME: &str = "vec";
+const FUN_TYPE_NAME: &str = "fun";
+const BITSTR_TYPE_NAME: &str = "bitstr";
+const ANY_TYPE_NAME: &str = "any";
+const TAG_TYPE_NAME: &str = "tag";
+
 impl Cell {
 
     pub fn type_name(&self) -> &str {
         match self {
-            Cell::Nil{..} => "nil",
-            Cell::Int{..} => "int",
-            Cell::Real{..} => "real",
-            Cell::Str{..} => "str",
-            Cell::Vector{..} => "vec",
-            Cell::Fun{..} => "fun",
-            Cell::Bitstr{..} => "bitstr",
-            Cell::AnyRc{..} => "any",
-            Cell::WithTag{..} => "tag",
+            Cell::Nil{..} => NIL_TYPE_NAME,
+            Cell::Int{..} => INT_TYPE_NAME,
+            Cell::Real{..} => REAL_TYPE_NAME,
+            Cell::Str{..} => STR_TYPE_NAME,
+            Cell::Vector{..} => VEC_TYPE_NAME,
+            Cell::Fun{..} => FUN_TYPE_NAME,
+            Cell::Bitstr{..} => BITSTR_TYPE_NAME,
+            Cell::AnyRc{..} => ANY_TYPE_NAME,
+            Cell::WithTag{..} => TAG_TYPE_NAME,
         }
     }
 

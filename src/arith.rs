@@ -22,7 +22,7 @@ fn arithmetic_ops_real(
         (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a as f64, *b))),
         (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
         (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
-        _ => Err(Xerr::TypeError),
+        _ => Err(Xerr::TypeError2(a, b)),
     }
 }
 
@@ -183,7 +183,10 @@ mod tests {
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
-        assert_eq!(Err(Xerr::TypeError), xs.eval("\"s\" 1 +"));
+        match xs.eval("\"s\" 1 +") {
+            Err(Xerr::TypeError2(_a, _b)) => (),
+            other => panic!("result {:?}", other),
+        }
         xs.eval("1 1 and").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 2 or").unwrap();

@@ -9,7 +9,7 @@ fn run() -> Xresult {
     let args = xeh::repl::parse_args()?;
     let res = xeh::repl::run_with_args(&mut xs, args);
     if let Err(e) = &res {
-        let errstr = xs.pretty_error(e);
+        let errstr = xs.pretty_error().unwrap_or_else(|| format!("{:?}", e));
         eprintln!("{:?}", errstr);
     }
     res

@@ -1,5 +1,7 @@
 use crate::cell::*;
 
+pub type CellBox = std::rc::Rc<Cell>;
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Opcode {
     Call(usize),
@@ -16,6 +18,7 @@ pub enum Opcode {
     Load(usize),
     LoadNil,
     LoadInt(Xint),
+    LoadCell(CellBox),
     Store(usize),
     InitLocal(usize),
     LoadLocal(usize),
