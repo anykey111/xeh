@@ -43,6 +43,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("not", core_word_bitnot)?;
     xs.defword("round", core_word_round)?;
     xs.defword("random", core_word_random)?;
+    xs.defword("min", core_word_min)?;
+    xs.defword("max", core_word_max)?;
     OK
 }
 
@@ -150,6 +152,14 @@ fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
     }
 }
 
+fn core_word_min(xs: &mut State) -> Xresult {
+    arithmetic_ops_real(xs, |a, b| a.min(b), |a,b| a.min(b))
+}
+
+fn core_word_max(xs: &mut State) -> Xresult {
+    arithmetic_ops_real(xs, |a, b| a.max(b), |a,b| a.max(b))
+}
+
 fn core_word_rem(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_rem, std::ops::Rem::<f64>::rem)
 }
@@ -246,6 +256,15 @@ mod tests {
         assert_eq!(Ok(Cell::Real(2.0)), xs.pop_data());
         xs.eval("2 [ ] with-tag 1 +").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_min_max() {
+        let mut xs = State::boot().unwrap();
+        xs.eval("-1.0 0 min").unwrap();
+        assert_eq!(Ok(Cell::from(-1.0)), xs.pop_data());
+        xs.eval("-1 0 max").unwrap();
+        assert_eq!(Ok(Cell::from(0u32)), xs.pop_data());        
     }
 
     #[test]
