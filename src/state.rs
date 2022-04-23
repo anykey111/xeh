@@ -379,6 +379,11 @@ impl State {
 
     fn build1(&mut self) -> Xresult {
         loop {
+            if self.ctx.mode == ContextMode::MetaEval
+                && !self.has_pending_flow()
+            {
+                self.run()?;
+            }
             match self.next_token()? {
                 Tok::EndOfInput => {
                     if self.has_pending_flow() {
