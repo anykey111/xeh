@@ -1,12 +1,11 @@
 
 : fib
-    dup 2 < if
-        drop 1
-    else
+    dup 1 > if
         dup 2 - fib
         swap 1 - fib
         +
-    then
+    endif
 ;
 
-36 fib println
+# 15 0 do     i fib "," print print loop
+35 fib println
