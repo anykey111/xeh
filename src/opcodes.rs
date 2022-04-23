@@ -17,9 +17,26 @@ pub enum Opcode {
     CaseOf(isize),
     Load(usize),
     LoadNil,
-    LoadInt(Xint),
+    LoadI64(i64),
     LoadCell(CellBox),
     Store(usize),
     InitLocal(usize),
     LoadLocal(usize),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    //#[ignore]
+    fn test_size() {
+        if isize::BITS == 64 {
+            assert_eq!(8, std::mem::size_of::<Xstr>());
+            assert_eq!(8, std::mem::size_of::<XfnPtr>());
+            assert_eq!(16, std::mem::size_of::<Opcode>());
+            assert_eq!(16, std::mem::size_of::<Xint>());
+        }
+    }
+
 }

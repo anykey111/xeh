@@ -226,7 +226,7 @@ impl State {
             Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
             Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
             Opcode::Load(a) => format!("load       {}", a),
-            Opcode::LoadInt(i) => format!("loadint    {}", i),
+            Opcode::LoadI64(i) => format!("loadint    {}", i),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
             Opcode::Store(a) => format!("store      {}", a),
@@ -731,7 +731,8 @@ impl State {
 
     fn code_emit_value(&mut self, val: Cell) -> Xresult {
         match val {
-            Cell::Int(i) => self.code_emit(Opcode::LoadInt(i)),
+            Cell::Int(i) if i64::MIN as Xint <= i && i <= i64::MAX as Xint =>
+                self.code_emit(Opcode::LoadI64(i as i64)),
             Cell::Nil => self.code_emit(Opcode::LoadNil),
             val => {
                 let c = CellBox::from(val);
@@ -864,8 +865,8 @@ impl State {
                     self.fetch_and_run()
                 }
             },
-            Opcode::LoadInt(n) => {
-                self.push_data(Cell::Int(n))?;
+            Opcode::LoadI64(n) => {
+                self.push_data(Cell::from(n))?;
                 self.next_ip()
             }
             Opcode::LoadNil => {
