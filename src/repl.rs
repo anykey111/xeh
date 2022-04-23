@@ -3,9 +3,9 @@ use getopts::Options;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub fn run(xs: &mut Xstate) -> Xresult {
-    crate::repl::run_tty_repl(xs, true);
-    OK
+fn print_pretty_error(xs: &mut Xstate, e: &Xerr) {
+    let s = xs.pretty_error().unwrap_or_else(|| format!("{:?}", e));
+    eprintln!("{}", s);
 }
 
 fn eval_line(xs: &mut Xstate, line: &str) -> Xresult {
@@ -34,7 +34,7 @@ fn run_tty_repl(xs: &mut Xstate, load_history: bool) {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 if let Err(e) = eval_line(xs, &line) {
-                    eprintln!("{}", xs.pretty_error().unwrap_or_else(|| format!("{:?}", e)));
+                    print_pretty_error(xs, &e);
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -84,6 +84,14 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
 }
 
 pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
+    let res = run_with_args1(xs, args);
+    if let Err(e) = res.as_ref() {
+        print_pretty_error(xs, e);
+    }
+    res
+}
+
+pub fn run_with_args1(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if let Some(ref path) = args.binary_path {
         crate::file::load_binary(xs, path)?;
     }
@@ -97,7 +105,8 @@ pub fn run_with_args(xs: &mut Xstate, args: XcmdArgs) -> Xresult {
     if let Some(s) = args.eval {
         xs.eval(&s)
     } else if args.sources.is_empty() {
-        crate::repl::run(xs)
+        run_tty_repl(xs, true);
+        OK
     } else {
         OK
     }

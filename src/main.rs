@@ -7,12 +7,7 @@ fn run() -> Xresult {
     let mut xs = Xstate::boot()?;
     xeh::d2_plugin::load(&mut xs)?;
     let args = xeh::repl::parse_args()?;
-    let res = xeh::repl::run_with_args(&mut xs, args);
-    if let Err(e) = &res {
-        let errstr = xs.pretty_error().unwrap_or_else(|| format!("{:?}", e));
-        eprintln!("{:?}", errstr);
-    }
-    res
+    xeh::repl::run_with_args(&mut xs, args)
 }
 
 #[cfg(not(feature = "stdio"))]
