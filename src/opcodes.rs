@@ -18,6 +18,7 @@ pub enum Opcode {
     Load(usize),
     LoadNil,
     LoadI64(i64),
+    LoadF64(f64),
     LoadCell(CellBox),
     Store(usize),
     InitLocal(usize),
@@ -36,6 +37,7 @@ mod tests {
             assert_eq!(8, std::mem::size_of::<XfnPtr>());
             assert_eq!(16, std::mem::size_of::<Opcode>());
             assert_eq!(16, std::mem::size_of::<Xint>());
+            assert_eq!(8, std::mem::size_of::<Xreal>());
         }
     }
 

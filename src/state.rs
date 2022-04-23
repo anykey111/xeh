@@ -226,7 +226,8 @@ impl State {
             Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
             Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
             Opcode::Load(a) => format!("load       {}", a),
-            Opcode::LoadI64(i) => format!("loadint    {}", i),
+            Opcode::LoadI64(i) => format!("loadi64    {}", i),
+            Opcode::LoadF64(i) => format!("loadf64    {}", i),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
             Opcode::Store(a) => format!("store      {}", a),
@@ -865,6 +866,10 @@ impl State {
                     self.fetch_and_run()
                 }
             },
+            Opcode::LoadF64(x) => {
+                self.push_data(Cell::from(x))?;
+                self.next_ip()
+            }
             Opcode::LoadI64(n) => {
                 self.push_data(Cell::from(n))?;
                 self.next_ip()
