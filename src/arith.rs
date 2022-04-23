@@ -1,6 +1,50 @@
 use crate::cell::*;
 use crate::error::*;
+use crate::prelude::Xstate;
 use crate::state::*;
+
+pub fn load(xs: &mut Xstate) -> Xresult {
+    xs.defword("+", core_word_add)?;
+    xs.defword("-", core_word_sub)?;
+    xs.defword("*", core_word_mul)?;
+    xs.defword("/", core_word_div)?;
+    xs.defword("negate", core_word_negate)?;
+    xs.defword("abs", core_word_abs)?;
+    xs.defword("<", |xs| {
+        let t = compare_cells(xs)?.is_lt();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword("<=", |xs| {
+        let t = compare_cells(xs)?.is_le();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword(">", |xs| {
+        let t = compare_cells(xs)?.is_gt();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword(">=", |xs| {
+        let t = compare_cells(xs)?.is_ge();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword("=", |xs| {
+        let t = compare_cells(xs)?.is_eq();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword("<>", |xs| {
+        let t = compare_cells(xs)?.is_ne();
+        xs.push_data(Cell::from(t))
+    })?;
+    xs.defword("rem", core_word_rem)?;
+    xs.defword("and", core_word_bitand)?;
+    xs.defword("or", core_word_bitor)?;
+    xs.defword("xor", core_word_bitxor)?;
+    xs.defword("shl", core_word_bitshl)?;
+    xs.defword("shr", core_word_bitshr)?;
+    xs.defword("not", core_word_bitnot)?;
+    xs.defword("round", core_word_round)?;
+    xs.defword("random", core_word_random)?;
+    OK
+}
 
 // (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {
@@ -26,19 +70,19 @@ fn arithmetic_ops_real(
     }
 }
 
-pub fn core_word_add(xs: &mut State) -> Xresult {
+fn core_word_add(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_add, std::ops::Add::<f64>::add)
 }
 
-pub fn core_word_sub(xs: &mut State) -> Xresult {
+fn core_word_sub(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_sub, std::ops::Sub::<f64>::sub)
 }
 
-pub fn core_word_mul(xs: &mut State) -> Xresult {
+fn core_word_mul(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_mul, std::ops::Mul::<f64>::mul)
 }
 
-pub fn core_word_div(xs: &mut State) -> Xresult {
+fn core_word_div(xs: &mut State) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
     match (a.value(), b.value()) {
@@ -66,7 +110,7 @@ pub fn core_word_div(xs: &mut State) -> Xresult {
     }
 }
 
-pub fn core_word_negate(xs: &mut State) -> Xresult {
+fn core_word_negate(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.checked_neg().ok_or(Xerr::IntegerOverflow)?)),
         Cell::Real(a) => xs.push_data(Cell::Real(-a)),
@@ -74,7 +118,7 @@ pub fn core_word_negate(xs: &mut State) -> Xresult {
     }
 }
 
-pub fn core_word_abs(xs: &mut State) -> Xresult {
+fn core_word_abs(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.abs())),
         Cell::Real(a) => xs.push_data(Cell::Real(a.abs())),
@@ -106,55 +150,45 @@ fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
     }
 }
 
-pub fn core_word_less_then(xs: &mut State) -> Xresult {
-    let c = compare_cells(xs)?;
-    xs.push_data(Cell::from(c == Ordering::Less))
-}
-
-pub fn core_word_eq(xs: &mut State) -> Xresult {
-    let c = compare_cells(xs)?;
-    xs.push_data(Cell::from(c == Ordering::Equal))
-}
-
-pub fn core_word_rem(xs: &mut State) -> Xresult {
+fn core_word_rem(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, Xint::wrapping_rem, std::ops::Rem::<f64>::rem)
 }
 
-pub fn core_word_bitand(xs: &mut State) -> Xresult {
+fn core_word_bitand(xs: &mut State) -> Xresult {
     arithmetic_ops_int(xs, std::ops::BitAnd::<Xint>::bitand)
 }
 
-pub fn core_word_bitor(xs: &mut State) -> Xresult {
+fn core_word_bitor(xs: &mut State) -> Xresult {
     arithmetic_ops_int(xs, std::ops::BitOr::<Xint>::bitor)
 }
 
-pub fn core_word_bitxor(xs: &mut State) -> Xresult {
+fn core_word_bitxor(xs: &mut State) -> Xresult {
     arithmetic_ops_int(xs, std::ops::BitXor::<Xint>::bitxor)
 }
 
-pub fn core_word_bitshl(xs: &mut State) -> Xresult {
+fn core_word_bitshl(xs: &mut State) -> Xresult {
     arithmetic_ops_int(xs, |a, b| Xint::wrapping_shl(a, b as u32))
 }
 
-pub fn core_word_bitshr(xs: &mut State) -> Xresult {
+fn core_word_bitshr(xs: &mut State) -> Xresult {
     arithmetic_ops_int(xs, |a, b| Xint::wrapping_shr(a, b as u32))
 }
 
-pub fn core_word_bitnot(xs: &mut State) -> Xresult {
+fn core_word_bitnot(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
         Cell::Int(x) => xs.push_data(Cell::Int(!x)),
         _ => Err(Xerr::TypeError),
     }
 }
 
-pub fn core_word_random(xs: &mut State) -> Xresult {
+fn core_word_random(xs: &mut State) -> Xresult {
     let mut buf = [0u8; 4];
     getrandom::getrandom(&mut buf).unwrap();
     let r = u32::from_le_bytes(buf) as Xreal / u32::MAX as Xreal;
     xs.push_data(Cell::Real(r))
 }
 
-pub fn core_word_round(xs: &mut State) -> Xresult {
+fn core_word_round(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
         n @ Cell::Int(_) => xs.push_data(n.clone()),
         Cell::Real(x) => xs.push_data(Cell::Int(*x as Xint)),
@@ -239,13 +273,15 @@ mod tests {
     #[test]
     fn test_cmp() {
         let mut xs = State::boot().unwrap();
-        xs.eval("-1 0 <").unwrap();
-        assert_eq!(Ok(ONE), xs.pop_data());
-        xs.eval("10 5 <").unwrap();
-        assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("2 3 =").unwrap();
-        assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("4 4 =").unwrap();
-        assert_eq!(Ok(ONE), xs.pop_data());
+        assert_eq!(Ok(TRUE), xs.eval("-1 0 <").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(FALSE), xs.eval("10 5 <").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(FALSE), xs.eval("2 3 =").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("4 4 =").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("2 1 >").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("2 2 >=").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(FALSE), xs.eval("1 2 >").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("1 1 >=").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(FALSE), xs.eval("7 7 <>").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("7 8 <>").and_then(|_| xs.pop_data()));
     }
 }

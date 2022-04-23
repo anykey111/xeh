@@ -1,4 +1,3 @@
-use crate::arith::*;
 use crate::bitstring_mod;
 use crate::cell::*;
 use crate::error::*;
@@ -515,6 +514,7 @@ impl State {
         xs.intercept_stdout(true);
         xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
+        crate::arith::load(&mut xs)?;
         crate::bitstring_mod::load(&mut xs)?;
         Ok(xs)
     }
@@ -663,23 +663,6 @@ impl State {
         self.defword("swap", |xs| xs.swap_data())?;
         self.defword("rot", |xs| xs.rot_data())?;
         self.defword("over", |xs| xs.over_data())?;
-        self.defword("+", core_word_add)?;
-        self.defword("-", core_word_sub)?;
-        self.defword("*", core_word_mul)?;
-        self.defword("/", core_word_div)?;
-        self.defword("negate", core_word_negate)?;
-        self.defword("abs", core_word_abs)?;
-        self.defword("<", core_word_less_then)?;
-        self.defword("=", core_word_eq)?;
-        self.defword("rem", core_word_rem)?;
-        self.defword("and", core_word_bitand)?;
-        self.defword("or", core_word_bitor)?;
-        self.defword("xor", core_word_bitxor)?;
-        self.defword("shl", core_word_bitshl)?;
-        self.defword("shr", core_word_bitshr)?;
-        self.defword("not", core_word_bitnot)?;
-        self.defword("random", core_word_random)?;
-        self.defword("round", core_word_round)?;
         self.defword("assert", core_word_assert)?;
         self.defword("assert-eq", core_word_assert_eq)?;
         self.defword("exit", core_word_exit)?;
