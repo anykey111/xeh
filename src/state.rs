@@ -173,7 +173,6 @@ impl State {
     }
 
     pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
-        let jumpaddr = |ip, offs| (ip as isize + offs) as usize;
         match op {
             Opcode::Call(x) => {
                 let name = self.dict.iter().rev().find(|e| {
@@ -195,13 +194,13 @@ impl State {
             },
             Opcode::Resolve(name) => format!("resolve    {:?}", &name),
             Opcode::Ret => format!("ret"),
-            Opcode::JumpIf(offs) => format!("jumpif     #{:#05x}", jumpaddr(ip, offs)),
-            Opcode::JumpIfNot(offs) => format!("jumpifnot  {:#05x}", jumpaddr(ip, offs)),
-            Opcode::Jump(offs) => format!("jump       {:#05x}", jumpaddr(ip, offs)),
-            Opcode::CaseOf(rel) => format!("caseof     {:#05x}", jumpaddr(ip, rel)),
-            Opcode::Do(rel) => format!("do         {:#05x}", jumpaddr(ip, rel)),
-            Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
-            Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
+            Opcode::JumpIf(rel) => format!("jumpif     #{:#05x}", rel.calculate(ip)),
+            Opcode::JumpIfNot(rel) => format!("jumpifnot  {:#05x}", rel.calculate(ip)),
+            Opcode::Jump(rel) => format!("jump       {:#05x}", rel.calculate(ip)),
+            Opcode::CaseOf(rel) => format!("caseof     {:#05x}", rel.calculate(ip)),
+            Opcode::Do(rel) => format!("do         {:#05x}", rel.calculate(ip)),
+            Opcode::Loop(rel) => format!("loop       {:#05x}", rel.calculate(ip)),
+            Opcode::Break(rel) => format!("break      {:#05x}", rel.calculate(ip)),
             Opcode::Load(a) => format!("load       {}", a.index()),
             Opcode::LoadI64(i) => format!("loadi64    {}", i),
             Opcode::LoadF64(i) => format!("loadf64    {}", i),
@@ -519,7 +518,7 @@ impl State {
 
     pub fn defwordself(&mut self, name: &str, x: XfnType, slf: Cell) -> Xresult {
         let start = self.code_origin();
-        self.code_emit(Opcode::Jump(0))?;
+        self.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
         let fn_addr = self.code_origin();
         self.code_emit_value(slf)?;
         
@@ -674,7 +673,7 @@ impl State {
         OK
     }
 
-    fn backpatch_jump(&mut self, at: usize, offs: isize) -> Xresult {
+    fn backpatch_jump(&mut self, at: usize, offs: RelativeJump) -> Xresult {
         let insn = match self.code.get(at).ok_or(Xerr::InternalError)? {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
@@ -715,7 +714,7 @@ impl State {
             Xfn::Interp(x) => {
                 let old_ip = self.ip();
                 self.push_return(old_ip)?;
-                self.set_ip(x)?;
+                self.set_ip(x);
                 self.run()
             }
         }
@@ -738,125 +737,150 @@ impl State {
 
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
-        match self.code[ip] {
-            Opcode::Jump(offs) => self.jump_to(offs),
-            Opcode::JumpIf(offs) => {
-                let t = self.pop_data()?;
-                self.jump_if(t.is_true(), offs)
+        match &self.code[ip] {
+            Opcode::Jump(rel) => {
+                let new_ip = rel.calculate(ip);
+                self.set_ip(new_ip);
+            },
+            Opcode::JumpIf(rel) => {
+                let new_ip = rel.calculate(ip);
+                if self.pop_data()?.is_true() {
+                    self.set_ip(new_ip);
+                } else {
+                    self.next_ip();
+                }
             }
-            Opcode::JumpIfNot(offs) => {
-                let t = self.pop_data()?;
-                self.jump_if(!t.is_true(), offs)
+            Opcode::JumpIfNot(rel) => {
+                let new_ip = rel.calculate(ip);
+                if !self.pop_data()?.is_true() {
+                    self.set_ip(new_ip);
+                } else {
+                    self.next_ip();
+                }
             }
             Opcode::CaseOf(rel) => {
+                let new_ip = rel.calculate(ip);
                 let a = self.pop_data()?;
                 let b = self.top_data().ok_or(Xerr::StackUnderflow)?;
                 if &a == b {
                     self.pop_data()?;
-                    self.next_ip()
+                    self.next_ip();
                 } else {
-                    self.jump_to(rel)
+                    self.set_ip(new_ip);
                 }
             }
             Opcode::Call(a) => {
+                let fn_addr = *a;
                 self.push_return(ip + 1)?;
-                self.set_ip(a)
+                self.set_ip(fn_addr);
             }
             Opcode::NativeCall(x) => {
                 x.0(self)?;
-                self.next_ip()
+                self.next_ip();
             }
             Opcode::Ret => {
                 let frame = self.pop_return()?;
-                self.set_ip(frame.return_to)
+                self.set_ip(frame.return_to);
             }
-            Opcode::Resolve(ref name) => match self.dict_entry(&name) {
-                None => Err(Xerr::UnknownWord(name.clone())),
-                Some(Entry::Variable(a)) => {
-                    let a = *a;
-                    self.backpatch(ip, Opcode::Load(a))?;
-                    self.fetch_and_run()
-                }
-                Some(Entry::Function {
-                    xf: Xfn::Interp(x), ..
-                }) => {
-                    let x = *x;
-                    self.backpatch(ip, Opcode::Call(x))?;
-                    self.fetch_and_run()
-                }
-                Some(Entry::Function {
-                    xf: Xfn::Native(x), ..
-                }) => {
-                    let x = *x;
-                    self.backpatch(ip, Opcode::NativeCall(x))?;
-                    self.fetch_and_run()
+            Opcode::Resolve(ref name) => {
+                let e = self.dict_entry(&name).ok_or_else(|| Xerr::UnknownWord(name.clone()))?;
+                match e {
+                    Entry::Variable(a) => {
+                        let op = Opcode::Load(*a);
+                        self.backpatch(ip, op)?;
+                        self.fetch_and_run()?;
+                    }
+                    Entry::Function {
+                        xf: Xfn::Interp(x), ..
+                    } => {
+                        let op = Opcode::Call(*x);
+                        self.backpatch(ip, op)?;
+                        self.fetch_and_run()?;
+                    }
+                    Entry::Function {
+                        xf: Xfn::Native(x), ..
+                    } => {
+                        let op = Opcode::NativeCall(*x);
+                        self.backpatch(ip, op)?;
+                        self.fetch_and_run()?;
+                    }
                 }
             },
             Opcode::LoadF64(x) => {
-                self.push_data(Cell::from(x))?;
-                self.next_ip()
+                let val = Cell::from(*x);
+                self.push_data(val)?;
+                self.next_ip();
             }
-            Opcode::LoadI64(n) => {
-                self.push_data(Cell::from(n))?;
-                self.next_ip()
+            Opcode::LoadI64(x) => {
+                let val = Cell::from(*x);
+                self.push_data(val)?;
+                self.next_ip();
             }
             Opcode::LoadNil => {
                 self.push_data(Cell::Nil)?;
-                self.next_ip()
+                self.next_ip();
             }
-            Opcode::LoadCell(ref c) => {
+            Opcode::LoadCell(c) => {
                 let val = c.as_ref().clone();
                 self.push_data(val)?;
-                self.next_ip()
+                self.next_ip();
             }
-            Opcode::Load(a) => {
-                let val = self.cell_ref(a)?.clone();
+            Opcode::Load(cref) => {
+                let cref = *cref;
+                let val = self.cell_ref(cref)?.clone();
                 self.push_data(val)?;
-                self.next_ip()
+                self.next_ip();
             }
             Opcode::Store(cref) => {
+                let cref = *cref;
                 let val = self.pop_data()?;
                 self.swap_cell_ref(cref, val)?;
-                self.next_ip()
+                self.next_ip();
             }
             Opcode::InitLocal(i) => {
+                let idx = *i;
                 let val = self.pop_data()?;
                 let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
-                assert_eq!(i, frame.locals.len());
+                assert_eq!(idx, frame.locals.len());
                 frame.locals.push(val);
                 if self.reverse_debugging() {
-                    self.add_reverse_step(ReverseStep::DropLocal(i));
+                    self.add_reverse_step(ReverseStep::DropLocal(idx));
                 }
-                self.next_ip()
+                self.next_ip();
             }
             Opcode::LoadLocal(i) => {
+                let i = *i;
                 let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
                 let val = frame.locals.get(i).cloned().ok_or(Xerr::InvalidAddress)?;
                 self.push_data(val)?;
-                self.next_ip()
+                self.next_ip();
             }
             Opcode::Do(rel) => {
+                let done_ip = rel.calculate(ip);
                 let l = do_init(self)?;
                 if l.range.is_empty() {
-                    self.jump_to(rel)
+                    self.set_ip(done_ip);
                 } else {
                     self.push_loop(l)?;
-                    self.next_ip()
+                    self.next_ip();
                 }                
             }
             Opcode::Break(rel) => {
+                let break_ip = rel.calculate(ip);
                 self.pop_loop()?;
-                self.jump_to(rel)
+                self.set_ip(break_ip);
             }
-            Opcode::Loop(rel) => {
+            Opcode::Loop(ref rel) => {
+                let done_ip = rel.calculate(ip);
                 if self.loop_next()? {
-                    self.jump_to(rel)
+                    self.set_ip(done_ip);
                 } else {
                     self.pop_loop()?;
-                    self.next_ip()
+                    self.next_ip();
                 }
             }
         }
+        OK
     }
 
     pub fn next(&mut self) -> Xresult {
@@ -981,20 +1005,6 @@ impl State {
         OK
     }
 
-    fn jump_to(&mut self, offs: isize) -> Xresult {
-        debug_assert!(offs != 0);
-        let new_ip = (self.ip() as isize + offs) as usize;
-        self.set_ip(new_ip)
-    }
-
-    fn jump_if(&mut self, t: bool, offs: isize) -> Xresult {
-        if t {
-            self.jump_to(offs)
-        } else {
-            self.next_ip()
-        }
-    }
-
     pub fn ip(&self) -> usize {
         self.ctx.ip
     }
@@ -1007,20 +1017,18 @@ impl State {
         &self.code
     }
 
-    fn set_ip(&mut self, new_ip: usize) -> Xresult {
+    fn set_ip(&mut self, new_ip: usize) {
         if self.reverse_debugging() {
             self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip = new_ip;
-        OK
     }
 
-    fn next_ip(&mut self) -> Xresult {
+    fn next_ip(&mut self) {
         if self.reverse_debugging() {
             self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip += 1;
-        OK
     }
 
     fn pop_flow(&mut self) -> Xresult1<Flow> {
@@ -1240,7 +1248,7 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
 fn core_word_if(xs: &mut State) -> Xresult {
     let org = xs.code_origin();
     xs.push_flow(Flow::If(org))?;
-    xs.code_emit(Opcode::JumpIfNot(0))    
+    xs.code_emit(Opcode::JumpIfNot(RelativeJump::uninit()))    
 }
 
 fn core_word_else(xs: &mut State) -> Xresult {
@@ -1250,7 +1258,7 @@ fn core_word_else(xs: &mut State) -> Xresult {
     };
     let else_org = xs.code_origin();
     xs.push_flow(Flow::Else(else_org))?;
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
     let rel = jump_offset(if_org, xs.code_origin());
     xs.backpatch_jump(if_org, rel)
 }
@@ -1286,14 +1294,14 @@ fn endcase_word(xs: &mut State) -> Xresult {
 fn of_word(xs: &mut State) -> Xresult {
     let of_org = xs.code_origin();
     xs.push_flow(Flow::CaseOf(of_org))?;
-    xs.code_emit(Opcode::CaseOf(0))
+    xs.code_emit(Opcode::CaseOf(RelativeJump::uninit()))
 }
 
 fn endof_word(xs: &mut State) -> Xresult {
     match take_first_cond_flow(xs)? {
         Flow::CaseOf(of_org) => {
             let endof_org = xs.code_origin();
-            xs.code_emit(Opcode::Jump(0))?;
+            xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
             let next_case_rel = jump_offset(of_org, xs.code_origin());
             xs.backpatch_jump(of_org, next_case_rel)?;
             xs.push_flow(Flow::CaseEndOf(endof_org))
@@ -1318,7 +1326,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
 
 fn core_word_while(xs: &mut State) -> Xresult {
     let cond = Flow::While(xs.code_origin());
-    xs.code_emit(Opcode::JumpIfNot(0))?;
+    xs.code_emit(Opcode::JumpIfNot(RelativeJump::uninit()))?;
     xs.push_flow(cond)
 }
 
@@ -1365,16 +1373,12 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
 
 fn core_word_leave(xs: &mut State) -> Xresult {
     let org = xs.code_origin();
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
     xs.push_flow(Flow::Leave(org))
 }
 
-fn jump_offset(origin: usize, dest: usize) -> isize {
-    if origin > dest {
-        -((origin - dest) as isize)
-    } else {
-        (dest - origin) as isize
-    }
+fn jump_offset(origin: usize, dest: usize) -> RelativeJump {
+    RelativeJump::from_to(origin, dest)
 }
 
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
@@ -1417,7 +1421,7 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 fn core_word_def_begin(xs: &mut State) -> Xresult {
     // jump over function body
     let start = xs.code_origin();
-    xs.code_emit(Opcode::Jump(0))?;
+    xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
     let name = xs.next_name()?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
@@ -1535,14 +1539,14 @@ fn do_init(xs: &mut State) -> Xresult1<Loop> {
 
 fn core_word_do(xs: &mut State) -> Xresult {
     let for_org = xs.code_origin();
-    xs.code_emit(Opcode::Do(0))?; // init and jump over if range is empty
+    xs.code_emit(Opcode::Do(RelativeJump::uninit()))?; // init and jump over if range is empty
     let body_org = xs.code_origin();
     xs.push_flow(Flow::Do { for_org, body_org })
 }
 
 fn core_word_loop(xs: &mut State) -> Xresult {
     let loop_org = xs.code_origin();
-    xs.code_emit(Opcode::Loop(0))?;
+    xs.code_emit(Opcode::Loop(RelativeJump::uninit()))?;
     let stop_org = xs.code_origin();
     loop {
         match xs.pop_flow()? {
@@ -1770,13 +1774,6 @@ mod tests {
         };
     }
 
-
-    #[test]
-    fn test_jump_offset() {
-        assert_eq!(2, jump_offset(2, 4));
-        assert_eq!(-2, jump_offset(4, 2));
-    }
-
     #[test]
     fn test_data_stack() {
         let mut xs = State::boot().unwrap();
@@ -1827,14 +1824,14 @@ mod tests {
         xs.compile("1 if 222 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
-        assert_eq!(&Opcode::JumpIfNot(2), it.next().unwrap());
+        assert_eq!(&Opcode::JumpIfNot(RelativeJump::from_i32(2)), it.next().unwrap());
         let mut xs = State::boot().unwrap();
         xs.compile("1 if 222 else 333 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
-        assert_eq!(&Opcode::JumpIfNot(3), it.next().unwrap());
+        assert_eq!(&Opcode::JumpIfNot(RelativeJump::from_i32(3)), it.next().unwrap());
         it.next().unwrap();
-        assert_eq!(&Opcode::Jump(2), it.next().unwrap());
+        assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         // test errors
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222 else 333"));
@@ -1862,8 +1859,8 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.compile("begin leave again").unwrap();
         let mut it = xs.code.iter();
-        assert_eq!(&Opcode::Jump(2), it.next().unwrap());
-        assert_eq!(&Opcode::Jump(-1), it.next().unwrap());
+        assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
+        assert_eq!(&Opcode::Jump(RelativeJump::from_i32(-1)), it.next().unwrap());
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 0 until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
