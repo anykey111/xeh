@@ -36,7 +36,6 @@ pub enum Xfn {
 pub enum Xref {
     None,
     Heap(usize),
-    Word(usize),
 }
 
 impl Default for Xref {

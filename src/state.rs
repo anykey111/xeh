@@ -578,22 +578,23 @@ impl State {
         }
     }
 
-    fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult1<Xref> {
+    fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult {
         let xf = Xfn::Native(XfnPtr(f));
         let i = self.dict_insert(DictEntry::new(name.into(),
             Entry::Function { immediate, xf, len: None }))?;
-        Ok(Xref::Word(i))
+        OK
     }
 
-    pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult1<Xref> {
-        self.dict_add_word(name, f, false)
+    pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult {
+        self.dict_add_word(name, f, false)?;
+        OK
     }
 
-    pub fn def_immediate(&mut self, name: &str, f: XfnType) -> Xresult1<Xref> {
+    pub fn def_immediate(&mut self, name: &str, f: XfnType) -> Xresult {
         self.dict_add_word(name, f, true)
     }
 
-    pub fn defwordself(&mut self, name: &str, x: XfnType, slf: Cell) -> Xresult1<Xref> {
+    pub fn defwordself(&mut self, name: &str, x: XfnType, slf: Cell) -> Xresult {
         let start = self.code_origin();
         self.code_emit(Opcode::Jump(0))?;
         let fn_addr = self.code_origin();
@@ -602,7 +603,7 @@ impl State {
         self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
-        let word_addr = self.dict_insert(DictEntry::new(
+        self.dict_insert(DictEntry::new(
             name.into(),
             Entry::Function {
                 immediate: false,
@@ -611,7 +612,7 @@ impl State {
             }))?;
         let offs = jump_offset(start, self.code_origin());
         self.backpatch_jump(start, offs)?;
-        Ok(Xref::Word(word_addr))
+        OK
     }
 
     pub fn set_doc(&mut self, name: Xstr, help: Xstr) -> Xresult {
