@@ -6,10 +6,10 @@ use crate::prelude::*;
 
 #[derive(Default, Clone)]
 pub struct BitstrMod {
-    big_endian: Xref,
-    offset: Xref,
-    input: Xref,
-    stash: Xref,
+    big_endian: CellRef,
+    offset: CellRef,
+    input: CellRef,
+    stash: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -240,13 +240,14 @@ fn write_dump_position(buf: &mut String, start: usize) {
 }
 
 pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstring) -> Xresult {
-    let old_offset = xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
-    let old_input = xs.set_var(xs.bitstr_mod.input, Cell::from(s))?;
+    let old_offset = xs.get_var(xs.bitstr_mod.offset)?.clone();
+    let old_input = xs.get_var(xs.bitstr_mod.input)?.clone();
+    xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
+    xs.set_var(xs.bitstr_mod.input, Cell::from(s))?;
     let stash = xs.get_var(xs.bitstr_mod.stash)?
         .vec()?
         .push_back(old_input.with_tag(old_offset));
-    xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))?;
-    OK
+    xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))
 }
 
 fn word_open_bitstr(xs: &mut Xstate) -> Xresult {

@@ -26,7 +26,7 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
         let slice = std::slice::from_raw_parts(ptr, mm.len());
         (mm, slice)
     };
-    xs.alloc_cell(Cell::from_any(mm))?;
+    xs.defvar_anonymous(Cell::from_any(mm))?;
     xs.set_binary_input(Xbitstr::from(slice))
 }
 

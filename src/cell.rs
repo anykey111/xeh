@@ -33,14 +33,20 @@ pub enum Xfn {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Xref {
-    None,
-    Heap(usize),
+pub struct CellRef(usize);
+
+impl Default for CellRef {
+    fn default() -> Self {
+        Self(usize::MAX)
+    }
 }
 
-impl Default for Xref {
-    fn default() -> Self {
-        Xref::None
+impl CellRef {
+    pub fn from_index(idx: usize) -> Self {
+        Self(idx)
+    }
+    pub fn index(&self) -> usize {
+        self.0
     }
 }
 

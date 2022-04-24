@@ -12,7 +12,7 @@ use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
-    Variable(usize),
+    Variable(CellRef),
     Function {
         immediate: bool,
         xf: Xfn,
@@ -129,6 +129,7 @@ pub enum ReverseStep {
     PopSpecial,
     PushSpecial(Special),
     DropLocal(usize),
+    SwapRef(CellRef,Cell),
 }
 
 #[derive(Default, Clone, Debug)]
@@ -180,9 +181,9 @@ pub struct State {
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrMod,
     // formatter flags
-    fmt_flags: Xref,
+    fmt_flags: CellRef,
     // d2 canvas
-    pub(crate) d2: Xref,
+    pub(crate) d2: CellRef,
 }
 
 impl State {
@@ -224,12 +225,12 @@ impl State {
             Opcode::Do(rel) => format!("do         {:#05x}", jumpaddr(ip, rel)),
             Opcode::Loop(rel) => format!("loop       {:#05x}", jumpaddr(ip, rel)),
             Opcode::Break(rel) => format!("break      {:#05x}", jumpaddr(ip, rel)),
-            Opcode::Load(a) => format!("load       {}", a),
+            Opcode::Load(a) => format!("load       {}", a.index()),
             Opcode::LoadI64(i) => format!("loadi64    {}", i),
             Opcode::LoadF64(i) => format!("loadf64    {}", i),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
-            Opcode::Store(a) => format!("store      {}", a),
+            Opcode::Store(a) => format!("store      {}", a.index()),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
         }
@@ -540,47 +541,36 @@ impl State {
         self.reverse_log = None;
     }
 
-    pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<Xref> {
+    pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
-        let a = self.alloc_cell(val)?;
-        self.dict_insert(DictEntry::new(name.into(), Entry::Variable(a)))?;
-        Ok(Xref::Heap(a))
+        let cref = self.alloc_cell(val)?;
+        self.dict_insert(DictEntry::new(name.into(), Entry::Variable(cref)))?;
+        Ok(cref)
     }
 
-    pub fn defvar_anonymous(&mut self, val: Cell) -> Xresult1<Xref> {
-        let a = self.alloc_cell(val)?;
-        Ok(Xref::Heap(a))
+    pub fn defvar_anonymous(&mut self, val: Cell) -> Xresult1<CellRef> {
+        self.alloc_cell(val)
     }
 
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
-            Some(Entry::Variable(a)) => Ok(&self.heap[*a]),
+            Some(Entry::Variable(a)) => self.cell_ref(*a),
             _ => Err(Xerr::InvalidAddress),
         }
     }
 
-    pub fn get_var(&self, xref: Xref) -> Xresult1<&Cell> {
-        match xref {
-            Xref::Heap(a) => self.heap.get(a).ok_or(Xerr::InvalidAddress),
-            _ => Err(Xerr::InvalidAddress),
-        }
+    pub fn get_var(&self, cref: CellRef) -> Xresult1<&Cell> {
+        self.cell_ref(cref)
     }
 
-    pub fn set_var(&mut self, xref: Xref, mut val: Cell) -> Xresult1<Cell> {
-        match xref {
-            Xref::Heap(a) => {
-                let x = self.heap.get_mut(a).ok_or(Xerr::InvalidAddress)?;
-                std::mem::swap(&mut val, x);
-                Ok(val)
-            }
-            _ => Err(Xerr::InvalidAddress),
-        }
+    pub fn set_var(&mut self, cref: CellRef, val: Cell) -> Xresult {
+        self.swap_cell_ref(cref, val)
     }
 
     fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult {
         let xf = Xfn::Native(XfnPtr(f));
-        let i = self.dict_insert(DictEntry::new(name.into(),
+        self.dict_insert(DictEntry::new(name.into(),
             Entry::Function { immediate, xf, len: None }))?;
         OK
     }
@@ -762,13 +752,28 @@ impl State {
         self.backpatch(at, insn)
     }
 
-    pub fn alloc_cell(&mut self, val: Cell) -> Xresult1<usize> {
+    fn cell_ref(&self, cref: CellRef) -> Xresult1<&Cell> {
+        self.heap.get(cref.index()).ok_or_else(|| Xerr::InvalidAddress)
+    }
+
+    fn swap_cell_ref(&mut self, cref: CellRef, val: Cell) -> Xresult {
+        let mut old = val;
+        std::mem::swap(
+            self.heap.get_mut(cref.index()).ok_or_else(|| Xerr::InvalidAddress)?,
+            &mut old);
+        if self.reverse_debugging() {
+            self.add_reverse_step(ReverseStep::SwapRef(cref, old));
+        }
+        OK
+    }
+
+    fn alloc_cell(&mut self, val: Cell) -> Xresult1<CellRef> {
         if self.ctx.mode == ContextMode::MetaEval {
             return Err(Xerr::ReadonlyAddress);
         }
-        let a = self.heap.len();
+        let idx = self.heap.len();
         self.heap.push(val);
-        Ok(a)
+        Ok(CellRef::from_index(idx))
     }
 
     fn run_immediate(&mut self, x: Xfn) -> Xresult {
@@ -873,13 +878,13 @@ impl State {
                 self.next_ip()
             }
             Opcode::Load(a) => {
-                let val = self.heap[a].clone();
+                let val = self.cell_ref(a)?.clone();
                 self.push_data(val)?;
                 self.next_ip()
             }
-            Opcode::Store(a) => {
+            Opcode::Store(cref) => {
                 let val = self.pop_data()?;
-                self.heap[a] = val;
+                self.swap_cell_ref(cref, val)?;
                 self.next_ip()
             }
             Opcode::InitLocal(i) => {
@@ -1034,6 +1039,11 @@ impl State {
             ReverseStep::DropLocal(_) => {
                 let f = self.top_frame().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
                 f.locals.pop();
+            }
+            ReverseStep::SwapRef(cref, val) => {
+                let a = self.heap.get_mut(cref.index()).ok_or_else(|| Xerr::InvalidAddress)?;
+                let mut b = val;
+                std::mem::swap(a, &mut b);
             }
         }
         OK
@@ -2224,6 +2234,24 @@ mod tests {
                 assert_eq!(expected_state, snapshot(&xs));
             }
         }
+    }
+
+    #[test]
+    fn test_rnext_var() {
+        let mut xs = State::boot().unwrap();
+        xs.start_recording();
+        eval_ok!(xs, "3 var GG");
+        assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
+        xs.rnext().unwrap();
+        assert_eq!(Ok(&NIL), xs.get_var_value("GG"));
+        xs.next().unwrap();
+        assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
+        eval_ok!(xs, "5 -> GG");
+        assert_eq!(Ok(&Cell::Int(5)), xs.get_var_value("GG"));
+        xs.rnext().unwrap();
+        assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
+        xs.next().unwrap();
+        assert_eq!(Ok(&Cell::Int(5)), xs.get_var_value("GG"));
     }
 
     #[test]
