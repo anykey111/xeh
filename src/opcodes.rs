@@ -21,7 +21,8 @@ impl RelativeJump {
     }
 
     pub fn calculate(&self, ip: usize) -> usize {
-        (ip as isize + self.0 as isize).max(0) as usize
+        debug_assert_ne!(self, &RelativeJump::uninit());
+        (ip as isize + self.0 as isize) as usize
     }
 
     #[cfg(test)]
