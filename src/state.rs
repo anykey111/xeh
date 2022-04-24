@@ -212,6 +212,19 @@ impl State {
         }
     }
 
+    pub fn last_error(&self) -> Option<(&Xerr, &TokenLocation)> {
+        self.last_error.as_ref().and_then(|ec| {
+            ec.location.as_ref().map(|loc| (&ec.err, loc))
+        })
+    }
+
+    pub fn token_from_current_ip(&self) -> Option<TokenLocation> {
+        self
+            .debug_map
+            .get(self.ip())
+            .and_then(|tok| token_location(&self.sources, tok))
+    }
+
     pub fn pretty_error(&self) -> Option<String> {
         let ec = self.last_error.as_ref()?;
         let errmsg = if let Some(loc) = &ec.location {
@@ -258,6 +271,10 @@ impl State {
     }
 
     pub fn compile(&mut self, s: &str) -> Xresult {
+        self.compile_xstr(s.into())
+    }
+
+    pub fn compile_xstr(&mut self, s: Xstr) -> Xresult {
         self.context_open(ContextMode::Compile)?;
         self.intern_source(s.into(), None)?;
         self.build0()?;
@@ -276,7 +293,7 @@ impl State {
         self.evalxstr(s.into())
     }
 
-    fn evalxstr(&mut self, s: Xstr) -> Xresult {
+    pub fn evalxstr(&mut self, s: Xstr) -> Xresult {
         self.intern_source(s, None)?;
         self.context_open(ContextMode::Eval)?;
         self.build0()?;
@@ -725,8 +742,7 @@ impl State {
         while self.is_running() {
             self.fetch_and_run().map_err(|e| {
                 if self.last_error.is_none() {
-                    let location = self.debug_map.get(self.ip())
-                        .and_then(|tok| token_location(&self.sources, tok));
+                    let location = self.token_from_current_ip();
                     self.last_error = Some(ErrorContext { err: e.clone(), location });
                 }
                 e

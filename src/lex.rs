@@ -13,10 +13,11 @@ pub enum Tok {
 
 #[derive(Clone)]
 pub struct TokenLocation {
-    line: usize,
-    col: usize,
-    filename: Xstr,
-    whole_line: Xsubstr,
+    pub line: usize,
+    pub col: usize,
+    pub filename: Xstr,
+    pub whole_line: Xsubstr,
+    pub token: Xsubstr,
 }
 
 impl fmt::Debug for TokenLocation {
@@ -223,6 +224,7 @@ pub fn token_location(sources: &[(Xstr, Xstr)], token: &Xsubstr) -> Option<Token
         col,
         filename,
         whole_line,
+        token: token.clone(),
     })
 }
 
