@@ -1,3 +1,6 @@
+: .doc-tag-stack immediate  "Stack Manipulation" with-tag doc ;
+: .doc-tag-cond immediate "Conditional Execution" with-tag doc ;
+
 (
 "Conditional branch.
 
@@ -5,31 +8,27 @@
 
 If FLAG is non-zero CODE is executed.
 "
-"if" doc
-)
+"if" .doc-tag-cond
 
-(
+
 "Fallback for *if* conditional branch.
 
     FLAG if CODE1 else CODE2 endif
     
 If FLAG is zero then CODE2 is executed.
 "
-"else" doc
-)
+"else" .doc-tag-cond
 
-(
+
 "End of the conditional branch.
 
     FLAG if CODE endif
 
 If FLAG is zero then CODE is not executed.
 "
+"endif" .doc-tag-cond
 
-"endif" doc
-)
 
-(
 "
     X case
         X1 of CODE1 endof
@@ -43,10 +42,10 @@ If X equals to X2 then CODE2 is executed.
 Otherwise DEFAULT is executed.
 DEFAULT is not mandatory and migth be empty.
 "
-dup "case" doc
-dup "endcase" doc
-dup "of" doc
-"endof" doc
+dup "case" .doc-tag-cond
+dup "endcase" .doc-tag-cond
+dup "of" .doc-tag-cond
+"endof" .doc-tag-cond
 )
 
 (
