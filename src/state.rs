@@ -142,7 +142,7 @@ pub struct State {
     dict: Vec<DictEntry>,
     heap: Vec<Cell>,
     code: Vec<Opcode>,
-    debug_map: Vec<Option<Xsubstr>>,
+    debug_map: Vec<Xsubstr>,
     sources: Vec<(Xstr, Xstr)>,
     input: Vec<Lex>,
     data_stack: Vec<Cell>,
@@ -304,7 +304,7 @@ impl State {
             if self.last_error.is_none() {
                 let location = self.input.last()
                     .and_then(|lex| lex.last_token())
-                    .and_then(|tok| token_location(&self.sources, tok));
+                    .and_then(|tok| token_location(&self.sources, &tok));
                 self.last_error = Some(ErrorContext { err: e.clone(), location });
             }
             e
@@ -657,7 +657,7 @@ impl State {
     fn code_emit(&mut self, op: Opcode) -> Xresult {
         let at = self.code.len();
         let len = self.debug_map.len();
-        let loc = self.input.last().and_then(|x| x.last_token());
+        let loc = self.input.last().and_then(|x| x.last_token()).unwrap_or_default();
         if at < len {
             self.debug_map[at] = loc;
         } else if at == len {
@@ -727,7 +727,6 @@ impl State {
             self.fetch_and_run().map_err(|e| {
                 if self.last_error.is_none() {
                     let location = self.debug_map.get(self.ip())
-                        .and_then(|dbg| dbg.clone())
                         .and_then(|tok| token_location(&self.sources, tok));
                     self.last_error = Some(ErrorContext { err: e.clone(), location });
                 }

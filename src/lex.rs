@@ -192,7 +192,7 @@ pub fn token_filename(sources: &[(Xstr, Xstr)], token: &Xsubstr) -> Option<Xstr>
         .map(|x| x.0.clone())
 }
 
-pub fn token_location(sources: &[(Xstr, Xstr)], token: Xsubstr) -> Option<TokenLocation> {
+pub fn token_location(sources: &[(Xstr, Xstr)], token: &Xsubstr) -> Option<TokenLocation> {
     let filename = token_filename(sources, &token)?;
     let tok_start = token.range().start;
     let par = token.parent();
