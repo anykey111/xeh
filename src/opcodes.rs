@@ -30,15 +30,16 @@ mod tests {
     use super::*;
 
     #[test]
-    //#[ignore]
+    #[cfg(target_pointer_width = "64")]
     fn test_size() {
-        if isize::BITS == 64 {
-            assert_eq!(8, std::mem::size_of::<Xstr>());
-            assert_eq!(8, std::mem::size_of::<XfnPtr>());
-            assert_eq!(16, std::mem::size_of::<Opcode>());
-            assert_eq!(16, std::mem::size_of::<Xint>());
-            assert_eq!(8, std::mem::size_of::<Xreal>());
-        }
+        assert_eq!(8, std::mem::size_of::<Xstr>());
+        assert_eq!(8, std::mem::size_of::<XfnPtr>());
+        assert_eq!(16, std::mem::size_of::<Opcode>());
+        assert_eq!(16, std::mem::size_of::<Xint>());
+        assert_eq!(8, std::mem::size_of::<Xreal>());
+        assert_eq!(32, std::mem::size_of::<Xcell>());
+        assert_eq!(24, std::mem::size_of::<Xvec>());
+        assert_eq!(24, std::mem::size_of::<Xbitstr>());
     }
 
 }
