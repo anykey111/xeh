@@ -6,7 +6,6 @@ use crate::lex::*;
 use crate::opcodes::*;
 use crate::bitstring_mod::BitstrMod;
 
-use std::fmt;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -132,30 +131,8 @@ pub enum ReverseStep {
     SwapRef(CellRef,Cell),
 }
 
-#[derive(Default, Clone, Debug)]
-struct SourceBuf {
-    name: String,
-    buf: Xstr,
-}
-
 #[derive(Clone)]
-pub struct TokenLocation {
-    line: usize,
-    col: usize,
-    filename: String,
-    whole_line: Xsubstr,
-}
-
-impl fmt::Debug for TokenLocation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
-        writeln!(f, "{}", self.whole_line)?;
-        write!(f, "{:->1$}", '^', self.col + 1)
-    }
-}
-
-#[derive(Clone)]
-pub struct ErrorContext {
+struct ErrorContext {
     err: Xerr,
     location: Option<TokenLocation>,
 }
@@ -166,7 +143,7 @@ pub struct State {
     heap: Vec<Cell>,
     code: Vec<Opcode>,
     debug_map: Vec<Option<Xsubstr>>,
-    sources: Vec<SourceBuf>,
+    sources: Vec<(Xstr, Xstr)>,
     input: Vec<Lex>,
     data_stack: Vec<Cell>,
     return_stack: Vec<Frame>,
@@ -237,54 +214,13 @@ impl State {
     }
 
     pub fn pretty_error(&self) -> Option<String> {
-        let ec = self.last_error()?;
+        let ec = self.last_error.as_ref()?;
         let errmsg = if let Some(loc) = &ec.location {
             format!("{:?}\n{:?}", ec.err, loc)
         } else {
             format!("{:?}", ec.err)
         };
         Some(errmsg)
-    }
-
-    pub fn last_error(&self) -> Option<&ErrorContext> {
-        self.last_error.as_ref()
-    }
-
-    fn token_location(&self, token: Xsubstr) -> Option<TokenLocation> {
-        let tok_start = token.range().start;
-        let par = token.parent();
-        let mut it = par.char_indices();
-        let mut start = 0;
-        let mut end = 1;
-        let mut line = 0;
-        let mut col = 0;
-        while let Some((i, c)) = it.next() {
-            end = i + c.len_utf8();
-            if c == '\n' || c == '\r' {
-                if (start..end).contains(&tok_start) {
-                    end = i;
-                    break;
-                }
-                if c == '\n' {
-                    line += 1;
-                }
-                start = end;
-                col = 0;
-            } else if i < tok_start {
-                col += 1;
-            }
-        }
-        let name = self.sources
-                    .iter()
-                    .find(|x| &x.buf == token.parent())
-                    .map(|x| x.name.as_str())?;
-        let whole_line = token.parent().substr(start..end);
-        Some(TokenLocation {
-            line,
-            col,
-            filename: name.to_owned(),
-            whole_line,
-        })
     }
 
     pub fn print(&mut self, msg: &str) {
@@ -352,17 +288,14 @@ impl State {
         let id = self.sources.len();
         let lex = Lex::new(buf.clone());
         let name = if let Some(name) = path {
-            name.to_string()
+            name.into()
         } else {
-            format!("<buffer#{}>", id)
+            format!("<buffer#{}>", id).into()
         };
-        self.sources.push(SourceBuf {
-            name,
-            buf,
-        });
+        self.sources.push((name, buf));
         self.input.push(lex);
-            OK
-        }
+        OK
+    }
 
     fn build0(&mut self) -> Xresult {
         self.last_error.take();
@@ -371,7 +304,7 @@ impl State {
             if self.last_error.is_none() {
                 let location = self.input.last()
                     .and_then(|lex| lex.last_token())
-                    .and_then(|tok| self.token_location(tok));
+                    .and_then(|tok| token_location(&self.sources, tok));
                 self.last_error = Some(ErrorContext { err: e.clone(), location });
             }
             e
@@ -795,7 +728,7 @@ impl State {
                 if self.last_error.is_none() {
                     let location = self.debug_map.get(self.ip())
                         .and_then(|dbg| dbg.clone())
-                        .and_then(|tok| self.token_location(tok));
+                        .and_then(|tok| token_location(&self.sources, tok));
                     self.last_error = Some(ErrorContext { err: e.clone(), location });
                 }
                 e

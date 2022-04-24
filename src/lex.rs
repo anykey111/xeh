@@ -2,12 +2,29 @@ use crate::cell::*;
 use crate::error::*;
 
 use std::iter::Iterator;
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
     Word(Xsubstr),
     Literal(Xcell),
+}
+
+#[derive(Clone)]
+pub struct TokenLocation {
+    line: usize,
+    col: usize,
+    filename: Xstr,
+    whole_line: Xsubstr,
+}
+
+impl fmt::Debug for TokenLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}:{}:{}", self.filename, self.line + 1, self.col + 1)?;
+        writeln!(f, "{}", self.whole_line)?;
+        write!(f, "{:->1$}", '^', self.col + 1)
+    }
 }
 
 #[derive(Clone)]
@@ -168,37 +185,45 @@ impl Lex {
 
 }
 
-pub struct XstrLines {
-    buf: Xstr,
-    pos: usize,
+pub fn token_filename(sources: &[(Xstr, Xstr)], token: &Xsubstr) -> Option<Xstr> {
+    sources
+        .iter()
+        .find(|x| &x.1 == token.parent())
+        .map(|x| x.0.clone())
 }
 
-impl Iterator for XstrLines {
-    type Item = Xsubstr;
-    fn next(&mut self) -> Option<Xsubstr> {
-        let start = self.pos;
-        if start >= self.buf.len() {
-            return None;
-        }
-        let mut it = self.buf[start..].char_indices();
-        while let Some((i, c)) = it.next() {
-            if c == '\n' {
-                let end = start + i;
-                let ss = self.buf.substr(start..end);
-                self.pos = end + c.len_utf8();
-                return Some(ss);
+pub fn token_location(sources: &[(Xstr, Xstr)], token: Xsubstr) -> Option<TokenLocation> {
+    let filename = token_filename(sources, &token)?;
+    let tok_start = token.range().start;
+    let par = token.parent();
+    let mut it = par.char_indices();
+    let mut start = 0;
+    let mut end = 1;
+    let mut line = 0;
+    let mut col = 0;
+    while let Some((i, c)) = it.next() {
+        end = i + c.len_utf8();
+        if c == '\n' || c == '\r' {
+            if (start..end).contains(&tok_start) {
+                end = i;
+                break;
             }
+            if c == '\n' {
+                line += 1;
+            }
+            start = end;
+            col = 0;
+        } else if i < tok_start {
+            col += 1;
         }
-        let ss = self.buf.substr(start..);
-        self.pos = self.buf.len();
-        return Some(ss);
     }
-}
-
-impl XstrLines {
-    pub fn new(buf: Xstr) -> XstrLines {
-        Self { buf, pos: 0}
-    }
+    let whole_line = token.parent().substr(start..end);
+    Some(TokenLocation {
+        line,
+        col,
+        filename,
+        whole_line,
+    })
 }
 
 #[cfg(test)]
@@ -299,12 +324,4 @@ mod tests {
         assert_eq!(tokenize_input(r#" "a"2 "#), Err(Xerr::InputParseError));
     }
 
-    #[test]
-    fn test_xstr_lines() {
-        let mut it = XstrLines::new("1\nff\nddd".into());
-        assert_eq!(it.next(), Some("1".into()));
-        assert_eq!(it.next(), Some("ff".into()));
-        assert_eq!(it.next(), Some("ddd".into()));
-        assert_eq!(it.next(), None);
-    }
 }
