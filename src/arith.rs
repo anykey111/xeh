@@ -59,29 +59,29 @@ fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresul
 fn arithmetic_ops_real(
     xs: &mut State,
     ops_int: fn(Xint, Xint) -> Xint,
-    ops_real: fn(f64, f64) -> f64,
+    ops_real: fn(Xreal, Xreal) -> Xreal,
 ) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
     match (a.value(), b.value()) {
         (Cell::Int(a), Cell::Int(b)) => xs.push_data(Cell::Int(ops_int(*a, *b))),
-        (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a as f64, *b))),
-        (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
-        (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as f64))),
+        (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a as Xreal, *b))),
+        (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as Xreal))),
+        (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as Xreal))),
         _ => Err(Xerr::TypeError2(a, b)),
     }
 }
 
 fn core_word_add(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, Xint::wrapping_add, std::ops::Add::<f64>::add)
+    arithmetic_ops_real(xs, Xint::wrapping_add, std::ops::Add::<Xreal>::add)
 }
 
 fn core_word_sub(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, Xint::wrapping_sub, std::ops::Sub::<f64>::sub)
+    arithmetic_ops_real(xs, Xint::wrapping_sub, std::ops::Sub::<Xreal>::sub)
 }
 
 fn core_word_mul(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, Xint::wrapping_mul, std::ops::Mul::<f64>::mul)
+    arithmetic_ops_real(xs, Xint::wrapping_mul, std::ops::Mul::<Xreal>::mul)
 }
 
 fn core_word_div(xs: &mut State) -> Xresult {
