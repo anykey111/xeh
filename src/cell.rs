@@ -210,35 +210,6 @@ impl Cell {
         }))
     }
 
-    pub fn multi_tag(self, new_tag: Cell) -> Cell {
-        match self {
-            Cell::WithTag(rc) => {
-                let tags = match &rc.tag {
-                    Cell::Vector(v) => v.push_back(new_tag),
-                    c => {
-                        let mut v = Xvec::new();
-                        v.push_back_mut(c.clone());
-                        v.push_back_mut(new_tag);
-                        v
-                    }
-                };
-                rc.value.clone().with_tag(Cell::from(tags))
-            },
-            _ => {
-                let tags = Xvec::new().push_back(new_tag);
-                self.with_tag(Cell::from(tags))
-            }
-        }
-    }
-
-    pub fn find_tagged(&self, tag: &Cell) -> Option<&Cell> {
-        match self.tag()? {
-            Cell::Vector(v) => v.iter().find_map(|c| c.find_tagged(tag)),
-            t if t == tag => Some(self),
-            _ => None,
-        }
-    }
-
     pub fn value(&self) -> &Cell {
         match self {
             Cell::WithTag(rc) => rc.value.value(),
@@ -450,37 +421,4 @@ mod tests {
         assert_eq!(ONE, c);
     }
 
-    #[test]
-    fn test_multi_tag() {
-        let tag_a = Cell::from("a");
-        let tag_b = Cell::from("b");
-        let c = ONE.with_tag(tag_a.clone()).multi_tag(tag_b.clone());
-        let tags = Xvec::new().push_back(tag_a).push_back(tag_b);
-        assert_eq!(Some(&Cell::from(tags)), c.tag());
-        assert_eq!(ONE, c);
-    }
-
-    #[test]
-    fn test_multi_tag2() {
-        let tag_a = Cell::from("a");
-        let c = ZERO.multi_tag(tag_a.clone());
-        let tags = Xvec::new().push_back(tag_a);
-        assert_eq!(Some(&Cell::from(tags)), c.tag());
-        assert_eq!(ZERO, c);
-    }
-
-    #[test]
-    fn test_find_tagged() {
-        let color_name = Cell::from("red");
-        let color_tag = Cell::from("color");
-        let comment_text = Cell::from("some text");
-        let comment_tag = Cell::from("comment");
-        let tag1 = comment_text.clone().with_tag(comment_tag.clone());
-        let tag2 = color_name.clone().with_tag(color_tag.clone());
-        let val = ONE.multi_tag(tag1).multi_tag(tag2);
-        assert_eq!(Some(&comment_text), val.find_tagged(&comment_tag));
-        assert_eq!(Some(&color_name), val.find_tagged(&color_tag));
-        assert_eq!(None, val.find_tagged(&color_name));
-        assert_eq!(None, val.find_tagged(&comment_text));
-    }
 }

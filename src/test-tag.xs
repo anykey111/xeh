@@ -1,16 +1,14 @@
 
-: @comment "comment" with-tag multi-tag ;
-
-: .comment "comment" find-tagged ;
-
-10 "ten!" @comment 
+10 "ten!" with-tag
 
 dup 10 assert-eq
 
-dup .comment "ten!" assert-eq
+dup tag-of "ten!" assert-eq
 
-dup "comment" . "ten!" assert-eq
+"a" "b" "c" with-tag with-tag
 
-dup tag [ "ten!" ] assert-eq
+dup tag-of "b" assert-eq
 
-dup tag 0 get tag "comment" assert-eq
+dup tag-of tag-of "c" assert-eq
+
+22 33 , tag-of 33 assert-eq

@@ -617,11 +617,11 @@ impl State {
         self.defword("newline", core_word_newline)?;
         self.defword("file-write", crate::file::core_word_file_write)?;
         self.defword("load", core_word_load)?;
-        self.defword("tag", core_word_get_tag)?;
+        self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
-        self.defword("multi-tag", core_word_multi_tag)?;
-        self.defword("find-tagged", core_word_find_tagged)?;
-        self.defword(".", core_word_find_tagged)?;
+        self.defword(",", core_word_with_tag)?;
+        self.defword("insert-tagged", core_word_insert_tagged)?;
+        self.defword("get-tagged", core_word_get_tagged)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
         self.defword("DEC", |xs| set_fmt_base(xs, 10))?;
         self.defword("OCT", |xs| set_fmt_base(xs, 8))?;
@@ -1754,7 +1754,7 @@ fn core_word_load(xs: &mut State) -> Xresult {
     xs.eval_from_file(&path)
 }
 
-fn core_word_get_tag(xs: &mut State) -> Xresult {
+fn core_word_tag_of(xs: &mut State) -> Xresult {
     let val = xs.top_data().and_then(|x| x.tag()).unwrap_or(&NIL).clone();
     xs.push_data(val)
 }
@@ -1765,16 +1765,23 @@ fn core_word_with_tag(xs: &mut State) -> Xresult {
     xs.push_data(val)
 }
 
-fn core_word_multi_tag(xs: &mut State) -> Xresult {
-    let tag = xs.pop_data()?;
-    let val = xs.pop_data()?.multi_tag(tag);
-    xs.push_data(val)
+fn core_word_insert_tagged(xs: &mut State) -> Xresult {
+    let val = xs.pop_data()?;
+    let mut vec = xs.pop_data()?.to_vector()?;
+    let pos = vec.iter().position(|x| x.tag() == val.tag());
+    if let Some(index) = pos {
+        vec.set_mut(index, val);
+    } else {
+        vec.push_back_mut(val);
+    };
+    xs.push_data(Cell::from(vec))
 }
 
-fn core_word_find_tagged(xs: &mut State) -> Xresult {
+fn core_word_get_tagged(xs: &mut State) -> Xresult {
     let tag = xs.pop_data()?;
-    let result = xs.pop_data()?.find_tagged(&tag).unwrap_or(&NIL).clone();
-    xs.push_data(result)
+    let vec = xs.pop_data()?;
+    let item = vec.vec()?.iter().find(|x| x.tag() == Some(&tag)).cloned();
+    xs.push_data(item.unwrap_or_else(|| NIL))
 }
 
 #[cfg(test)]
@@ -2240,7 +2247,13 @@ mod tests {
     #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
-        xs.eval(include_str!("test-tag.xs")).unwrap();
+        eval_ok!(xs, include_str!("test-tag.xs"));
+    }
+
+    #[test]
+    fn test_tagged() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, include_str!("test-tagged.xeh"));
     }
 
     #[test]
