@@ -56,7 +56,7 @@ impl fmt::Debug for Xerr {
             Xerr::TypeError => f.write_str("TypeError"),
             Xerr::TypeError2(a, b) => write!(f, "unexpected types {:?} and {:?}",
                 a.value().type_name(), b.value().type_name()),
-            Xerr::ExpectingName => f.write_str("ExpectingName"),
+            Xerr::ExpectingName => f.write_str("expecting a word name"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
