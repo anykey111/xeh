@@ -446,7 +446,7 @@ impl State {
                 self.code.truncate(self.ctx.cs_len);
             }
         }
-        let mut prev = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
+        let mut prev = self.nested.pop().ok_or_else(||Xerr::ControlFlowError)?;
         if prev.mode == self.ctx.mode {
             if self.ctx.mode == ContextMode::Eval {
                 // preserve current ip value
@@ -560,7 +560,7 @@ impl State {
 
     pub fn set_doc(&mut self, name: Xstr, help: Xstr) -> Xresult {
         let a = self.dict_find(name.as_str())
-            .ok_or(Xerr::UnknownWord(name))?;
+            .ok_or_else(||Xerr::UnknownWord(name))?;
         self.dict[a].help = Some(help);
         OK
     }
@@ -698,7 +698,7 @@ impl State {
     }
 
     fn backpatch_jump(&mut self, at: usize, offs: RelativeJump) -> Xresult {
-        let insn = match self.code.get(at).ok_or(Xerr::InternalError)? {
+        let insn = match self.code.get(at).ok_or_else(||Xerr::InternalError)? {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
             Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
@@ -781,7 +781,7 @@ impl State {
             Opcode::CaseOf(rel) => {
                 let new_ip = rel.calculate(ip);
                 let a = self.pop_data()?;
-                let b = self.top_data().ok_or(Xerr::StackUnderflow)?;
+                let b = self.top_data().ok_or_else(||Xerr::StackUnderflow)?;
                 if &a == b {
                     self.pop_data()?;
                     self.next_ip();
@@ -865,7 +865,7 @@ impl State {
             Opcode::InitLocal(i) => {
                 let idx = *i;
                 let val = self.pop_data()?;
-                let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
+                let frame = self.top_frame().ok_or_else(||Xerr::ReturnStackUnderflow)?;
                 assert_eq!(idx, frame.locals.len());
                 frame.locals.push(val);
                 if self.reverse_debugging() {
@@ -875,8 +875,8 @@ impl State {
             }
             Opcode::LoadLocal(i) => {
                 let i = *i;
-                let frame = self.top_frame().ok_or(Xerr::ReturnStackUnderflow)?;
-                let val = frame.locals.get(i).cloned().ok_or(Xerr::InvalidAddress)?;
+                let frame = self.top_frame().ok_or_else(||Xerr::ReturnStackUnderflow)?;
+                let val = frame.locals.get(i).cloned().ok_or_else(||Xerr::InvalidAddress)?;
                 self.push_data(val)?;
                 self.next_ip();
             }
@@ -1058,7 +1058,7 @@ impl State {
 
     fn pop_flow(&mut self) -> Xresult1<Flow> {
         if self.flow_stack.len() > self.ctx.fs_len {
-            self.flow_stack.pop().ok_or(Xerr::ControlFlowError)
+            self.flow_stack.pop().ok_or_else(||Xerr::ControlFlowError)
         } else {
             Err(Xerr::ControlFlowError)
         }
@@ -1178,7 +1178,7 @@ impl State {
 
     fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
-            let ret = self.return_stack.pop().ok_or(Xerr::ReturnStackUnderflow)?;
+            let ret = self.return_stack.pop().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
             if self.reverse_debugging() {
                 self.add_reverse_step(ReverseStep::PushReturn(ret.clone()));
             }
@@ -1206,7 +1206,7 @@ impl State {
 
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
-            let l = self.loops.pop().ok_or(Xerr::InternalError)?;
+            let l = self.loops.pop().ok_or_else(||Xerr::InternalError)?;
             if self.reverse_debugging() {
                 self.add_reverse_step(ReverseStep::PushLoop(l.clone()));
             }
@@ -1241,7 +1241,7 @@ impl State {
 
     fn pop_special(&mut self) -> Xresult1<Special> {
         if self.special.len() > self.ctx.ss_ptr {
-            let s = self.special.pop().ok_or(Xerr::InternalError)?;
+            let s = self.special.pop().ok_or_else(||Xerr::InternalError)?;
             if self.reverse_debugging() {
                 self.add_reverse_step(ReverseStep::PushSpecial(s.clone()));
             }
@@ -1473,7 +1473,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
-            match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)? {
+            match xs.dict.get_mut(dict_idx).ok_or_else(||Xerr::InvalidAddress)? {
                 DictEntry { entry: Entry::Function { ref mut len, .. }, ..} => *len = Some(fun_len),
                 _ => panic!("entry type"),
             }
@@ -1494,8 +1494,8 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     let dict_idx = xs
         .top_function_flow()
         .map(|f| f.dict_idx)
-        .ok_or(Xerr::ControlFlowError)?;
-    match xs.dict.get_mut(dict_idx).ok_or(Xerr::InvalidAddress)?.entry {
+        .ok_or_else(||Xerr::ControlFlowError)?;
+    match xs.dict.get_mut(dict_idx).ok_or_else(||Xerr::InvalidAddress)?.entry {
         Entry::Function {
             ref mut immediate, ..
         } => {
@@ -1508,7 +1508,7 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
 
 fn core_word_def_local(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
-    let ff = xs.top_function_flow().ok_or(Xerr::ControlFlowError)?;
+    let ff = xs.top_function_flow().ok_or_else(||Xerr::ControlFlowError)?;
     let idx = ff.locals.len();
     ff.locals.push(name);
     xs.code_emit(Opcode::InitLocal(idx))
