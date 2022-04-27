@@ -2075,6 +2075,17 @@ mod tests {
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
 
+
+    #[test]
+    fn test_const() {
+        let mut xs = State::boot().unwrap();
+        match xs.eval(" 33 const ss") {
+            Err(Xerr::ErrorStr(_)) => (),
+            other => panic!("{:?}", other),
+        }
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq ");
+    }
     #[test]
     fn test_defvar() {
         let mut xs = State::boot().unwrap();
