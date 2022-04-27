@@ -11,6 +11,7 @@ use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
+    Constant(Cell),
     Variable(CellRef),
     Function {
         immediate: bool,
@@ -361,7 +362,10 @@ impl State {
         match self.dict_entry(name.as_str()) {
             None =>
                 self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
-
+            Some(Entry::Constant(c)) => {
+                let op = self.load_value_opcode(c.clone());
+                self.code_emit(op)
+            }
             Some(Entry::Variable(a)) => {
                 let a = *a;
                 self.code_emit(Opcode::Load(a))
@@ -437,9 +441,9 @@ impl State {
     fn context_close(&mut self) -> Xresult {
         if self.ctx.mode != ContextMode::Compile {
             self.run()?;
-        if self.ctx.mode == ContextMode::MetaEval {
-            // purge meta context code after evaluation
-            self.code.truncate(self.ctx.cs_len);
+            if self.ctx.mode == ContextMode::MetaEval {
+                // purge meta context code after evaluation
+                self.code.truncate(self.ctx.cs_len);
             }
         }
         let mut prev = self.nested.pop().ok_or(Xerr::ControlFlowError)?;
@@ -592,6 +596,7 @@ impl State {
         self.def_immediate("nil", core_word_nil)?;
         self.def_immediate("(", core_word_nested_begin)?;
         self.def_immediate(")", core_word_nested_end)?;
+        self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
         self.defword("doc", core_word_doc)?;
@@ -658,16 +663,18 @@ impl State {
         self.code.len()
     }
 
-    fn code_emit_value(&mut self, val: Cell) -> Xresult {
+    fn load_value_opcode(&self, val: Cell) -> Opcode {
         match val {
             Cell::Int(i) if i64::MIN as Xint <= i && i <= i64::MAX as Xint =>
-                self.code_emit(Opcode::LoadI64(i as i64)),
-            Cell::Nil => self.code_emit(Opcode::LoadNil),
-            val => {
-                let c = CellBox::from(val);
-                self.code_emit(Opcode::LoadCell(c))
-            }
+                Opcode::LoadI64(i as i64),
+            Cell::Nil => Opcode::LoadNil,
+            val => Opcode::LoadCell(CellBox::from(val)),
         }
+    }
+
+    fn code_emit_value(&mut self, val: Cell) -> Xresult {
+        let op = self.load_value_opcode(val);
+        self.code_emit(op)
     }
 
     fn code_emit(&mut self, op: Opcode) -> Xresult {
@@ -801,6 +808,11 @@ impl State {
             Opcode::Resolve(ref name) => {
                 let e = self.dict_entry(&name).ok_or_else(|| Xerr::UnknownWord(name.clone()))?;
                 match e {
+                    Entry::Constant(c) => {
+                        let op = self.load_value_opcode(c.clone());
+                        self.backpatch(ip, op)?;
+                        self.fetch_and_run()?;
+                    }
                     Entry::Variable(a) => {
                         let op = Opcode::Load(*a);
                         self.backpatch(ip, op)?;
@@ -1545,6 +1557,18 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     xs.context_close()
 }
 
+fn core_word_const(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    if xs.ctx.mode != ContextMode::MetaEval {
+        let s = arcstr::literal!("const word used out of meta context");
+        Err(Xerr::ErrorStr(s))
+    } else {
+        let val = xs.pop_data()?;
+        xs.dict_insert(DictEntry::new(name.into(), Entry::Constant(val)))?;
+        OK
+    }
+}
+
 fn do_init(xs: &mut State) -> Xresult1<Loop> {
     let start = xs.pop_data()?;
     let limit = xs.pop_data()?;
@@ -1690,7 +1714,7 @@ fn core_word_assert_eq(xs: &mut State) -> Xresult {
     if a == b {
         OK
     } else {
-        Err(Xerr::AssertEqFailed(a, b))
+        Err(Xerr::AssertEqFailed { a, b })
     }
 }
 

@@ -25,7 +25,7 @@ pub enum Xerr {
     IOError { filename: Xstr, reason: Xstr, },
     OutOfBounds(usize),
     AssertFailed,
-    AssertEqFailed(Cell, Cell),
+    AssertEqFailed { a: Cell, b: Cell },
     InternalError,
     // bitstring errors
     ReadError { src: Xbitstr, len: usize },
@@ -35,6 +35,8 @@ pub enum Xerr {
     UnalignedBitstr,
     InvalidFloatLength(usize),
     FromUtf8Error,
+    // just text error 
+    ErrorStr(Xstr),
     // Stop interpreter execution
     Exit(isize),
 }
@@ -42,6 +44,7 @@ pub enum Xerr {
 impl fmt::Debug for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Xerr::ErrorStr(s) => f.write_str(s),
             Xerr::UnknownWord(s) => write!(f, "unknown word {}", s),
             Xerr::InputIncomplete => f.write_str("InputIncomplete"),
             Xerr::InputParseError => f.write_str("InputParseError"),
@@ -64,8 +67,8 @@ impl fmt::Debug for Xerr {
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
             Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
-            Xerr::AssertEqFailed(a, b) => {
-                writeln!(f, "assertion failed, two top stack values not equals")?;
+            Xerr::AssertEqFailed { a, b } => {
+                f.write_str("assertion failed:")?;
                 writeln!(f, "[0] {:?}", a)?;
                 write!(f,   "[1] {:?}", b)
             },
