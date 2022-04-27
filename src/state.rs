@@ -2075,6 +2075,12 @@ mod tests {
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
 
+    #[test]
+    fn test_recursive_def() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, ": a  : b  23 ; b ; a 23 assert-eq");
+        assert_eq!(0, xs.data_depth());
+    }
 
     #[test]
     fn test_const() {
@@ -2086,6 +2092,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq ");
     }
+
     #[test]
     fn test_defvar() {
         let mut xs = State::boot().unwrap();
