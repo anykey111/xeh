@@ -1428,7 +1428,8 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
         Special::VecStackStart(stack_ptr) => {
             let top_ptr = xs.data_stack.len();
             if top_ptr < stack_ptr {
-                Err(Xerr::StackNotBalanced)
+                const ERRMSG: Xstr = arcstr::literal!("vector stack unbalanced");
+                Err(Xerr::ErrorStr(ERRMSG))
             } else {
                 let mut v = Xvec::new();
                 for x in &xs.data_stack[stack_ptr..] {
@@ -1533,8 +1534,8 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Store(a))
         }
         _ => {
-            let errmsg = arcstr::literal!("word is readonly");
-            Err(Xerr::ErrorStr(errmsg))
+            const ERRMSG: Xstr = arcstr::literal!("word is readonly");
+            Err(Xerr::ErrorStr(ERRMSG))
         }
     }
 }
@@ -1863,6 +1864,12 @@ mod tests {
         assert_eq!(Some(&Cell::Int(2)), xs.get_data(1));
         assert_eq!(Some(&Cell::Int(1)), xs.get_data(2));
         assert_eq!(3, xs.data_depth());
+    }
+
+    #[test]
+    fn test_vec_balanced() {
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" 1 [ 2 drop drop ] "));
     }
 
     #[test]
