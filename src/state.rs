@@ -724,9 +724,6 @@ impl State {
     }
 
     fn alloc_cell(&mut self, val: Cell) -> Xresult1<CellRef> {
-        if self.ctx.mode == ContextMode::MetaEval {
-            return Err(Xerr::ReadonlyAddress);
-        }
         let idx = self.heap.len();
         self.heap.push(val);
         Ok(CellRef::from_index(idx))
@@ -1535,7 +1532,10 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
             let a = *a;
             xs.code_emit(Opcode::Store(a))
         }
-        _ => Err(Xerr::ReadonlyAddress),
+        _ => {
+            let errmsg = arcstr::literal!("word is readonly");
+            Err(Xerr::ErrorStr(errmsg))
+        }
     }
 }
 
@@ -2080,6 +2080,15 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, ": a  : b  23 ; b ; a 23 assert-eq");
         assert_eq!(0, xs.data_depth());
+    }
+
+    #[test]
+    fn test_readonly_word() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "( 1 const x ) : y x ; 2 var g : f g ; ");
+        assert!(xs.eval("0 -> x").is_err());
+        assert!(xs.eval("0 -> y").is_err());
+        eval_ok!(xs, "0 -> g  f 0 assert-eq");
     }
 
     #[test]
