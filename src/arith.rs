@@ -63,12 +63,26 @@ fn arithmetic_ops_real(
 ) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    match (a.value(), b.value()) {
-        (Cell::Int(a), Cell::Int(b)) => xs.push_data(Cell::Int(ops_int(*a, *b))),
-        (Cell::Int(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a as Xreal, *b))),
-        (Cell::Real(a), Cell::Int(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as Xreal))),
-        (Cell::Real(a), Cell::Real(b)) => xs.push_data(Cell::Real(ops_real(*a, *b as Xreal))),
-        _ => Err(Xerr::TypeError2(a, b)),
+    match b.value() {
+        Cell::Int(b) => {
+            match a.value() {
+                Cell::Int(a) => {
+                    let c = Cell::from(ops_int(*a, *b));
+                    xs.push_data(c)
+                }
+                _ => Err(Xerr::TypeError)
+            }
+        },
+        Cell::Real(b) => {
+            match a.value() {
+                Cell::Real(a) => {
+                    let c = Cell::from(ops_real(*a, *b));
+                    xs.push_data(c)
+                }
+                _ => Err(Xerr::TypeError)
+            }
+        }
+        _ => Err(Xerr::TypeError)
     }
 }
 
@@ -87,28 +101,34 @@ fn core_word_mul(xs: &mut State) -> Xresult {
 fn core_word_div(xs: &mut State) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    match (a.value(), b.value()) {
-        (Cell::Int(a), Cell::Int(b)) => if *b == 0 {
-                Err(Xerr::DivisionByZero)
-            } else {
-                xs.push_data(Cell::Int(*a / *b))
-            },
-        (Cell::Int(a), Cell::Real(b)) => if *b == 0.0 {
-                Err(Xerr::DivisionByZero)
-            } else {
-                xs.push_data(Cell::Real(*a as f64 / *b))
-            },
-        (Cell::Real(a), Cell::Int(b)) => if *b == 0 {
-                Err(Xerr::DivisionByZero)
-            } else {
-                xs.push_data(Cell::Real(*a / *b as f64))
-            },
-        (Cell::Real(a), Cell::Real(b)) => if *b == 0.0 {
-                Err(Xerr::DivisionByZero)
-            } else {
-                xs.push_data(Cell::Real(*a / *b as f64))
-            },
-        _ => Err(Xerr::TypeError),
+    match b.value() {
+        Cell::Int(b) => {
+            match a.value() {
+                Cell::Int(a) => {
+                    if *b == 0 {
+                        Err(Xerr::DivisionByZero)
+                    } else {
+                        let c = Cell::from(*a / *b);
+                        xs.push_data(c)
+                    }
+                }
+                _ => Err(Xerr::TypeError)
+            }
+        },
+        Cell::Real(b) => {
+            match a.value() {
+                Cell::Real(a) => {
+                    if *b == 0.0 {
+                        Err(Xerr::DivisionByZero)
+                    } else {
+                        let c = Cell::from(*a / *b);
+                        xs.push_data(c)
+                    }
+                }
+                _ => Err(Xerr::TypeError)
+            }
+        }
+        _ => Err(Xerr::TypeError)
     }
 }
 
@@ -228,7 +248,7 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
         match xs.eval("\"s\" 1 +") {
-            Err(Xerr::TypeError2(_a, _b)) => (),
+            Err(Xerr::TypeError) => (),
             other => panic!("result {:?}", other),
         }
         xs.eval("1 1 and").unwrap();
@@ -252,7 +272,7 @@ mod tests {
     #[test]
     fn test_tag_arith() {
         let mut xs = State::boot().unwrap();
-        xs.eval("1 \"ok\" with-tag 1.0 +").unwrap();
+        xs.eval("1.0 \"ok\" with-tag 1.0 +").unwrap();
         assert_eq!(Ok(Cell::Real(2.0)), xs.pop_data());
         xs.eval("2 [ ] with-tag 1 +").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
@@ -285,8 +305,8 @@ mod tests {
     fn test_div_by_zero() {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1 0 /"));
-        assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1 0.0 /"));
-        assert_eq!(OK, xs.eval("1 0.00000001 /"));
+        assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1.0 0.0 /"));
+        assert_eq!(OK, xs.eval("1.0 0.00000001 /"));
     }
 
     #[test]
