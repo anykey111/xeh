@@ -48,6 +48,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     OK
 }
 
+const NUM_TYPE_NAME: Xstr = arcstr::literal!("num");
+
 // (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {
     let b = xs.pop_data()?.to_xint()?;
@@ -65,25 +67,21 @@ fn arithmetic_ops_real(
     let a = xs.pop_data()?;
     match b.value() {
         Cell::Int(b) => {
-            match a.value() {
-                Cell::Int(a) => {
-                    let c = Cell::from(ops_int(*a, *b));
-                    xs.push_data(c)
-                }
-                _ => Err(Xerr::TypeError)
-            }
+            let a = a.to_xint()?;
+            let c = Cell::from(ops_int(a, *b));
+            xs.push_data(c)
         },
         Cell::Real(b) => {
-            match a.value() {
-                Cell::Real(a) => {
-                    let c = Cell::from(ops_real(*a, *b));
-                    xs.push_data(c)
-                }
-                _ => Err(Xerr::TypeError)
-            }
+            let a = a.to_real()?;
+            let c = Cell::from(ops_real(a, *b));
+            xs.push_data(c)
         }
-        _ => Err(Xerr::TypeError)
+        _ => Err(Xerr::TypeErrorMsg{msg: NUM_TYPE_NAME, val: b })
     }
+}
+
+fn num_type_error(val: Cell) -> Xerr {
+    Xerr::TypeErrorMsg{ msg: NUM_TYPE_NAME, val }
 }
 
 fn core_word_add(xs: &mut State) -> Xresult {
@@ -103,51 +101,45 @@ fn core_word_div(xs: &mut State) -> Xresult {
     let a = xs.pop_data()?;
     match b.value() {
         Cell::Int(b) => {
-            match a.value() {
-                Cell::Int(a) => {
-                    if *b == 0 {
-                        Err(Xerr::DivisionByZero)
-                    } else {
-                        let c = Cell::from(*a / *b);
-                        xs.push_data(c)
-                    }
-                }
-                _ => Err(Xerr::TypeError)
-            }
-        },
-        Cell::Real(b) => {
-            match a.value() {
-                Cell::Real(a) => {
-                    if *b == 0.0 {
-                        Err(Xerr::DivisionByZero)
-                    } else {
-                        let c = Cell::from(*a / *b);
-                        xs.push_data(c)
-                    }
-                }
-                _ => Err(Xerr::TypeError)
+            let a = a.to_xint()?;
+            if *b == 0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                let c = Cell::from(a / *b);
+                xs.push_data(c)
             }
         }
-        _ => Err(Xerr::TypeError)
+        Cell::Real(b) => {
+            let a = a.to_real()?;
+            if *b == 0.0 {
+                Err(Xerr::DivisionByZero)
+            } else {
+                let c = Cell::from(a / *b);
+                xs.push_data(c)
+            }
+        }
+        _ => Err(num_type_error(b))
     }
 }
 
 fn core_word_negate(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
+    let a = xs.pop_data()?; 
+    match a.value() {
         Cell::Int(a) => {
             let neg = a.checked_neg().ok_or_else(|| Xerr::IntegerOverflow)?;
             xs.push_data(Cell::Int(neg))
         },
         Cell::Real(a) => xs.push_data(Cell::Real(-a)),
-        _ => Err(Xerr::TypeError),
+        _ => Err(num_type_error(a))
     }
 }
 
 fn core_word_abs(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
+    let a = xs.pop_data()?;
+    match a.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.abs())),
         Cell::Real(a) => xs.push_data(Cell::Real(a.abs())),
-        _ => Err(Xerr::TypeError),
+        _ => Err(num_type_error(a))
     }
 }
 
@@ -166,12 +158,16 @@ fn compare_reals(a: Xreal, b: Xreal) -> Ordering {
 fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    match (a.value(), b.value()) {
-        (Cell::Int(a), Cell::Int(b)) => Ok(a.cmp(&b)),
-        (Cell::Int(a), Cell::Real(b)) => Ok(compare_reals(*a as Xreal, *b)),
-        (Cell::Real(a), Cell::Int(b)) => Ok(compare_reals(*a, *b as Xreal)),
-        (Cell::Real(a), Cell::Real(b)) => Ok(compare_reals(*a, *b)),
-        _ => Err(Xerr::TypeError),
+    match b.value() {
+        Cell::Int(b) => {
+            let a = a.to_xint()?;
+            Ok(a.cmp(b))
+        }
+        Cell::Real(b) => {
+            let a = a.to_real()?;
+            Ok(compare_reals(a, *b))
+        }
+        _ => Err(num_type_error(b))
     }
 }
 
@@ -251,7 +247,7 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
         match xs.eval("\"s\" 1 +") {
-            Err(Xerr::TypeError) => (),
+            Err(Xerr::TypeErrorMsg{..}) => (),
             other => panic!("result {:?}", other),
         }
         xs.eval("1 1 and").unwrap();
