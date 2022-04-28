@@ -505,11 +505,12 @@ impl State {
         self.alloc_cell(val)
     }
 
-    pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
+    #[cfg(test)]
+    fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => self.cell_ref(*a),
-            _ => Err(Xerr::InvalidAddress),
+            _ => Err(Xerr::TypeError),
         }
     }
 
@@ -2344,7 +2345,7 @@ mod tests {
         let res = xs.eval("[\n10 loop\n]");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "ControlFlowError\n",
+            "control flow error\n",
             "<buffer#0>:2:4\n",
             "10 loop\n",
             "---^"));
@@ -2353,7 +2354,7 @@ mod tests {
         let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "ControlFlowError\n",
+            "control flow error\n",
             "<buffer#0>:2:3\n",
             "( loop )\n",
             "--^"));
@@ -2362,7 +2363,7 @@ mod tests {
         let res = xs.eval("\"src/test-location1.xs\" load");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "ControlFlowError\n",
+            "control flow error\n",
             "src/test-location2.xs:2:3\n",
             "[ again ]\n",
             "--^"));
