@@ -134,7 +134,10 @@ fn core_word_div(xs: &mut State) -> Xresult {
 
 fn core_word_negate(xs: &mut State) -> Xresult {
     match xs.pop_data()?.value() {
-        Cell::Int(a) => xs.push_data(Cell::Int(a.checked_neg().ok_or(Xerr::IntegerOverflow)?)),
+        Cell::Int(a) => {
+            let neg = a.checked_neg().ok_or_else(|| Xerr::IntegerOverflow)?;
+            xs.push_data(Cell::Int(neg))
+        },
         Cell::Real(a) => xs.push_data(Cell::Real(-a)),
         _ => Err(Xerr::TypeError),
     }
@@ -307,6 +310,14 @@ mod tests {
         assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1 0 /"));
         assert_eq!(Err(Xerr::DivisionByZero), xs.eval("1.0 0.0 /"));
         assert_eq!(OK, xs.eval("1.0 0.00000001 /"));
+    }
+    #[test]
+    fn test_neg() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval(&format!("{} negate", Xint::MAX)));
+        assert_ne!(OK, xs.eval(&format!("{} negate", Xint::MIN)));
+        assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MAX))));
+        assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MIN))));
     }
 
     #[test]
