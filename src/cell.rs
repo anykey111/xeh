@@ -228,7 +228,7 @@ impl Cell {
         }
     }
 
-    pub fn to_vector(&self) -> Xresult1<Xvec> {
+    pub fn to_vec(&self) -> Xresult1<Xvec> {
         match self.value() {
             Cell::Vector(x) => Ok(x.clone()),
             val => Err(cell_type_error(VEC_TYPE_NAME, val.clone()))
@@ -242,28 +242,28 @@ impl Cell {
         }
     }
 
-    pub fn to_string(&self) -> Xresult1<Xstr> {
+    pub fn to_xstr(&self) -> Xresult1<Xstr> {
         match self.value() {
             Cell::Str(x) => Ok(x.clone()),
             val => Err(cell_type_error(STR_TYPE_NAME, val.clone()))
         }
     }
 
-    pub fn real(&self) -> Xresult1<Xreal> {
+    pub fn to_real(&self) -> Xresult1<Xreal> {
         match self.value() {
             Cell::Real(x) => Ok(*x),
             val => Err(cell_type_error(REAL_TYPE_NAME, val.clone()))
         }
     }
 
-    pub fn any(&self) -> Xresult1<Xanyrc> {
+    pub fn to_any(&self) -> Xresult1<Xanyrc> {
         match self.value() {
             Cell::AnyRc(rc) => Ok(rc.clone()),
             val => Err(cell_type_error(ANY_TYPE_NAME, val.clone()))
         }
     }
 
-    pub fn xint(&self) -> Xresult1<Xint> {
+    pub fn to_xint(&self) -> Xresult1<Xint> {
         match self.value() {
             Cell::Int(x) => Ok(*x),
             val => Err(cell_type_error(INT_TYPE_NAME, val.clone()))
@@ -290,7 +290,7 @@ impl Cell {
         }
     }
 
-    pub fn to_bitstring(&self) -> Xresult1<Xbitstr> {
+    pub fn to_bitstr(&self) -> Xresult1<Xbitstr> {
         match self.value() {
             Cell::Bitstr(s) => Ok(s.clone()),
             val => Err(cell_type_error(BITSTR_TYPE_NAME, val.clone()))

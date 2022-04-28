@@ -1607,7 +1607,7 @@ fn core_word_loop(xs: &mut State) -> Xresult {
 }
 
 fn core_word_help(xs: &mut State) -> Xresult {
-    let name = xs.pop_data()?.to_string()?;
+    let name = xs.pop_data()?.to_xstr()?;
     let res = xs.dict_find(name.as_str())
         .and_then(|a| xs.dict.get(a))
         .and_then(|e| e.help.clone());
@@ -1619,11 +1619,11 @@ fn core_word_help(xs: &mut State) -> Xresult {
 
 fn core_word_doc(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?;
-    let help = xs.pop_data()?.to_string()?;
+    let help = xs.pop_data()?.to_xstr()?;
     match name.value() {
         Cell::Vector(v) => {
             for x in v.iter() {
-                let name = x.to_string()?;
+                let name = x.to_xstr()?;
                 xs.set_doc(name, help.clone())?;
             }
             OK
@@ -1682,13 +1682,13 @@ fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
 
 fn core_word_get(xs: &mut State) -> Xresult {
     let index = xs.pop_data()?.to_isize()?;
-    let v = xs.pop_data()?.to_vector()?;
+    let v = xs.pop_data()?.to_vec()?;
     xs.push_data(vector_get(&v, index)?.clone())
 }
 
 fn core_word_sort(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
-    let v = xs.pop_data()?.to_vector()?;
+    let v = xs.pop_data()?.to_vec()?;
     let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
     let sorted = Xvec::from_iter(m.into_iter());
     xs.push_data(Cell::from(sorted))
@@ -1696,7 +1696,7 @@ fn core_word_sort(xs: &mut State) -> Xresult {
 
 fn core_word_reverse(xs: &mut State) -> Xresult {
     use std::iter::FromIterator;
-    let v = xs.pop_data()?.to_vector()?;
+    let v = xs.pop_data()?.to_vec()?;
     let rv = Xvec::from_iter(v.iter().rev().cloned());
     xs.push_data(Cell::from(rv))
 }
@@ -1775,7 +1775,7 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
 }
 
 fn core_word_load(xs: &mut State) -> Xresult {
-    let path = xs.pop_data()?.to_string()?;
+    let path = xs.pop_data()?.to_xstr()?;
     xs.eval_from_file(&path)
 }
 
@@ -1792,7 +1792,7 @@ fn core_word_with_tag(xs: &mut State) -> Xresult {
 
 fn core_word_insert_tagged(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
-    let mut vec = xs.pop_data()?.to_vector()?;
+    let mut vec = xs.pop_data()?.to_vec()?;
     let pos = vec.iter().position(|x| x.tag() == val.tag());
     if let Some(index) = pos {
         vec.set_mut(index, val);
@@ -1946,7 +1946,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 leave again").unwrap();
         let x = xs.pop_data().unwrap();
-        assert_eq!(x.xint(), Ok(1));
+        assert_eq!(x.to_xint(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
         let res = xs.compile("begin 1 again leave");
@@ -2076,7 +2076,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
         eval_ok!(xs, "10 var x  ( ( x nil assert-eq  ) )");
         eval_ok!(xs, "(  [ x 0 do i loop ] )");
-        let v = xs.pop_data().unwrap().to_vector().unwrap();
+        let v = xs.pop_data().unwrap().to_vec().unwrap();
         assert_eq!(10, v.len());
         eval_ok!(xs, ": f [ ( 3 3 * ) ] ; f 0 get");
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
