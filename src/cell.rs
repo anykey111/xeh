@@ -9,7 +9,7 @@ pub type XfnType = fn(&mut State) -> Xresult;
 pub type Xint = i128;
 pub type Xreal = f64;
 pub type Xanyrc = std::rc::Rc<std::cell::RefCell<dyn std::any::Any>>;
-pub type Xbitstr = crate::bitstring::Bitstring;
+pub type Xbitstr = crate::bitstr::Bitstr;
 pub type Xcell = Cell;
 
 pub struct WithTag {

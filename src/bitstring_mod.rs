@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use crate::bitstring::*;
+use crate::bitstr::*;
 use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
@@ -106,7 +106,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 
 fn pack_int_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = xs.pop_data()?.to_xint()?;
-    let s = Bitstring::from_int(val, n, bo);
+    let s = Bitstr::from_int(val, n, bo);
     xs.push_data(Cell::Bitstr(s))
 }
 
@@ -118,8 +118,8 @@ fn pack_int(xs: &mut Xstate, n: usize) -> Xresult {
 fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = xs.pop_data()?.to_real()?;
     let s = match n {
-        32 => Bitstring::from_f32(val as f32, bo),
-        64 => Bitstring::from_f64(val, bo),
+        32 => Bitstr::from_f32(val as f32, bo),
+        64 => Bitstr::from_f64(val, bo),
         n => return Err(Xerr::InvalidFloatLength(n)),
     };
     xs.push_data(Cell::Bitstr(s))
@@ -200,7 +200,7 @@ pub fn byte_to_dump_char(x: u8) -> char {
     }
 }
 
-fn dump_bitstr(xs: &mut Xstate, s: &Bitstring, ncols: usize) -> Xresult {
+fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
     let mut buf = String::new();
     let mut pos = s.start();
     let mut hex  = String::new();
@@ -239,7 +239,7 @@ fn write_dump_position(buf: &mut String, start: usize) {
     }
 }
 
-pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstring) -> Xresult {
+pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstr) -> Xresult {
     let old_offset = xs.get_var(xs.bitstr_mod.offset)?.clone();
     let old_input = xs.get_var(xs.bitstr_mod.input)?.clone();
     xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
@@ -305,7 +305,7 @@ fn bitstring_xor(xs: &mut Xstate) -> Xresult {
 
 fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_xstr()?;
-    match Bitstring::from_hex_str(&s) {
+    match Bitstr::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
         Err(pos) => {
             Err(Xerr::ParseError {
@@ -324,7 +324,7 @@ fn bitstr_to_hex(xs: &mut Xstate) -> Xresult {
 
 fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_xstr()?;
-    match Bitstring::from_bin_str(&s) {
+    match Bitstr::from_bin_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
         Err(pos) => {
             Err(Xerr::ParseError {
@@ -364,9 +364,9 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
     }
 }
 
-pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
+pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
     match val {
-        Cell::Str(s) => Ok(Bitstring::from(s.to_string().into_bytes())),
+        Cell::Str(s) => Ok(Bitstr::from(s.to_string().into_bytes())),
         Cell::Vector(v) => {
             let mut tmp = Xbitstr::new();
             for x in v.iter() {
@@ -387,7 +387,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstring> {
                     _ => return Err(Xerr::TypeError),
                 }
             }
-            Ok(Bitstring::from(tmp))
+            Ok(Bitstr::from(tmp))
         }
         Cell::Bitstr(s) => Ok(s),
         _ => Err(Xerr::TypeError)

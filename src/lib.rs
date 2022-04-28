@@ -1,5 +1,5 @@
 mod arith;
-pub mod bitstring;
+pub mod bitstr;
 pub mod bitstring_mod;
 pub mod cell;
 pub mod error;

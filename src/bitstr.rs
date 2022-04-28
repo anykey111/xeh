@@ -17,7 +17,7 @@ pub const NATIVE: Byteorder = LITTLE;
 #[cfg(target_endian = "big")]
 pub const NATIVE: Byteorder = BIG;
 
-type BitstringRange = Range<usize>;
+type BitstrRange = Range<usize>;
 
 fn upper_bound_index(num_bits: usize) -> usize {
     let n = if (num_bits % 8) > 0 { 1 } else { 0 };
@@ -42,7 +42,7 @@ pub type CowBytes = Cow<'static, [u8]>;
 
 use std::fmt;
 
-impl fmt::Debug for Bitstring {
+impl fmt::Debug for Bitstr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.to_bin_string())
     }
@@ -66,25 +66,25 @@ impl BitvecBuilder {
         self.len += 1;
     }
 
-    pub fn finish(self) -> Bitstring {
-        let mut res = Bitstring::from(self.data);
+    pub fn finish(self) -> Bitstr {
+        let mut res = Bitstr::from(self.data);
         res.range.end = self.len;
         res
     }
 }
 
 #[derive(Clone, Default)]
-pub struct Bitstring {
-    range: BitstringRange,
+pub struct Bitstr {
+    range: BitstrRange,
     data: Rc<CowBytes>,
 }
 
-impl Bitstring {
+impl Bitstr {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn from_bin_str(s: &str) -> Result<Bitstring, usize> {
+    pub fn from_bin_str(s: &str) -> Result<Bitstr, usize> {
         let mut tmp = BitvecBuilder::default();
         for (pos, c) in s.chars().enumerate() {
             match c {
@@ -103,7 +103,7 @@ impl Bitstring {
         return s;
     }
 
-    pub fn from_hex_str(s: &str) -> Result<Bitstring, usize> {
+    pub fn from_hex_str(s: &str) -> Result<Bitstr, usize> {
         let mut n = 0;
         let mut buf = Vec::new();
         for (pos, c) in s.chars().enumerate() {
@@ -119,7 +119,7 @@ impl Bitstring {
             }
             n += 4;
         }
-        let mut result = Bitstring::from(buf);
+        let mut result = Bitstr::from(buf);
         result.range.end = n;
         Ok(result)
     }
@@ -153,7 +153,7 @@ impl Bitstring {
         (self.range.start % 8 == 0) && (self.range.end % 8 == 0)
     }
 
-    pub fn seek(&self, pos: usize) -> Option<Bitstring> {
+    pub fn seek(&self, pos: usize) -> Option<Bitstr> {
         if self.range.start <= pos && pos <= self.range.end {
             let mut s = self.clone();
             s.range.start = pos;
@@ -163,7 +163,7 @@ impl Bitstring {
         }
     }
 
-    pub fn read(&mut self, num_bits: usize) -> Option<Bitstring> {
+    pub fn read(&mut self, num_bits: usize) -> Option<Bitstr> {
         let pos = self.range.start + num_bits;
         if pos > self.range.end {
             return None;
@@ -174,7 +174,7 @@ impl Bitstring {
         Some(result)
     }
 
-    pub fn peek(&self, num_bits: usize) -> Option<Bitstring> {
+    pub fn peek(&self, num_bits: usize) -> Option<Bitstr> {
         let end = self.start() + num_bits;
         if self.range.start <= end && end <= self.range.end {
             let mut s = self.clone();
@@ -185,7 +185,7 @@ impl Bitstring {
         }
     }
 
-    pub fn substr(&self, start: usize, end: usize) -> Option<Bitstring> {
+    pub fn substr(&self, start: usize, end: usize) -> Option<Bitstr> {
         if start <= end && self.range.start <= start && end <= self.range.end {
             let mut s = self.clone();
             s.range = start..end;
@@ -195,7 +195,7 @@ impl Bitstring {
         }
     }
 
-    pub fn split_at(&self, bit_index: usize) -> Option<(Bitstring, Bitstring)> {
+    pub fn split_at(&self, bit_index: usize) -> Option<(Bitstr, Bitstr)> {
         let mid = self.range.start + bit_index;
         if mid > self.range.end {
             return None;
@@ -241,7 +241,7 @@ impl Bitstring {
         acc
     }
 
-    pub fn from_int(val: i128, num_bits: usize, order: Byteorder) -> Bitstring {
+    pub fn from_int(val: i128, num_bits: usize, order: Byteorder) -> Bitstr {
         let mut tmp = Vec::with_capacity(upper_bound_index(num_bits));
         if order == BIG {
             let mut i = num_bits;
@@ -260,8 +260,8 @@ impl Bitstring {
                 i += n;
             }
         }
-        Bitstring {
-            range: BitstringRange::from(0..num_bits),
+        Bitstr {
+            range: BitstrRange::from(0..num_bits),
             data: Rc::new(Cow::from(tmp)),
         }
     }
@@ -292,22 +292,22 @@ impl Bitstring {
         }
     }
 
-    pub fn from_f32(val: f32, order: Byteorder) -> Bitstring {
+    pub fn from_f32(val: f32, order: Byteorder) -> Bitstr {
         let bytes = if order == BIG {
             val.to_be_bytes()
         } else {
             val.to_le_bytes()
         };
-        Bitstring::from(bytes.to_vec())
+        Bitstr::from(bytes.to_vec())
     }
 
-    pub fn from_f64(val: f64, order: Byteorder) -> Bitstring {
+    pub fn from_f64(val: f64, order: Byteorder) -> Bitstr {
         let bytes = if order == BIG {
             val.to_be_bytes()
         } else {
             val.to_le_bytes()
         };
-        Bitstring::from(bytes.to_vec())
+        Bitstr::from(bytes.to_vec())
     }
 
 
@@ -325,7 +325,7 @@ impl Bitstring {
         &self.data[self.bytes_range()]
     }
 
-    pub fn bytes_range(&self) -> BitstringRange {
+    pub fn bytes_range(&self) -> BitstrRange {
         let i = self.range.start / 8;
         let e = upper_bound_index(self.range.end);
         i..e
@@ -345,17 +345,17 @@ impl Bitstring {
         }
     }
 
-    pub fn detach(self) -> Bitstring {
+    pub fn detach(self) -> Bitstr {
         if Rc::strong_count(&self.data) == 1 {
             self
         } else if self.len() == 0 {
-            Bitstring::new()
+            Bitstr::new()
         } else {
             let end = self.len();
             let mut tmp = Vec::with_capacity(upper_bound_index(end));
             tmp.extend(self.iter8().map(|(val, n)| val << (8 - n)));
-            Bitstring {
-                range: BitstringRange::from(0..end),
+            Bitstr {
+                range: BitstrRange::from(0..end),
                 data: Rc::new(Cow::from(tmp)),
             }
         }
@@ -365,15 +365,15 @@ impl Bitstring {
         Rc::make_mut(&mut self.data).to_mut()
     }
 
-    fn append_bytes_mut(mut self, tail: &Bitstring) -> Bitstring {
+    fn append_bytes_mut(mut self, tail: &Bitstr) -> Bitstr {
         self.data_mut().extend_from_slice(tail.slice());
         let start = self.range.start;
         let end = self.range.end + tail.len();
-        self.range = BitstringRange::from(start..end);
+        self.range = BitstrRange::from(start..end);
         self
     }
 
-    fn append_bits_mut(mut self, tail: &Bitstring) -> Bitstring {
+    fn append_bits_mut(mut self, tail: &Bitstr) -> Bitstr {
         if self.is_bytestring() && tail.is_bytestring() {
             return self.append_bytes_mut(tail);
         }
@@ -387,20 +387,20 @@ impl Bitstring {
             pos += 1;
         }
         let start = self.range.start;
-        self.range = BitstringRange::from(start..pos);
+        self.range = BitstrRange::from(start..pos);
         self
     }
 
-    pub fn append(self, tail: &Bitstring) -> Bitstring {
+    pub fn append(self, tail: &Bitstr) -> Bitstr {
         self.detach().append_bits_mut(tail)
     }
 
-    pub fn insert(self, bit_index: usize, s: &Bitstring) -> Option<Bitstring> {
+    pub fn insert(self, bit_index: usize, s: &Bitstr) -> Option<Bitstr> {
         let (left, right) = self.split_at(bit_index)?;
         Some(left.detach().append_bits_mut(&s).append_bits_mut(&right))
     }
 
-    pub fn invert(self) -> Bitstring {
+    pub fn invert(self) -> Bitstr {
         let r = self.range.clone();
         let mut s = self.detach();
         let data = s.data_mut();
@@ -411,7 +411,7 @@ impl Bitstring {
         s
     }
 
-    pub fn eq_with(&self, other: &Bitstring) -> bool {
+    pub fn eq_with(&self, other: &Bitstr) -> bool {
         if self.len() != other.len() {
             false
         } else if self.is_bytestring() && other.is_bytestring() {
@@ -422,31 +422,31 @@ impl Bitstring {
     }
 }
 
-impl PartialEq for Bitstring {
-    fn eq(&self, other: &Bitstring) -> bool {
+impl PartialEq for Bitstr {
+    fn eq(&self, other: &Bitstr) -> bool {
         self.eq_with(other)
     }
 }
 
-impl<'a> From<&'static [u8]> for Bitstring {
+impl<'a> From<&'static [u8]> for Bitstr {
     fn from(s: &'static [u8]) -> Self {
-        Bitstring {
-            range: BitstringRange::from(0..(s.len() * 8)),
+        Bitstr {
+            range: BitstrRange::from(0..(s.len() * 8)),
             data: Rc::new(CowBytes::from(s)),
         }
     }
 }
 
-impl<'a> From<&'static str> for Bitstring {
+impl<'a> From<&'static str> for Bitstr {
     fn from(s: &'static str) -> Self {
-        Bitstring::from(s.as_bytes())
+        Bitstr::from(s.as_bytes())
     }
 }
 
-impl From<Vec<u8>> for Bitstring {
+impl From<Vec<u8>> for Bitstr {
     fn from(v: Vec<u8>) -> Self {
-        Bitstring {
-            range: BitstringRange::from(0..(v.len() * 8)),
+        Bitstr {
+            range: BitstrRange::from(0..(v.len() * 8)),
             data: Rc::new(CowBytes::from(v)),
         }
     }
@@ -455,7 +455,7 @@ impl From<Vec<u8>> for Bitstring {
 #[derive(Clone)]
 pub struct Bits<'a> {
     pos: usize,
-    bs: &'a Bitstring,
+    bs: &'a Bitstr,
 }
 
 impl<'a> Iterator for Bits<'a> {
@@ -475,7 +475,7 @@ impl<'a> Iterator for Bits<'a> {
 
 pub struct Iter8<'a> {
     pos: usize,
-    bs: &'a Bitstring,
+    bs: &'a Bitstr,
 }
 
 impl<'a> Iterator for Iter8<'a> {
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_split_at() {
-        let bs = Bitstring::from(vec![0x7f]);
+        let bs = Bitstr::from(vec![0x7f]);
         let (a, b) = bs.split_at(4).unwrap();
         assert_eq!(a.to_uint(BIG), 7);
         assert_eq!(b.to_int(LITTLE), -1);
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_detach() {
-        let mut a = Bitstring::from(vec![0xff, 0x2f]);
+        let mut a = Bitstr::from(vec![0xff, 0x2f]);
         let b = a.read(8).unwrap().detach();
         assert_eq!(b.range, (0..8));
         assert_eq!(b.to_bytes(), vec![0xff]);
@@ -547,7 +547,7 @@ mod tests {
         assert_eq!(c.to_bytes(), vec![2]);
         assert_eq!(c.detach().data[0], 0x20);
         assert_eq!(a.range, (12..16));
-        let mut x = Bitstring::from(vec![0x12, 0x34]);
+        let mut x = Bitstr::from(vec![0x12, 0x34]);
         x.read(4).unwrap();
         assert_eq!(x.read(8).unwrap().to_bytes(), vec![0x23]);
     }
@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn test_cow() {
         static X: [u8; 1] = [255];
-        let a = Bitstring::from(&X[..]);
+        let a = Bitstr::from(&X[..]);
         match &*a.data {
             Cow::Borrowed(x) => assert_eq!(x.as_ptr(), X.as_ptr()),
             other => panic!("fail {:?}", other),
@@ -570,15 +570,15 @@ mod tests {
     #[test]
     fn test_append() {
         // byte aligned
-        let a = Bitstring::from(vec![0x12, 0x34]);
-        let b = Bitstring::from(vec![0x56, 0x78]);
+        let a = Bitstr::from(vec![0x12, 0x34]);
+        let b = Bitstr::from(vec![0x56, 0x78]);
         assert_eq!(a.append(&b).to_bytes(), vec![0x12, 0x34, 0x56, 0x78]);
         // unaligned
-        let mut g = Bitstring::from(vec![0b11000001, 0b10011001]);
+        let mut g = Bitstr::from(vec![0b11000001, 0b10011001]);
         let h = g.read(7).unwrap();
         let f = g.read(9).unwrap();
         assert_eq!(h.append(&f).to_bytes(), vec![0b11000001, 0b10011001]);
-        let mut w = Bitstring::from(vec![0xab, 0xcd, 0xef]);
+        let mut w = Bitstr::from(vec![0xab, 0xcd, 0xef]);
         let x = w.read(9).unwrap();
         let y = w.read(13).unwrap();
         let z = w.read(1).unwrap();
@@ -587,12 +587,12 @@ mod tests {
             x.append(&y).append(&z).append(&r).to_bytes(),
             vec![0xab, 0xcd, 0xef]
         );
-        let mut s = Bitstring::from(vec![0x13]);
+        let mut s = Bitstr::from(vec![0x13]);
         let a = s.read(4).unwrap();
         let b = s.read(4).unwrap();
         assert_eq!(b.append(&a).to_bytes(), vec![0x31]);
 
-        let mut s = Bitstring::from_bin_str("0_1000000_0_0111011_0_1111000").unwrap();
+        let mut s = Bitstr::from_bin_str("0_1000000_0_0111011_0_1111000").unwrap();
         s.read(1).unwrap();
         let a = s.read(7).unwrap();
         let a_bits: Vec<_> = a.bits().collect();
@@ -624,50 +624,50 @@ mod tests {
 
     #[test]
     fn test_seek() {
-        let s = Bitstring::from(vec![0x12, 0x34]);
+        let s = Bitstr::from(vec![0x12, 0x34]);
         assert_eq!(vec![0x34], s.seek(8).unwrap().to_bytes());
         assert_eq!(&s, &s.seek(0).unwrap());
-        assert_eq!(Bitstring::new(), s.seek(16).unwrap());
+        assert_eq!(Bitstr::new(), s.seek(16).unwrap());
         assert_eq!(None, s.seek(17));
     }
 
     #[test]
     fn test_peek() {
-        let s = Bitstring::from(vec![0x12, 0x34, 0x56]);
+        let s = Bitstr::from(vec![0x12, 0x34, 0x56]);
         assert_eq!(vec![0x12], s.peek(8).unwrap().to_bytes());
         assert_eq!(None, s.peek(25));
-        assert_eq!(Bitstring::new(), s.peek(0).unwrap());
+        assert_eq!(Bitstr::new(), s.peek(0).unwrap());
         assert_eq!(&s, &s.peek(24).unwrap());
     }
 
     #[test]
     fn test_substr() {
-        let s = Bitstring::from(vec![0x12, 0x34, 0x56]);
+        let s = Bitstr::from(vec![0x12, 0x34, 0x56]);
         assert_eq!(vec![0x34], s.substr(8, 16).unwrap().to_bytes());
         assert_eq!(&s, &s.substr(0, 24).unwrap());
         assert_eq!(None, s.substr(0, 25));
         assert_eq!(None, s.substr(24, 0));
-        assert_eq!(Bitstring::new(), s.substr(0, 0).unwrap());
+        assert_eq!(Bitstr::new(), s.substr(0, 0).unwrap());
         
         
     }
 
     #[test]
     fn test_insert() {
-        let f = Bitstring::from_bin_str("1111").unwrap();
-        let res  = Bitstring::from(vec![0xaa, 0xbb])
+        let f = Bitstr::from_bin_str("1111").unwrap();
+        let res  = Bitstr::from(vec![0xaa, 0xbb])
                     .insert(4, &f).unwrap()
                     .insert(16, &f).unwrap();
         assert_eq!(vec![0xaf, 0xab, 0xfb], res.to_bytes());
-        let z5 = Bitstring::from_bin_str("00000").unwrap();
-        let res = Bitstring::from_bin_str("111111").unwrap()
+        let z5 = Bitstr::from_bin_str("00000").unwrap();
+        let res = Bitstr::from_bin_str("111111").unwrap()
             .insert(3, &z5).unwrap();
-        assert_eq!(Bitstring::from_bin_str("11100000111").unwrap(), res);
+        assert_eq!(Bitstr::from_bin_str("11100000111").unwrap(), res);
     }
 
     #[test]
     fn test_invert() {
-        let mut a = Bitstring::from_bin_str("01111111_01111111").unwrap();
+        let mut a = Bitstr::from_bin_str("01111111_01111111").unwrap();
         let b = a.clone().invert();
         assert_eq!("1000000010000000", b.to_bin_string().as_str());
         assert_eq!("0111111101111111", b.invert().to_bin_string().as_str());
@@ -680,103 +680,103 @@ mod tests {
 
     #[test]
     fn test_value() {
-        let bs = Bitstring::from(vec![0x7f]);
+        let bs = Bitstr::from(vec![0x7f]);
         assert_eq!(bs.to_int(LITTLE), 127);
         assert_eq!(bs.to_uint(LITTLE), 127);
 
-        let bs = Bitstring::from(vec![0xff]);
+        let bs = Bitstr::from(vec![0xff]);
         assert_eq!(bs.to_uint(LITTLE), 255);
         assert_eq!(bs.to_int(LITTLE), -1);
 
-        let bs = Bitstring::from(vec![0xfe]);
+        let bs = Bitstr::from(vec![0xfe]);
         assert_eq!(bs.to_uint(LITTLE), 254);
         assert_eq!(bs.to_int(LITTLE), -2);
 
-        let bs = Bitstring::from(vec![0xff, 0xff]);
+        let bs = Bitstr::from(vec![0xff, 0xff]);
         assert_eq!(bs.to_int(LITTLE), -1);
 
-        let bs = Bitstring::from(vec![0xff, 0x7f]);
+        let bs = Bitstr::from(vec![0xff, 0x7f]);
         assert_eq!(bs.to_int(LITTLE), i16::max_value() as i128);
 
-        let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f]);
+        let bs = Bitstr::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f]);
         assert_eq!(bs.to_int(LITTLE), i64::max_value() as i128);
 
-        let bs = Bitstring::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+        let bs = Bitstr::from(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
         assert_eq!(bs.to_int(LITTLE), -1);
         assert_eq!(bs.to_uint(LITTLE), u64::max_value() as u128);
 
         let f = f32::MAX;
         let le = f.to_le_bytes().to_vec();
-        assert_eq!(Bitstring::from(le).to_f32(LITTLE), f);
+        assert_eq!(Bitstr::from(le).to_f32(LITTLE), f);
         let be = f.to_be_bytes().to_vec();
-        assert_eq!(Bitstring::from(be).to_f32(BIG), f);
+        assert_eq!(Bitstr::from(be).to_f32(BIG), f);
 
         let f: f32 = 1.234;
-        assert_eq!(f.to_le_bytes().to_vec(), Bitstring::from_f32(f, LITTLE).to_bytes());
-        assert_eq!(f.to_be_bytes().to_vec(), Bitstring::from_f32(f, BIG).to_bytes());
+        assert_eq!(f.to_le_bytes().to_vec(), Bitstr::from_f32(f, LITTLE).to_bytes());
+        assert_eq!(f.to_be_bytes().to_vec(), Bitstr::from_f32(f, BIG).to_bytes());
 
     }
 
     #[test]
     fn test_nums() {
-        assert_eq!(Bitstring::from_int(0, 0, BIG).to_bytes(), vec![]);
-        let bs = Bitstring::from_int(1, 3, BIG);
+        assert_eq!(Bitstr::from_int(0, 0, BIG).to_bytes(), vec![]);
+        let bs = Bitstr::from_int(1, 3, BIG);
         assert_eq!(bs.to_int(BIG), 1);
         assert_eq!(bs.to_bytes(), vec![1]);
-        let ls = Bitstring::from_int(1, 3, LITTLE);
+        let ls = Bitstr::from_int(1, 3, LITTLE);
         assert_eq!(ls.to_int(LITTLE), 1);
         assert_eq!(ls.to_bytes(), vec![1]);
 
         assert_eq!(
-            &Bitstring::from_int(0x12345678, 32, LITTLE).to_bytes(),
+            &Bitstr::from_int(0x12345678, 32, LITTLE).to_bytes(),
             &0x12345678u32.to_le_bytes()
         );
         assert_eq!(
-            &Bitstring::from_int(0x12345678, 32, BIG).to_bytes(),
+            &Bitstr::from_int(0x12345678, 32, BIG).to_bytes(),
             &0x12345678u32.to_be_bytes()
         );
         assert_eq!(
-            &Bitstring::from_int(0x7FFFFFFF, 32, LITTLE).to_bytes(),
+            &Bitstr::from_int(0x7FFFFFFF, 32, LITTLE).to_bytes(),
             &0x7FFFFFFFu32.to_le_bytes()
         );
         assert_eq!(
-            Bitstring::from_int(0xFFFF_FFFF, 32, LITTLE).to_int(LITTLE),
+            Bitstr::from_int(0xFFFF_FFFF, 32, LITTLE).to_int(LITTLE),
             -1
         );
         assert_eq!(
-            Bitstring::from_int(0x7FFF_FFFF, 32, LITTLE).to_int(LITTLE),
+            Bitstr::from_int(0x7FFF_FFFF, 32, LITTLE).to_int(LITTLE),
             i32::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_int(0xFFFF_FFFF, 32, BIG).to_int(BIG),
+            Bitstr::from_int(0xFFFF_FFFF, 32, BIG).to_int(BIG),
             -1
         );
         assert_eq!(
-            Bitstring::from_int(0x7FFF_FFFF, 32, BIG).to_int(BIG),
+            Bitstr::from_int(0x7FFF_FFFF, 32, BIG).to_int(BIG),
             i32::max_value() as i128
         );
         assert_eq!(
-            &Bitstring::from_int(i64::MAX.into(), 64, LITTLE).to_bytes(),
+            &Bitstr::from_int(i64::MAX.into(), 64, LITTLE).to_bytes(),
             &i64::max_value().to_le_bytes()
         );
         assert_eq!(
-            &Bitstring::from_int(i64::MAX.into(), 64, BIG).to_bytes(),
+            &Bitstr::from_int(i64::MAX.into(), 64, BIG).to_bytes(),
             &i64::max_value().to_be_bytes()
         );
         assert_eq!(
-            Bitstring::from_int(i64::MAX.into(), 64, LITTLE).to_int(LITTLE),
+            Bitstr::from_int(i64::MAX.into(), 64, LITTLE).to_int(LITTLE),
             i64::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from_int(i64::MAX.into(), 64, BIG).to_int(BIG),
+            Bitstr::from_int(i64::MAX.into(), 64, BIG).to_int(BIG),
             i64::max_value() as i128
         );
         assert_eq!(
-            Bitstring::from(i128::MAX.to_le_bytes().to_vec()).to_int(LITTLE),
+            Bitstr::from(i128::MAX.to_le_bytes().to_vec()).to_int(LITTLE),
             i128::MAX
         );
         assert_eq!(
-            Bitstring::from(i128::MIN.to_le_bytes().to_vec()).to_int(LITTLE),
+            Bitstr::from(i128::MIN.to_le_bytes().to_vec()).to_int(LITTLE),
             i128::MIN
         );
     }
@@ -784,25 +784,25 @@ mod tests {
     #[test]
     fn test_from_bin_str() {
         let s = "10111001001";
-        let bs = Bitstring::from_bin_str(s).unwrap();
+        let bs = Bitstr::from_bin_str(s).unwrap();
         assert_eq!(bs.len(), s.len());
         assert_eq!(s, bs.to_bin_string().as_str());
-        assert_eq!(Err(7), Bitstring::from_bin_str("11_11_02"));
-        let bs = Bitstring::from_bin_str("1 1 1 1 1 1 1").unwrap();
+        assert_eq!(Err(7), Bitstr::from_bin_str("11_11_02"));
+        let bs = Bitstr::from_bin_str("1 1 1 1 1 1 1").unwrap();
         assert_eq!(*bs.data, vec![0xfe]);
     }
 
     #[test]
     fn test_from_hex_str() {
         let s = "fe1";
-        let bs = Bitstring::from_hex_str(s).unwrap();
+        let bs = Bitstr::from_hex_str(s).unwrap();
         assert_eq!(bs.len(), 12);
         assert_eq!(bs.to_bytes(), vec![0xfe, 0x1]);
         assert_eq!(bs.to_hex_string(), s);
-        let bs = Bitstring::from_hex_str("f f 00 E _ E 11").unwrap();
+        let bs = Bitstr::from_hex_str("f f 00 E _ E 11").unwrap();
         assert_eq!(bs.len(), 32);
         assert_eq!(bs.to_bytes(), vec![0xff, 0x00, 0xee,0x11]);
-        assert_eq!(Err(1), Bitstring::from_hex_str("FX"));
+        assert_eq!(Err(1), Bitstr::from_hex_str("FX"));
     }
 
     #[test]
@@ -830,38 +830,38 @@ mod tests {
 
     #[test]
     fn test_bits() {
-        let s = Bitstring::from(vec![0b11000000]);
+        let s = Bitstr::from(vec![0b11000000]);
         let res: Vec<_> = s.bits().collect();
         assert_eq!(vec![1, 1, 0, 0, 0, 0, 0, 0], res);
     }
 
     #[test]
     fn test_eq_with() {
-        let a = Bitstring::from(vec![0x12, 0x34]);
-        let b = Bitstring::from(vec![0x12, 0x34]);
+        let a = Bitstr::from(vec![0x12, 0x34]);
+        let b = Bitstr::from(vec![0x12, 0x34]);
         assert!(a.eq_with(&b));
         let c = a.seek(8).unwrap();
-        let d = Bitstring::from(vec![0x34]);
+        let d = Bitstr::from(vec![0x34]);
         assert!(c.eq_with(&d));
         assert!(!c.eq_with(&a));
-        let s1 = Bitstring::from_bin_str("1000 1000 111").unwrap();
+        let s1 = Bitstr::from_bin_str("1000 1000 111").unwrap();
         let s2 = s1.clone();
         assert!(s1.eq_with(&s2));
-        let s3 = Bitstring::from_bin_str("1000 1000 1111").unwrap();
+        let s3 = Bitstr::from_bin_str("1000 1000 1111").unwrap();
         assert!(!s1.eq_with(&s3));
-        let s4 = Bitstring::from_bin_str("1000 1000 011").unwrap();
+        let s4 = Bitstr::from_bin_str("1000 1000 011").unwrap();
         assert!(!s1.eq_with(&s4));
     }
 
     #[test]
     fn test_iter8() {
-        let a = Bitstring::from(vec![0xaf, 0xbc]);
+        let a = Bitstr::from(vec![0xaf, 0xbc]);
         let mut it = a.iter8();
         assert_eq!(Some((0xaf, 8)), it.next());
         assert_eq!(Some((0xbc, 8)), it.next());
         assert_eq!(None, it.next());
         // unaligned
-        let s = Bitstring::from(vec![0xab, 0xcd]);
+        let s = Bitstr::from(vec![0xab, 0xcd]);
         let b = s.seek(4).unwrap();
         let mut it = b.iter8();
         assert_eq!(Some((0xbc, 8)), it.next());
