@@ -115,12 +115,17 @@ fn pack_int(xs: &mut Xstate, n: usize) -> Xresult {
     pack_int_bo(xs, n, bo)
 }
 
+fn float_len_err(len: usize) -> Xerr {
+    let errmsg = format!("unsupported float length {}", len);
+    Xerr::ErrorMsg(errmsg.into())
+}
+
 fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = xs.pop_data()?.to_real()?;
     let s = match n {
         32 => Bitstr::from_f32(val as f32, bo),
         64 => Bitstr::from_f64(val, bo),
-        n => return Err(Xerr::InvalidFloatLength(n)),
+        n => return Err(float_len_err(n)),
     };
     xs.push_data(Cell::Bitstr(s))
 }
@@ -523,7 +528,7 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let val = match n {
         32 => s.to_f32(bo) as Xreal,
         64 => s.to_f64(bo) as Xreal,
-        n => return Err(Xerr::InvalidFloatLength(n)),
+        n => return Err(float_len_err(n)),
     };
     move_offset_checked(xs, s.end())?;
     xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(n, bo)))

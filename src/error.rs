@@ -28,7 +28,6 @@ pub enum Xerr {
     SeekError { src: Xbitstr, offset: usize },
     MatchError { src: Xbitstr, expect: Xbitstr, fail_pos: usize },
     UnalignedBitstr,
-    InvalidFloatLength(usize),
     // just text error 
     ErrorMsg(Xstr),
     // Stop interpreter execution
@@ -64,7 +63,6 @@ impl fmt::Display for Xerr {
             },
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::UnalignedBitstr => f.write_str("UnalignedBitstr"),
-            Xerr::InvalidFloatLength{..} => f.write_str("InvalidFloatLength"),
             Xerr::Exit{..} => f.write_str("Exit"),
             Xerr::ReadError { src, len } => {
                 write!(f, "trying to read {} bits while only {} remain", len, src.len())
