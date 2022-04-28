@@ -307,7 +307,13 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_string()?;
     match Bitstring::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => Err(Xerr::RuntimeParseError(s, pos)),
+        Err(pos) => {
+            Err(Xerr::ParseError {
+                msg: arcstr::literal!("hex string parse error"),
+                substr: s.substr(..),
+                pos,
+            })
+        }
     }
 }
 
@@ -320,7 +326,13 @@ fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_string()?;
     match Bitstring::from_bin_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => Err(Xerr::RuntimeParseError(s, pos)),
+        Err(pos) => {
+            Err(Xerr::ParseError {
+                msg: arcstr::literal!("bin string parse error"),
+                substr: s.substr(..),
+                pos,
+            })
+        }
     }
 }
 
@@ -340,7 +352,15 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?;
     match String::from_utf8(bs.bitstr()?.to_bytes()) {
         Ok(s) => xs.push_data(Cell::from(s)),
-        Err(_) => Err(Xerr::FromUtf8Error),
+        Err(e) => {
+            let pos = e.utf8_error().valid_up_to();
+            let bytes = e.into_bytes();
+            Err(Xerr::StrDecodeError {
+                msg: arcstr::literal!("utf8 bytes parse error"),
+                bytes,
+                pos,
+            })
+        }
     }
 }
 
@@ -579,7 +599,7 @@ mod tests {
             Err(Xerr::MatchError{ fail_pos, ..}) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
         }
-        assert_eq!(format!("{:?}", res.err().unwrap()),
+        assert_eq!(format!("{}", res.err().unwrap()),
         "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3");
     }
 

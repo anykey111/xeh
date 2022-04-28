@@ -36,6 +36,12 @@ pub struct Lex {
     tmp: String,
 }
 
+const PARSE_INT_ERRMSG: Xstr = arcstr::literal!("parse int error");
+const PARSE_FLOAT_ERRMSG: Xstr = arcstr::literal!("parse float error");
+const EOF_ERRMSG: Xstr = arcstr::literal!("unexpected end of file");
+const ESCAPE_SEQ_ERRMSG: Xstr = arcstr::literal!("unknown string escape sequence");
+const EXPECT_WS_ERRMSG: Xstr = arcstr::literal!("expect whitespace word separator");
+
 impl Lex {
     pub fn new(buf: Xstr) -> Lex {
         Self { buf, pos: 0, last_substr: None, tmp: String::new() }
@@ -81,15 +87,27 @@ impl Lex {
             Some('"') => {
                 self.tmp.clear();
                 loop {
-                    let c = self.take_char().ok_or_else(|| Xerr::InputIncomplete)?;
+                    let c = self.take_char().ok_or_else(|| Xerr::ParseError {
+                        msg: EOF_ERRMSG,
+                        substr: self.buf.substr(..),
+                        pos: self.pos
+                    })?;
                     if c == '\\' {
-                        let c2 = self.take_char().ok_or_else(|| Xerr::InputIncomplete)?;
+                        let c2 = self.take_char().ok_or_else(|| Xerr::ParseError {
+                            msg: EOF_ERRMSG,
+                            substr: self.buf.substr(..),
+                            pos: self.pos
+                        })?;
                         match c2 {
                             '\\' => self.tmp.push(c2),
                             '\"' => self.tmp.push(c2),
                             'n' => self.tmp.push('\n'),
                             'r' => self.tmp.push('\r'),
-                            _ => break Err(Xerr::InputParseError),
+                            _ => break Err(Xerr::ParseError {
+                                    msg: ESCAPE_SEQ_ERRMSG,
+                                    substr: self.buf.substr(..),
+                                    pos: self.pos - 2,
+                                })
                         }
                     } else if c == '"' {
                         let ss = self.buf.substr(start..self.pos);
@@ -102,7 +120,11 @@ impl Lex {
                         if ws {
                             break Ok(Tok::Literal(val))
                         } else {
-                            break Err(Xerr::InputParseError)
+                            break Err(Xerr::ParseError {
+                                msg: EXPECT_WS_ERRMSG,
+                                substr: self.buf.substr(..),
+                                pos: self.pos
+                            })
                         }
                     } else {
                         self.tmp.push(c);
@@ -163,19 +185,25 @@ impl Lex {
                 if !num_prefix {
                     return Ok(Tok::Word(ss));
                 }
-                let val = if has_dot {
+                let val = if has_dot && radix == 10 {
                     if radix != 10 {
-                        return Err(Xerr::InputParseError);
+                        return Err(Xerr::ParseError {
+                            msg: PARSE_FLOAT_ERRMSG,
+                            substr: self.buf.substr(..),
+                            pos: start,
+                        });
                     }
-                    let r: Xreal = self.tmp.parse().map_err(|_x| {
-                        //panic!("{:?}", (&self.tmp, x));
-                        Xerr::InputParseError
+                    let r: Xreal = self.tmp.parse().map_err(|_| Xerr::ParseError {
+                        msg: PARSE_FLOAT_ERRMSG,
+                        substr: self.buf.substr(..),
+                        pos: start,
                     })?;
                     Cell::Real(r)
                 } else {
-                    let i = Xint::from_str_radix(&self.tmp, radix).map_err(|_x| {
-                        //panic!("{:?}", (&self.tmp, x));
-                        Xerr::InputParseError
+                    let i = Xint::from_str_radix(&self.tmp, radix).map_err(|_| Xerr::ParseError {
+                        msg:PARSE_INT_ERRMSG,
+                        substr: self.buf.substr(..),
+                        pos: start,
                     })?;
                     Cell::Int(i)
                 };
@@ -318,8 +346,7 @@ mod tests {
         let res = tokenize_input(" \"))\n[[\" ").unwrap();
         assert_eq!(res, vec![str("))\n[[")]);
 
-        let res = tokenize_input( " \" xx\n ");
-        assert_eq!(res, Err(Xerr::InputIncomplete));
+        assert!(tokenize_input( " \" xx\n ").is_err());
     }
 
     #[test]
@@ -333,13 +360,13 @@ mod tests {
         let res = tokenize_input("0x00_ff 123_0_00_ 0b_1_1").unwrap();
         assert_eq!(res, vec![int(255), int(123000), int(3)]);
 
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("0f"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("12-"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("-0x"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("-0b"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("0_"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("0x0.1"));
-        assert_eq!(Err(Xerr::InputParseError), tokenize_input("0_.1"));
+        assert!(tokenize_input("0f").is_err());
+        assert!(tokenize_input("12-").is_err());
+        assert!(tokenize_input("-0x").is_err());
+        assert!(tokenize_input("-0b").is_err());
+        assert!(tokenize_input("0_").is_err());
+        assert!(tokenize_input("0x0.1").is_err());
+        assert!(tokenize_input("0_.1").is_err());
 
         let res = tokenize_input("1.2 0.1_1").unwrap();
         assert_eq!(res, vec![real(1.2), real(0.11)]);
@@ -349,14 +376,31 @@ mod tests {
     fn test_lex_escape() {
         let res = tokenize_input(r#""\\ \" \r \n""#).unwrap();
         assert_eq!(res, vec![str("\\ \" \r \n")]);
-        let res = tokenize_input(r#" " \x " "#);
-        assert_eq!(res, Err(Xerr::InputParseError));
+
+        match tokenize_input(r#" " \x " "#) {
+            Err(Xerr::ParseError { msg, pos: 3,..}) => assert_eq!(msg, ESCAPE_SEQ_ERRMSG),
+            e => panic!("{:?}", e)
+        }
+        match tokenize_input(r#""aaa\"#) {
+            Err(Xerr::ParseError { msg, pos: 5,..}) => assert_eq!(msg, EOF_ERRMSG),
+            e => panic!("{:?}", e)
+        }
+        match tokenize_input(r#""aaa\""#) {
+            Err(Xerr::ParseError { msg, pos: 6,..}) => assert_eq!(msg, EOF_ERRMSG),
+            e => panic!("{:?}", e)
+        }
     }
 
     #[test]
     fn test_str_tok() {
-        assert_eq!(tokenize_input(r#" 1"a" "#), Err(Xerr::InputParseError));
-        assert_eq!(tokenize_input(r#" "a"2 "#), Err(Xerr::InputParseError));
+        match tokenize_input(r#" 1"a" "#) {
+            Err(Xerr::ParseError { msg, pos: 1,..}) => assert_eq!(msg, PARSE_INT_ERRMSG),
+            e => panic!("{:?}", e)
+        }
+        match tokenize_input(r#" "a"2 "#) {
+            Err(Xerr::ParseError { msg, pos: 4,..}) => assert_eq!(msg, EXPECT_WS_ERRMSG),
+            e => panic!("{:?}", e)
+        }
     }
 
     #[test]

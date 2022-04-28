@@ -229,9 +229,9 @@ impl State {
     pub fn pretty_error(&self) -> Option<String> {
         let ec = self.last_error.as_ref()?;
         let errmsg = if let Some(loc) = &ec.location {
-            format!("{:?}\n{:?}", ec.err, loc)
+            format!("{}\n{:?}", ec.err, loc)
         } else {
-            format!("{:?}", ec.err)
+            format!("{}", ec.err)
         };
         Some(errmsg)
     }
@@ -1429,7 +1429,7 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
             let top_ptr = xs.data_stack.len();
             if top_ptr < stack_ptr {
                 const ERRMSG: Xstr = arcstr::literal!("vector stack unbalanced");
-                Err(Xerr::ErrorStr(ERRMSG))
+                Err(Xerr::ErrorMsg(ERRMSG))
             } else {
                 let mut v = Xvec::new();
                 for x in &xs.data_stack[stack_ptr..] {
@@ -1535,7 +1535,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
         }
         _ => {
             const ERRMSG: Xstr = arcstr::literal!("word is readonly");
-            Err(Xerr::ErrorStr(ERRMSG))
+            Err(Xerr::ErrorMsg(ERRMSG))
         }
     }
 }
@@ -1562,7 +1562,7 @@ fn core_word_const(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
         let s = arcstr::literal!("const word used out of meta context");
-        Err(Xerr::ErrorStr(s))
+        Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
         xs.dict_insert(DictEntry::new(name.into(), Entry::Constant(val)))?;
@@ -2102,7 +2102,7 @@ mod tests {
     fn test_const() {
         let mut xs = State::boot().unwrap();
         match xs.eval(" 33 const ss") {
-            Err(Xerr::ErrorStr(_)) => (),
+            Err(Xerr::ErrorMsg(_)) => (),
             other => panic!("{:?}", other),
         }
         let mut xs = State::boot().unwrap();

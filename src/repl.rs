@@ -72,8 +72,9 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     opts.optflag("r", "", "reverse debugging");
     let it = std::env::args().skip(1);
     let matches = opts.parse(it).map_err(|e| {
-        eprintln!("getopts: {}", e);
-        Xerr::InputParseError
+        let errmsg = format!("getopts: {}", e);
+        eprintln!("{}", errmsg);
+        Xerr::ErrorMsg(errmsg.into())
     })?;
     Ok(XcmdArgs {
         reverse_debug: matches.opt_present("r"),

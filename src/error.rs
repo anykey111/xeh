@@ -1,14 +1,14 @@
-use crate::prelude::{Xbitstr, Xstr,Cell};
+use crate::prelude::{Xbitstr, Xstr, Xsubstr, Cell};
 
 use std::fmt;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Xerr {
     UnknownWord(Xstr),
-    InputIncomplete,
-    InputParseError,
-    ControlFlowError,
+    ParseError { msg: Xstr, substr: Xsubstr, pos: usize },
+    StrDecodeError { msg: Xstr, bytes: Vec<u8>, pos: usize },
     ExpectingName,
+    ControlFlowError,
     IntegerOverflow,
     DivisionByZero,
     StackUnderflow,
@@ -27,23 +27,21 @@ pub enum Xerr {
     ReadError { src: Xbitstr, len: usize },
     SeekError { src: Xbitstr, offset: usize },
     MatchError { src: Xbitstr, expect: Xbitstr, fail_pos: usize },
-    RuntimeParseError(Xstr, usize),
     UnalignedBitstr,
     InvalidFloatLength(usize),
-    FromUtf8Error,
     // just text error 
-    ErrorStr(Xstr),
+    ErrorMsg(Xstr),
     // Stop interpreter execution
     Exit(isize),
 }
 
-impl fmt::Debug for Xerr {
+impl fmt::Display for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Xerr::ErrorStr(s) => f.write_str(s),
+            Xerr::ErrorMsg(s) => f.write_str(s),
             Xerr::UnknownWord(s) => write!(f, "unknown word {}", s),
-            Xerr::InputIncomplete => f.write_str("InputIncomplete"),
-            Xerr::InputParseError => f.write_str("InputParseError"),
+            Xerr::ParseError { msg, .. } => write!(f, "{}", msg),
+            Xerr::StrDecodeError { msg, .. } => write!(f, "{}", msg),
             Xerr::IntegerOverflow => f.write_str("IntegerOverflow"),
             Xerr::DivisionByZero => f.write_str("division by zero"),
             Xerr::ControlFlowError => f.write_str("ControlFlowError"),
@@ -89,12 +87,6 @@ impl fmt::Debug for Xerr {
                     write!(f, " {:02X}", x)?
                 }
                 write!(f, " ] pattern at {}", expect.start() + fail_pos)
-            }
-            Xerr::RuntimeParseError(_, pos) => {
-                write!(f, "char parse error at offset {}", pos)
-            }
-            Xerr::FromUtf8Error => {
-                write!(f, "utf8 parse error")
             }
         }
     }
