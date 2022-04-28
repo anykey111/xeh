@@ -1,10 +1,10 @@
-use crate::bitstring_mod;
+use crate::bitstr_ext;
 use crate::cell::*;
 use crate::error::*;
 use crate::fmt_flags::FmtFlags;
 use crate::lex::*;
 use crate::opcodes::*;
-use crate::bitstring_mod::BitstrMod;
+use crate::bitstr_ext::BitstrState;
 
 use std::fmt::Debug;
 use std::ops::Range;
@@ -157,7 +157,7 @@ pub struct State {
     stdout: Option<String>,
     last_error: Option<ErrorContext>,
     pub(crate) about_to_stop: bool,
-    pub(crate) bitstr_mod: BitstrMod,
+    pub(crate) bitstr_mod: BitstrState,
     // formatter flags
     fmt_flags: CellRef,
     // d2 canvas
@@ -268,7 +268,7 @@ impl State {
     }
 
     pub fn set_binary_input(&mut self, s: Xbitstr) -> Xresult {
-        bitstring_mod::open_bitstr(self, s)
+        bitstr_ext::open_bitstr(self, s)
     }
 
     pub fn compile(&mut self, s: &str) -> Xresult {
@@ -474,7 +474,7 @@ impl State {
         xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::arith::load(&mut xs)?;
-        crate::bitstring_mod::load(&mut xs)?;
+        crate::bitstr_ext::load(&mut xs)?;
         Ok(xs)
     }
 

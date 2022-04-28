@@ -51,7 +51,7 @@ pub fn read_source_file(path: &str) -> Xresult1<String> {
 pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
     let path = xs.pop_data()?.to_xstr()?;
     let data = xs.pop_data()?;
-    let s = crate::bitstring_mod::bitstring_from(data)?;
+    let s = crate::bitstr_ext::bitstring_from(data)?;
     let open = || {
         OpenOptions::new()
             .create(true)

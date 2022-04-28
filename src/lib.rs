@@ -1,6 +1,6 @@
 mod arith;
 pub mod bitstr;
-pub mod bitstring_mod;
+pub mod bitstr_ext;
 pub mod cell;
 pub mod error;
 pub mod lex;

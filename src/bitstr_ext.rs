@@ -5,7 +5,7 @@ use crate::error::*;
 use crate::prelude::*;
 
 #[derive(Default, Clone)]
-pub struct BitstrMod {
+pub struct BitstrState {
     big_endian: CellRef,
     offset: CellRef,
     input: CellRef,
@@ -41,7 +41,7 @@ macro_rules! def_data_word_real {
 }
 
 pub fn load(xs: &mut Xstate) -> Xresult {
-    let mut m = BitstrMod::default();
+    let mut m = BitstrState::default();
     let empty = Cell::from(Xbitstr::new());
     m.big_endian = xs.defvar("big?", ZERO)?;
     m.input = xs.defvar("current-bitstr", empty)?;
