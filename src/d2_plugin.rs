@@ -10,7 +10,7 @@ struct D2Context {
 }
 
 fn resize(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let h = xs.pop_data()?.to_usize()?;
@@ -23,14 +23,14 @@ fn resize(xs: &mut Xstate) -> Xresult {
 }
 
 pub fn size(xs: &mut Xstate) -> Xresult1<(usize, usize)> {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_ref::<D2Context>().ok_or(Xerr::TypeError)?;
     Ok((d2.width, d2.height))
 }
 
 fn color_set(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let color = xs.pop_data()?.to_usize()?;
@@ -39,21 +39,21 @@ fn color_set(xs: &mut Xstate) -> Xresult {
 }
 
 fn width_get(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     xs.push_data(Xcell::from(d2.width))
 }
 
 fn height_get(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     xs.push_data(Xcell::from(d2.height))
 }
 
 fn palette_set(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let newpal = xs.pop_data()?.to_vector()?;
@@ -67,7 +67,7 @@ fn palette_set(xs: &mut Xstate) -> Xresult {
 }
 
 fn data_set(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let y = xs.pop_data()?.to_usize()?;
@@ -84,7 +84,7 @@ fn data_set(xs: &mut Xstate) -> Xresult {
 }
 
 fn data_get(xs: &mut Xstate) -> Xresult {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     let y = xs.pop_data()?.to_usize()?;
@@ -121,7 +121,7 @@ fn buffer_u8_get(xs: &mut Xstate) -> Xresult {
 }
 
 pub fn copy_rgba_data(xs: &mut Xstate, buf: &mut Vec<u8>) -> Xresult1<(usize, usize)> {
-    let any = xs.get_var(xs.d2)?.clone().into_any()?;
+    let any = xs.get_var(xs.d2)?.any()?;
     let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
     let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
     buf.clear();

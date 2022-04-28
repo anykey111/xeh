@@ -50,8 +50,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 
 // (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {
-    let b = xs.pop_data()?.to_int()?;
-    let a = xs.pop_data()?.to_int()?;
+    let b = xs.pop_data()?.xint()?;
+    let a = xs.pop_data()?.xint()?;
     let c = ops_int(a, b);
     xs.push_data(Cell::Int(c))
 }
@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn test_min_max() {
         let mut xs = State::boot().unwrap();
-        xs.eval("-1.0 0 min").unwrap();
+        xs.eval("-1.0 0.0 min").unwrap();
         assert_eq!(Ok(Cell::from(-1.0)), xs.pop_data());
         xs.eval("-1 0 max").unwrap();
         assert_eq!(Ok(Cell::from(0u32)), xs.pop_data());        
@@ -294,10 +294,10 @@ mod tests {
         let r = xs.pop_data().unwrap().to_real().unwrap();
         assert!(0.0 <= r && r <= 1.0);
         xs.eval("random round").unwrap();
-        let i = xs.pop_data().unwrap().to_int().unwrap();
+        let i = xs.pop_data().unwrap().xint().unwrap();
         assert!(0 <= i && i <= 1);
         xs.eval("1 round").unwrap();
-        assert_eq!(Ok(1), xs.pop_data().unwrap().to_int());
+        assert_eq!(Ok(1), xs.pop_data().unwrap().xint());
         assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] round"));
     }
 

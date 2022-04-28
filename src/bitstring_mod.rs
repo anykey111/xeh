@@ -105,7 +105,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 }
 
 fn pack_int_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
-    let val = xs.pop_data()?.to_int()?;
+    let val = xs.pop_data()?.xint()?;
     let s = Bitstring::from_int(val, n, bo);
     xs.push_data(Cell::Bitstr(s))
 }
@@ -116,7 +116,7 @@ fn pack_int(xs: &mut Xstate, n: usize) -> Xresult {
 }
 
 fn pack_float_bo(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
-    let val = xs.pop_data()?.to_real()?;
+    let val = xs.pop_data()?.real()?;
     let s = match n {
         32 => Bitstring::from_f32(val as f32, bo),
         64 => Bitstring::from_f64(val, bo),
@@ -712,7 +712,7 @@ mod tests {
             Err(Xerr::SeekError{offset,..}) => assert_eq!(100, offset),
             other => panic!("{:?}", other),
         }
-        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] seek"));
+        assert_ne!(OK, xs.eval("[ ] seek"));
         xs.eval("8 seek u8").unwrap();
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
         xs.eval("0 seek u8").unwrap();

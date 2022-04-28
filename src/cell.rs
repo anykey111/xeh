@@ -164,19 +164,23 @@ impl Ord for Cell {
 }
 impl Eq for Cell {}
 
-const NIL_TYPE_NAME: &str = "nil";
-const INT_TYPE_NAME: &str = "int";
-const REAL_TYPE_NAME: &str = "real";
-const STR_TYPE_NAME: &str = "str";
-const VEC_TYPE_NAME: &str = "vec";
-const FUN_TYPE_NAME: &str = "fun";
-const BITSTR_TYPE_NAME: &str = "bitstr";
-const ANY_TYPE_NAME: &str = "any";
-const TAG_TYPE_NAME: &str = "tag";
+const NIL_TYPE_NAME: Xstr = arcstr::literal!("nil");
+const INT_TYPE_NAME: Xstr = arcstr::literal!("int");
+const REAL_TYPE_NAME: Xstr = arcstr::literal!("real");
+const STR_TYPE_NAME: Xstr = arcstr::literal!("str");
+const VEC_TYPE_NAME: Xstr = arcstr::literal!("vec");
+const FUN_TYPE_NAME: Xstr = arcstr::literal!("fun");
+const BITSTR_TYPE_NAME: Xstr = arcstr::literal!("bitstr");
+const ANY_TYPE_NAME: Xstr = arcstr::literal!("any");
+const TAG_TYPE_NAME: Xstr = arcstr::literal!("tag");
+
+fn cell_type_error(msg: Xstr, val: Cell) -> Xerr {
+    Xerr::TypeErrorMsg { msg, val }
+}
 
 impl Cell {
 
-    pub fn type_name(&self) -> &str {
+    pub fn type_name(&self) -> Xstr {
         match self {
             Cell::Nil{..} => NIL_TYPE_NAME,
             Cell::Int{..} => INT_TYPE_NAME,
@@ -220,77 +224,76 @@ impl Cell {
     pub fn vec(&self) -> Xresult1<&Xvec> {
         match self.value() {
            Cell::Vector(x) => Ok(x),
-           _ => Err(Xerr::TypeError)
+           val => Err(cell_type_error(VEC_TYPE_NAME, val.clone()))
+        }
+    }
+
+    pub fn to_vector(&self) -> Xresult1<Xvec> {
+        match self.value() {
+            Cell::Vector(x) => Ok(x.clone()),
+            val => Err(cell_type_error(VEC_TYPE_NAME, val.clone()))
         }
     }
 
     pub fn str(&self) -> Xresult1<&str> {
         match self.value() {
-            Cell::Str(s) => Ok(s.as_str()),
-            _ => Err(Xerr::TypeError),
+            Cell::Str(x) => Ok(x.as_str()),
+            val => Err(cell_type_error(STR_TYPE_NAME, val.clone()))
         }
     }
 
     pub fn to_string(&self) -> Xresult1<Xstr> {
         match self.value() {
-            Cell::Str(s) => Ok(s.clone()),
-            _ => Err(Xerr::TypeError),
+            Cell::Str(x) => Ok(x.clone()),
+            val => Err(cell_type_error(STR_TYPE_NAME, val.clone()))
         }
     }
 
-    pub fn to_vector(&self) -> Result<Xvec, Xerr> {
-        match self.value() {
-            Cell::Vector(x) => Ok(x.clone()),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-
-    pub fn to_real(&self) -> Xresult1<Xreal> {
+    pub fn real(&self) -> Xresult1<Xreal> {
         match self.value() {
             Cell::Real(x) => Ok(*x),
-            _ => Err(Xerr::TypeError),
+            val => Err(cell_type_error(REAL_TYPE_NAME, val.clone()))
         }
     }
 
-    pub fn into_any(self) -> Xresult1<Xanyrc> {
-        match self {
-            Cell::AnyRc(rc) => Ok(rc),
-            _ => Err(Xerr::TypeError),
+    pub fn any(&self) -> Xresult1<Xanyrc> {
+        match self.value() {
+            Cell::AnyRc(rc) => Ok(rc.clone()),
+            val => Err(cell_type_error(ANY_TYPE_NAME, val.clone()))
         }
     }
 
+    pub fn xint(&self) -> Xresult1<Xint> {
+        match self.value() {
+            Cell::Int(x) => Ok(*x),
+            val => Err(cell_type_error(INT_TYPE_NAME, val.clone()))
+        }
+    }
     pub fn to_isize(&self) -> Xresult1<isize> {
         match self.value() {
             Cell::Int(i) => Ok(*i as isize),
-            _ => Err(Xerr::TypeError),
+            val => Err(cell_type_error(INT_TYPE_NAME, val.clone()))
         }
     }
 
     pub fn to_usize(&self) -> Xresult1<usize> {
         match self.value() {
             Cell::Int(i) => Ok(*i as usize),
-            _ => Err(Xerr::TypeError),
-        }
-    }
-
-    pub fn to_int(&self) -> Xresult1<Xint> {
-        match self.value() {
-            Cell::Int(i) => Ok(*i),
-            _ => Err(Xerr::TypeError),
+            val => Err(cell_type_error(INT_TYPE_NAME, val.clone()))
         }
     }
 
     pub fn bitstr(&self) -> Xresult1<&Xbitstr> {
         match self.value() {
             Cell::Bitstr(s) => Ok(s),
-            _ => Err(Xerr::TypeError),
+            val => Err(cell_type_error(BITSTR_TYPE_NAME, val.clone()))
         }
     }
 
     pub fn to_bitstring(&self) -> Xresult1<Xbitstr> {
         match self.value() {
             Cell::Bitstr(s) => Ok(s.clone()),
-            _ => Err(Xerr::TypeError),
+            val => Err(cell_type_error(BITSTR_TYPE_NAME, val.clone()))
         }
     }
 
