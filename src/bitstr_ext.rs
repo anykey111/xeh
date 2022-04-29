@@ -558,6 +558,7 @@ fn bitstr_real_tag(len: usize, bo: Byteorder) -> Cell {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Cow;
 
     #[test]
     fn test_bitstring_mod() {
@@ -660,6 +661,26 @@ mod tests {
         xs.set_binary_input(Xbitstr::from(s)).unwrap();
         xs.eval("1 kbytes 1 mbytes remain").unwrap();
         assert_eq!(0, xs.pop_data().unwrap().to_usize().unwrap());
+    }
+
+    #[test]
+    fn test_bytestr_slice() {
+        let bs = Bitstr::from(vec![1, 2]);
+        assert!(bs.slice().is_some());
+        let (a4, b) = bs.split_at(4).unwrap();
+        let b8 = b.peek(8).unwrap();
+        assert_eq!(None, a4.slice());
+        assert_eq!(None, b8.slice());
+        assert!(!a4.is_bytestr());
+        assert!(b8.is_bytestr());
+        match b8.bytestr() {
+            Some(Cow::Owned(_)) => (),
+            other => panic!("{:?}", other),
+        }
+        match bs.bytestr() {
+            Some(Cow::Borrowed(_)) => (),
+            other => panic!("{:?}", other),
+        }
     }
 
     #[test]
