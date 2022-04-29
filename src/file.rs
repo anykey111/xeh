@@ -62,8 +62,8 @@ pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
     let mut file = open().map_err(|e| {
         ioerror_with_path(path.clone(), &e)
     })?;
-    if s.is_bytestring() {
-        file.write_all(s.slice()).map_err(|e| {
+    if let Some(data) = s.slice() {
+        file.write_all(data).map_err(|e| {
             ioerror_with_path(path.clone(), &e)
         })?;
     } else {

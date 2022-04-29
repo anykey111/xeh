@@ -96,7 +96,7 @@ impl fmt::Debug for Cell {
                 f.write_str("]")
             }
             Cell::Fun(x) => write!(f, "{:?}", x),
-            Cell::Bitstr(s) => if s.is_bytestring() {
+            Cell::Bitstr(s) => if s.is_bytestr() {
                     f.write_str("[ ")?;
                     for x in s.iter8().map(|x| Cell::Int(x.0 as Xint)) {
                         x.fmt(f)?;

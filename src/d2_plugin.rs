@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(3 * 2 * 32, bs.len());
         for y in 0..2 {
             for x in 0..3 {
-                let c = bs.read(32).unwrap().to_bytes();
+                let c = bs.read(32).unwrap().to_bytes_with_padding();
                 assert_eq!(c[3], y * 3 + x);
             }
         }
