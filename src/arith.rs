@@ -47,6 +47,9 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("max", core_word_max)?;
     xs.defword(">real", core_word_into_real)?;
     xs.defword(">int", core_word_into_int)?;
+    xs.defword("zero?", core_word_is_zero)?;
+    xs.defword("positive?", core_word_is_positive)?;
+    xs.defword("negative?", core_word_is_negative)?;
     OK
 }
 
@@ -189,6 +192,57 @@ fn core_word_into_int(xs: &mut State) -> Xresult {
         _ => {
             let a = xs.pop_data()?.to_real()?;
             xs.push_data(Cell::from(a as Xint))
+        }
+    }
+}
+
+fn core_word_is_zero(xs: &mut State) -> Xresult {
+    match xs.top_data()?.value() {
+        Cell::Int(a) => {
+            let flag = Cell::from(*a == 0);
+            xs.push_data(flag)
+        }
+        Cell::Real(a) => {
+            let flag = Cell::from(*a == 0.0);
+            xs.push_data(flag)
+        }
+        _ => {
+            let val = xs.top_data()?.clone();
+            Err(num_type_error(val))
+        }
+    }
+}
+
+fn core_word_is_positive(xs: &mut State) -> Xresult {
+    match xs.top_data()?.value() {
+        Cell::Int(a) => {
+            let flag = Cell::from(*a > 0);
+            xs.push_data(flag)
+        }
+        Cell::Real(a) => {
+            let flag = Cell::from(*a > 0.0);
+            xs.push_data(flag)
+        }
+        _ => {
+            let val = xs.top_data()?.clone();
+            Err(num_type_error(val))
+        }
+    }
+}
+
+fn core_word_is_negative(xs: &mut State) -> Xresult {
+    match xs.top_data()?.value() {
+        Cell::Int(a) => {
+            let flag = Cell::from(*a < 0);
+            xs.push_data(flag)
+        }
+        Cell::Real(a) => {
+            let flag = Cell::from(*a < 0.0);
+            xs.push_data(flag)
+        }
+        _ => {
+            let val = xs.top_data()?.clone();
+            Err(num_type_error(val))
         }
     }
 }
@@ -347,6 +401,64 @@ mod tests {
         assert_ne!(OK, xs.eval(&format!("{} negate", Xint::MIN)));
         assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MAX))));
         assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MIN))));
+    }
+
+    #[test]
+    fn test_zero() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("0 zero?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("0.0 zero?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-0.0 zero?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("1.0 zero?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-1.0 zero?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_ne!(OK, xs.eval("false zero?"));
+    }
+
+    #[test]
+    fn test_positive() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("0 positive?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("0.0 positive?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-0.0 positive?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("1.0 positive?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("1 positive?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-0.001 positive?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("0.001 positive?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_ne!(OK, xs.eval("true positive?"));
+        assert_ne!(OK, xs.eval("false positive?"));
+    }
+
+    #[test]
+    fn test_negative() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("0 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("0.0 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-0.0 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("1.0 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("1 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("-0.001 negative?"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("0.001 negative?"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_ne!(OK, xs.eval("true negative?"));
+        assert_ne!(OK, xs.eval("false negative?"));
     }
 
     #[test]
