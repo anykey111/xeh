@@ -572,6 +572,8 @@ impl State {
     }
 
     fn load_core(&mut self) -> Xresult {
+        self.dict_insert(DictEntry::new(arcstr::literal!("true").into(), Entry::Constant(TRUE)))?;
+        self.dict_insert(DictEntry::new(arcstr::literal!("false").into(), Entry::Constant(FALSE)))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -766,7 +768,7 @@ impl State {
             },
             Opcode::JumpIf(rel) => {
                 let new_ip = rel.calculate(ip);
-                if self.pop_data()?.is_true() {
+                if self.pop_data()?.cond_true()? {
                     self.set_ip(new_ip);
                 } else {
                     self.next_ip();
@@ -774,7 +776,7 @@ impl State {
             }
             Opcode::JumpIfNot(rel) => {
                 let new_ip = rel.calculate(ip);
-                if !self.pop_data()?.is_true() {
+                if !self.pop_data()?.cond_true()? {
                     self.set_ip(new_ip);
                 } else {
                     self.next_ip();
@@ -1712,7 +1714,7 @@ fn core_word_depth(xs: &mut State) -> Xresult {
 }
 
 fn core_word_assert(xs: &mut State) -> Xresult {
-    if xs.pop_data()?.is_true() {
+    if xs.pop_data()?.cond_true()? {
         OK
     } else {
         Err(Xerr::AssertFailed)
@@ -1930,9 +1932,9 @@ mod tests {
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(-1)), it.next().unwrap());
         let mut xs = State::boot().unwrap();
-        xs.eval("begin 1 0 until").unwrap();
+        xs.eval("begin 1 false until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 var x begin x while 0 -> x repeat").unwrap();
+        xs.eval("1 var x begin x 0 <> while 0 -> x repeat").unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin endif repeat"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));

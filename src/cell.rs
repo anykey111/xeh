@@ -53,6 +53,7 @@ impl CellRef {
 #[derive(Clone)]
 pub enum Cell {
     Nil,
+    Flag(bool),
     Int(Xint),
     Real(Xreal),
     Str(Xstr),
@@ -76,6 +77,7 @@ impl fmt::Debug for Cell {
         let flags = f.width().map(|n| FmtFlags::from_raw(n)).unwrap_or_default();
         match self {
             Cell::Nil => write!(f, "nil"),
+            Cell::Flag(x) => write!(f, "{}", if *x { "true" } else { "false" }),
             Cell::Int(n) => match flags.base() {
                 2 if flags.show_prefix() => write!(f, "{:#b}", n),
                 2 => write!(f, "{:b}", n),
@@ -133,6 +135,7 @@ impl PartialEq for Cell {
     fn eq(&self, other: &Self) -> bool {
         match (self.value(), other.value()) {
             (Cell::Nil, Cell::Nil) => true,
+            (Cell::Flag(a), Cell::Flag(b)) => a == b,
             (Cell::Int(a), Cell::Int(b)) => a == b,
             (Cell::Real(a), Cell::Real(b)) => a == b,
             (Cell::Str(a), Cell::Str(b)) => a == b,
@@ -165,6 +168,7 @@ impl Ord for Cell {
 impl Eq for Cell {}
 
 const NIL_TYPE_NAME: Xstr = arcstr::literal!("nil");
+const FLAG_TYPE_NAME: Xstr = arcstr::literal!("flag");
 const INT_TYPE_NAME: Xstr = arcstr::literal!("int");
 const REAL_TYPE_NAME: Xstr = arcstr::literal!("real");
 const STR_TYPE_NAME: Xstr = arcstr::literal!("str");
@@ -183,6 +187,7 @@ impl Cell {
     pub fn type_name(&self) -> Xstr {
         match self {
             Cell::Nil{..} => NIL_TYPE_NAME,
+            Cell::Flag {..} => FLAG_TYPE_NAME,
             Cell::Int{..} => INT_TYPE_NAME,
             Cell::Real{..} => REAL_TYPE_NAME,
             Cell::Str{..} => STR_TYPE_NAME,
@@ -194,12 +199,20 @@ impl Cell {
         }
     }
 
-    pub fn is_true(&self) -> bool {
+    pub fn flag(&self) -> Xresult1<bool> {
         match self.value() {
-            Cell::Nil | Cell::Int(0) => false,
-            _ => true,
+            Cell::Flag(x) => Ok(*x),
+            _ => Err(cell_type_error(FLAG_TYPE_NAME, self.clone()))
         }
     }
+
+    pub fn cond_true(&self) -> Xresult1<bool> {
+        match self.value() {
+            Cell::Nil => Ok(false),
+            _ => self.flag()            
+        }
+    }
+
 
     pub fn tag(&self) -> Option<&Cell> {
         match self {
@@ -356,9 +369,9 @@ impl From<f64> for Cell {
 impl From<bool> for Cell {
     fn from(x: bool) -> Self {
         if x {
-            ONE
+            TRUE
         } else {
-            ZERO
+            FALSE
         }
     }
 }
@@ -390,12 +403,22 @@ impl From<String> for Cell {
 pub const ZERO: Cell = Cell::Int(0);
 pub const ONE: Cell = Cell::Int(1);
 pub const NIL: Cell = Cell::Nil;
-pub const TRUE: Cell = ONE;
-pub const FALSE: Cell = ZERO;
+pub const TRUE: Cell = Cell::Flag(true);
+pub const FALSE: Cell = Cell::Flag(false);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cell_is_true() {
+        assert_ne!(Ok(true), ZERO.flag());
+        assert_ne!(Ok(true), NIL.flag());
+        assert_eq!(Ok(true), TRUE.flag());
+        assert_eq!(Ok(true), TRUE.cond_true());
+        assert_eq!(Ok(false), FALSE.cond_true());
+        assert_eq!(Ok(false), NIL.cond_true());
+    }
 
     #[test]
     fn cell_eq() {
