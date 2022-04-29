@@ -614,6 +614,7 @@ impl State {
         self.defword("swap", |xs| xs.swap_data())?;
         self.defword("rot", |xs| xs.rot_data())?;
         self.defword("over", |xs| xs.over_data())?;
+        self.defword("depth", core_word_depth)?;
         self.defword("assert", core_word_assert)?;
         self.defword("assert-eq", core_word_assert_eq)?;
         self.defword("exit", core_word_exit)?;
@@ -1705,6 +1706,11 @@ fn core_word_reverse(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(rv))
 }
 
+fn core_word_depth(xs: &mut State) -> Xresult {
+    let n = xs.data_depth();
+    xs.push_data(Cell::from(n))
+}
+
 fn core_word_assert(xs: &mut State) -> Xresult {
     if xs.pop_data()?.is_true() {
         OK
@@ -1832,10 +1838,13 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("1 \"s\" 2").unwrap();
         xs.eval("dup").unwrap();
+        assert_eq!(OK, xs.eval("depth 4 assert-eq"));
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         xs.eval("drop").unwrap();
+        assert_eq!(OK, xs.eval("depth 1 assert-eq"));
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+        assert_eq!(OK, xs.eval("depth 0 assert-eq"));
         let res = xs.eval("drop");
         assert_eq!(Err(Xerr::StackUnderflow), res);
         let res = xs.eval("dup");
