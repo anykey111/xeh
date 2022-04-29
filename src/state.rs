@@ -1109,8 +1109,9 @@ impl State {
     }
 
     pub fn top_data(&self) -> Xresult1<&Cell> {
-        if self.data_stack.len() > self.ctx.ds_len {
-            self.data_stack.last().ok_or_else(|| Xerr::StackUnderflow)
+        let len = self.data_stack.len();
+        if len > self.ctx.ds_len {
+            Ok(&self.data_stack[len - 1])
         } else {
             Err(Xerr::StackUnderflow)
         }
@@ -1122,8 +1123,9 @@ impl State {
     }
 
     fn dup_data(&mut self) -> Xresult {
-        if self.data_stack.len() > self.ctx.ds_len {
-            let val = self.data_stack.last().unwrap().clone();
+        let len = self.data_stack.len();
+        if len > self.ctx.ds_len {
+            let val = self.data_stack[len - 1].clone();
             self.push_data(val)
         } else {
             Err(Xerr::StackUnderflow)
