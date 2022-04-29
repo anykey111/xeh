@@ -226,10 +226,8 @@ fn core_word_bitshr(xs: &mut State) -> Xresult {
 }
 
 fn core_word_bitnot(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
-        Cell::Int(x) => xs.push_data(Cell::Int(!x)),
-        _ => Err(Xerr::TypeError),
-    }
+    let a = xs.pop_data()?.to_xint()?;
+    xs.push_data(Cell::from(!a))
 }
 
 fn core_word_random(xs: &mut State) -> Xresult {
