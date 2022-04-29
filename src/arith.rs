@@ -238,11 +238,8 @@ fn core_word_random(xs: &mut State) -> Xresult {
 }
 
 fn core_word_round(xs: &mut State) -> Xresult {
-    match xs.pop_data()?.value() {
-        n @ Cell::Int(_) => xs.push_data(n.clone()),
-        Cell::Real(x) => xs.push_data(Cell::Int(*x as Xint)),
-        _ => Err(Xerr::TypeError),
-    }
+    let x = xs.pop_data()?.to_real()?;
+    xs.push_data(Cell::from(x.round()))
 }
 
 #[cfg(test)]
@@ -330,11 +327,10 @@ mod tests {
         let r = xs.pop_data().unwrap().to_real().unwrap();
         assert!(0.0 <= r && r <= 1.0);
         xs.eval("random round").unwrap();
-        let i = xs.pop_data().unwrap().to_xint().unwrap();
-        assert!(0 <= i && i <= 1);
-        xs.eval("1 round").unwrap();
-        assert_eq!(Ok(1), xs.pop_data().unwrap().to_xint());
-        assert_eq!(Err(Xerr::TypeError), xs.eval("[ ] round"));
+        let i = xs.pop_data().unwrap().to_real().unwrap();
+        assert!(0.0 <= i && i <= 1.0);
+        assert_ne!(OK, xs.eval("1 round"));
+        assert_ne!(OK, xs.eval("[ ] round"));
     }
 
     #[test]
