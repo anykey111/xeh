@@ -866,8 +866,8 @@ impl State {
             Opcode::InitLocal(i) => {
                 let idx = *i;
                 let val = self.pop_data()?;
-                let frame = self.top_frame().ok_or_else(||Xerr::ReturnStackUnderflow)?;
-                assert_eq!(idx, frame.locals.len());
+                let frame = self.top_frame()?;
+                debug_assert_eq!(idx, frame.locals.len());
                 frame.locals.push(val);
                 if self.reverse_debugging() {
                     self.add_reverse_step(ReverseStep::DropLocal(idx));
@@ -876,7 +876,7 @@ impl State {
             }
             Opcode::LoadLocal(i) => {
                 let i = *i;
-                let frame = self.top_frame().ok_or_else(||Xerr::ReturnStackUnderflow)?;
+                let frame = self.top_frame()?;
                 let val = frame.locals.get(i).cloned().ok_or_else(||Xerr::InvalidAddress)?;
                 self.push_data(val)?;
                 self.next_ip();
@@ -1019,7 +1019,7 @@ impl State {
                 }
             }
             ReverseStep::DropLocal(_) => {
-                let f = self.top_frame().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
+                let f = self.top_frame()?;
                 f.locals.pop();
             }
             ReverseStep::SwapRef(cref, val) => {
@@ -1191,11 +1191,12 @@ impl State {
         }
     }
 
-    fn top_frame(&mut self) -> Option<&mut Frame> {
-        if self.return_stack.len() > self.ctx.rs_len {
-            self.return_stack.last_mut()
+    fn top_frame(&mut self) -> Xresult1<&mut Frame> {
+        let len = self.return_stack.len();
+        if len > self.ctx.rs_len {
+            Ok(&mut self.return_stack[len - 1])
         } else {
-            None
+            Err(Xerr::ReturnStackUnderflow)
         }
     }
 
