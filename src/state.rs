@@ -782,7 +782,7 @@ impl State {
             Opcode::CaseOf(rel) => {
                 let new_ip = rel.calculate(ip);
                 let a = self.pop_data()?;
-                let b = self.top_data().ok_or_else(||Xerr::StackUnderflow)?;
+                let b = self.top_data()?;
                 if &a == b {
                     self.pop_data()?;
                     self.next_ip();
@@ -1108,11 +1108,11 @@ impl State {
         self.data_stack.len() - self.ctx.ds_len
     }
 
-    fn top_data(&self) -> Option<&Cell> {
+    pub fn top_data(&self) -> Xresult1<&Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
-            self.data_stack.last()
+            self.data_stack.last().ok_or_else(|| Xerr::StackUnderflow)
         } else {
-            None
+            Err(Xerr::StackUnderflow)
         }
     }
 
@@ -1781,8 +1781,9 @@ fn core_word_load(xs: &mut State) -> Xresult {
 }
 
 fn core_word_tag_of(xs: &mut State) -> Xresult {
-    let val = xs.top_data().and_then(|x| x.tag()).unwrap_or(&NIL).clone();
-    xs.push_data(val)
+    let val = xs.top_data()?;
+    let tag = val.tag().unwrap_or(&NIL).clone();
+    xs.push_data(tag)
 }
 
 fn core_word_with_tag(xs: &mut State) -> Xresult {
@@ -2178,11 +2179,11 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.compile("1 2 +").unwrap();
         assert_eq!(OK, xs.next());
-        assert_eq!(xs.top_data(), Some(&Cell::Int(1)));
+        assert_eq!(xs.top_data(), Ok(&Cell::Int(1)));
         assert_eq!(OK, xs.next());
-        assert_eq!(xs.top_data(), Some(&Cell::Int(2)));
+        assert_eq!(xs.top_data(), Ok(&Cell::Int(2)));
         assert_eq!(OK, xs.next());
-        assert_eq!(xs.top_data(), Some(&Cell::Int(3)));
+        assert_eq!(xs.top_data(), Ok(&Cell::Int(3)));
     }
 
     #[test]

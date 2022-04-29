@@ -45,6 +45,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("random", core_word_random)?;
     xs.defword("min", core_word_min)?;
     xs.defword("max", core_word_max)?;
+    xs.defword(">real", core_word_into_real)?;
+    xs.defword(">int", core_word_into_int)?;
     OK
 }
 
@@ -171,6 +173,26 @@ fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
     }
 }
 
+fn core_word_into_real(xs: &mut State) -> Xresult {
+    match xs.top_data()?.value() {
+        Cell::Real(_) => OK,
+        _ => {
+            let a = xs.pop_data()?.to_xint()?;
+            xs.push_data(Cell::from(a as Xreal))
+        }
+    }
+}
+
+fn core_word_into_int(xs: &mut State) -> Xresult {
+    match xs.top_data()?.value() {
+        Cell::Int(_) => OK,
+        _ => {
+            let a = xs.pop_data()?.to_real()?;
+            xs.push_data(Cell::from(a as Xint))
+        }
+    }
+}
+
 fn core_word_min(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, |a, b| a.min(b), |a,b| a.min(b))
 }
@@ -266,6 +288,23 @@ mod tests {
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         xs.eval("-1 negate").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_into_real() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("1 >real 1.0 assert-eq"));
+        assert_eq!(OK, xs.eval("1.0 >real 1.0 assert-eq"));
+        assert_ne!(OK, xs.eval("\"1\" >real 1.0 assert-eq"));
+    }
+
+    #[test]
+    fn test_into_int() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("1.4 >int 1 assert-eq"));
+        assert_eq!(OK, xs.eval("1.6 >int 1 assert-eq"));
+        assert_eq!(OK, xs.eval("1 >int 1 assert-eq"));
+        assert_ne!(OK, xs.eval("\"1\" >int 1 assert-eq"));
     }
 
     #[test]
