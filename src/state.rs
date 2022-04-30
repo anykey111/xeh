@@ -7,6 +7,7 @@ use crate::opcodes::*;
 use crate::bitstr_ext::BitstrState;
 
 use std::fmt::Debug;
+use std::iter::FromIterator;
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -213,6 +214,10 @@ impl State {
         }
     }
 
+    pub fn word_list(&self) -> Vec<Xsubstr> {
+        Vec::from_iter(self.dict.iter().map(|e| e.name.clone()))
+    }
+
     pub fn last_error(&self) -> Option<(&Xerr, &TokenLocation)> {
         self.last_error.as_ref().and_then(|ec| {
             ec.location.as_ref().map(|loc| (&ec.err, loc))
@@ -329,6 +334,7 @@ impl State {
     }
 
     fn build1(&mut self) -> Xresult {
+        let ctx_depth = self.nested.len();
         loop {
             if self.ctx.mode == ContextMode::MetaEval
                 && !self.has_pending_flow()
@@ -337,6 +343,10 @@ impl State {
             }
             match self.next_token()? {
                 Tok::EndOfInput => {
+                    if self.nested.len() != ctx_depth {
+                        let msg = arcstr::literal!("unexpect end of file");
+                        break Err(Xerr::ErrorMsg(msg));
+                    }
                     if self.has_pending_flow() {
                         break Err(Xerr::ControlFlowError);
                     }
@@ -505,8 +515,8 @@ impl State {
         self.alloc_cell(val)
     }
 
-    #[cfg(test)]
-    fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
+    //#[cfg(test)]
+    pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name) {
             None => Err(Xerr::UnknownWord(Xstr::from(name))),
             Some(Entry::Variable(a)) => self.cell_ref(*a),
@@ -1694,7 +1704,6 @@ fn core_word_get(xs: &mut State) -> Xresult {
 }
 
 fn core_word_sort(xs: &mut State) -> Xresult {
-    use std::iter::FromIterator;
     let v = xs.pop_data()?.to_vec()?;
     let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
     let sorted = Xvec::from_iter(m.into_iter());
@@ -1702,7 +1711,6 @@ fn core_word_sort(xs: &mut State) -> Xresult {
 }
 
 fn core_word_reverse(xs: &mut State) -> Xresult {
-    use std::iter::FromIterator;
     let v = xs.pop_data()?.to_vec()?;
     let rv = Xvec::from_iter(v.iter().rev().cloned());
     xs.push_data(Cell::from(rv))

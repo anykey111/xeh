@@ -20,6 +20,7 @@ pub mod prelude {
     pub type Xlex = crate::lex::Lex;
     pub type Xcell = crate::cell::Cell;
     pub use crate::lex::TokenLocation;
+    pub use crate::cell::Xstr;
 }
 
 pub mod c_api {

@@ -50,7 +50,7 @@ impl fmt::Display for Xerr {
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
             Xerr::SpecialStackUnderflow => f.write_str("unbalanced vector"),
             Xerr::TypeError => f.write_str("unexpected type"),
-            Xerr::TypeErrorMsg { val, msg } => write!(f, "expected {}, found {}\n[0]: {:?}",
+            Xerr::TypeErrorMsg { val, msg } => write!(f, "expected {}, found {}\n# {:?}",
                 msg, val.type_name(), val),
             Xerr::ExpectingName => f.write_str("expecting a word name"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
@@ -59,8 +59,8 @@ impl fmt::Display for Xerr {
             Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
             Xerr::AssertEqFailed { a, b } => {
                 f.write_str("assertion failed:")?;
-                writeln!(f, "[0] {:?}", a)?;
-                write!(f,   "[1] {:?}", b)
+                writeln!(f, "# {:?}", a)?;
+                write!(f,   "# {:?}", b)
             },
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::ToBytestrError {..} => f.write_str("bytestr need to be divisible by 8"),
