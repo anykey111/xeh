@@ -137,14 +137,14 @@ fn print_pretty_error(xs: &Xstate, e: &Xerr) {
 
 const CMD_NEXT: Xstr = arcstr::literal!("/next");
 const CMD_RNEXT: Xstr =  arcstr::literal!("/rnext");
-const CMD_TRIAL: Xstr =  arcstr::literal!("/trial");
+const CMD_LIVE: Xstr =  arcstr::literal!("/live");
 const CMD_REPL: Xstr =  arcstr::literal!("/repl");
 const CMD_SNAPSHOT: Xstr =  arcstr::literal!("/snapshot");
 const CMD_ROLLBACK: Xstr =  arcstr::literal!("/rollback");
 const REPL_CMD_HINTS: &[Xstr] = &[
     CMD_NEXT,
     CMD_RNEXT,
-    CMD_TRIAL,
+    CMD_LIVE,
     CMD_REPL,
     CMD_SNAPSHOT,
     CMD_ROLLBACK,
@@ -156,7 +156,7 @@ fn run_line(st: &mut ReplState, line: &str) {
         st.xs.next()
     } else if cmd == CMD_RNEXT {
         st.xs.rnext()
-    } else if cmd == CMD_TRIAL {
+    } else if cmd == CMD_LIVE {
         if st.trial.is_none() {
             st.trial = Some(Default::default());
             println!("Trial and error mode!");
@@ -212,7 +212,7 @@ fn run_tty_repl(xs: Xstate, args: XcmdArgs) -> Xresult {
             (lst, st.trial.is_some())
         };
         rl_state.set_helper(Some(XsHelper(lst, st_rc.clone())));
-        let prompt = if trial { "TRIAL> "} else { "REPL> " };
+        let prompt = if trial { "LIVE> "} else { "REPL> " };
         let res = rl_state.readline(prompt);
         match res {
             Ok(line) => {
