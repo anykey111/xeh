@@ -286,7 +286,7 @@ pub fn run_with_args() -> Xresult {
         e
     })?;
     if args.reverse_debug {
-        xs.start_recording();
+        xs.set_recording_enabled(true);
     }
     for path in args.sources.iter() {
         xs.eval_from_file(&path)?;

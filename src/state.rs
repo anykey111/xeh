@@ -154,7 +154,7 @@ pub struct State {
     special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
-    pub reverse_log: Option<Vec<ReverseStep>>,
+    reverse_log: Option<Vec<ReverseStep>>,
     stdout: Option<String>,
     last_error: Option<ErrorContext>,
     pub(crate) about_to_stop: bool,
@@ -494,16 +494,6 @@ impl State {
         self.build0()
     }
 
-    pub fn start_recording(&mut self) {
-        if self.reverse_log.is_none() {
-            self.reverse_log = Some(Vec::default());
-        }
-    }
-
-    pub fn stop_recording(&mut self) {
-        self.reverse_log = None;
-    }
-
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
         let cref = self.alloc_cell(val)?;
@@ -731,7 +721,7 @@ impl State {
         std::mem::swap(
             self.heap.get_mut(cref.index()).ok_or_else(|| Xerr::InvalidAddress)?,
             &mut old);
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::SwapRef(cref, old));
         }
         OK
@@ -882,7 +872,7 @@ impl State {
                 let frame = self.top_frame()?;
                 debug_assert_eq!(idx, frame.locals.len());
                 frame.locals.push(val);
-                if self.reverse_debugging() {
+                if self.is_recording() {
                     self.add_reverse_step(ReverseStep::DropLocal(idx));
                 }
                 self.next_ip();
@@ -949,7 +939,17 @@ impl State {
         OK
     }
     
-    fn reverse_debugging(&self) -> bool {
+    pub fn set_recording_enabled(&mut self, yes: bool) {
+        if yes {
+            if self.reverse_log.is_none() {
+                self.reverse_log = Some(Vec::new());
+            }
+        } else {
+            self.reverse_log = None;
+        }
+    }
+
+    pub fn is_recording(&self) -> bool {
         self.reverse_log.is_some()
     }
 
@@ -1057,14 +1057,14 @@ impl State {
     }
 
     fn set_ip(&mut self, new_ip: usize) {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip = new_ip;
     }
 
     fn next_ip(&mut self) {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::SetIp(self.ctx.ip));
         }
         self.ctx.ip += 1;
@@ -1094,7 +1094,7 @@ impl State {
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopData);
         }
         self.data_stack.push(data);
@@ -1104,7 +1104,7 @@ impl State {
     pub fn pop_data(&mut self) -> Xresult1<Cell> {
         if self.data_stack.len() > self.ctx.ds_len {
             let val = self.data_stack.pop().unwrap();
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushData(val.clone()));
             }
             Ok(val)
@@ -1148,7 +1148,7 @@ impl State {
     fn swap_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::SwapData);
             }
             self.data_stack.swap(len - 1, len - 2);
@@ -1161,7 +1161,7 @@ impl State {
     fn rot_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 3 {
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::RotData);
             }
             self.data_stack.swap(len - 1, len - 3);
@@ -1174,7 +1174,7 @@ impl State {
     fn over_data(&mut self) -> Xresult {
         let len = self.data_stack.len();
         if (len - self.ctx.ds_len) >= 2 {
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::OverData);
             }
             let val = self.data_stack[len - 2].clone();
@@ -1185,7 +1185,7 @@ impl State {
     }
 
     fn push_return(&mut self, return_to: usize) -> Xresult {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopReturn);
         }
         self.return_stack.push(Frame::from_addr(return_to));
@@ -1195,7 +1195,7 @@ impl State {
     fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
             let ret = self.return_stack.pop().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushReturn(ret.clone()));
             }
             Ok(ret)
@@ -1214,7 +1214,7 @@ impl State {
     }
 
     fn push_loop(&mut self, l: Loop) -> Xresult {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopLoop);
         }
         self.loops.push(l);
@@ -1224,7 +1224,7 @@ impl State {
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
             let l = self.loops.pop().ok_or_else(||Xerr::InternalError)?;
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushLoop(l.clone()));
             }
             Ok(l)
@@ -1239,7 +1239,7 @@ impl State {
             let old = l.clone();
             l.range.next();
             let has_more = !l.range.is_empty();
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::LoopNextBack(old));
             }
             Ok(has_more)
@@ -1249,7 +1249,7 @@ impl State {
     }
 
     fn push_special(&mut self, s: Special) -> Xresult {
-        if self.reverse_debugging() {
+        if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopSpecial);
         }
         self.special.push(s);
@@ -1259,7 +1259,7 @@ impl State {
     fn pop_special(&mut self) -> Xresult1<Special> {
         if self.special.len() > self.ctx.ss_ptr {
             let s = self.special.pop().ok_or_else(||Xerr::InternalError)?;
-            if self.reverse_debugging() {
+            if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushSpecial(s.clone()));
             }
             Ok(s)
@@ -2212,7 +2212,7 @@ mod tests {
     fn test_reverse_next() {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.rnext());
-        xs.start_recording();
+        xs.set_recording_enabled(true);
         xs.compile(r#"
         100 4 /
         3 *
@@ -2254,7 +2254,7 @@ mod tests {
     fn test_reverse_vec() {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
-        xs.start_recording();
+        xs.set_recording_enabled(true);
         xs.compile("[ 3 0 do i loop ] length").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
@@ -2273,7 +2273,7 @@ mod tests {
     #[test]
     fn test_rnext_var() {
         let mut xs = State::boot().unwrap();
-        xs.start_recording();
+        xs.set_recording_enabled(true);
         eval_ok!(xs, "3 var GG");
         assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
         xs.rnext().unwrap();
@@ -2294,7 +2294,7 @@ mod tests {
              xs.data_stack.clone(),
              xs.return_stack.clone());
         let mut xs = State::boot().unwrap();
-        xs.start_recording();
+        xs.set_recording_enabled(true);
         xs.compile(r#"
        : tower-of-hanoi
             local aux
