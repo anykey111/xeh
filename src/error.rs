@@ -88,11 +88,11 @@ impl fmt::Display for Xerr {
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
-            Xerr::AssertFailed => f.write_str("assertion failed, the top stack value is zero"),
+            Xerr::AssertFailed => f.write_str("assertion failed"),
             Xerr::AssertEqFailed { a, b } => {
-                f.write_str("assertion failed:")?;
-                writeln!(f, "# {:?}", a)?;
-                write!(f, "# {:?}", b)
+                f.write_str("assertion failed, a <> b:")?;
+                writeln!(f, "b: {:?}", b)?;
+                write!(f, "a: {:?}", a)
             }
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::ToBytestrError { .. } => f.write_str("bytestr need to be divisible by 8"),
