@@ -157,6 +157,7 @@ pub struct State {
     reverse_log: Option<Vec<ReverseStep>>,
     stdout: Option<String>,
     last_error: Option<ErrorContext>,
+    last_token: Option<Xsubstr>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrState,
     // formatter flags
@@ -224,7 +225,7 @@ impl State {
         })
     }
 
-    pub fn token_from_current_ip(&self) -> Option<TokenLocation> {
+    pub fn location_from_current_ip(&self) -> Option<TokenLocation> {
         self
             .debug_map
             .get(self.ip())
@@ -324,9 +325,8 @@ impl State {
         self.build1().map_err(|e| {
             // build-time error
             if self.last_error.is_none() {
-                let location = self.input.last()
-                    .and_then(|lex| lex.last_token())
-                    .and_then(|tok| token_location(&self.sources, &tok));
+                let tok = self.last_token.as_ref();
+                let location = tok.and_then(|tok| token_location(&self.sources, &tok));
                 self.last_error = Some(ErrorContext { err: e.clone(), location });
             }
             e
@@ -408,24 +408,20 @@ impl State {
     }
 
     fn next_name(&mut self) -> Xresult1<Xsubstr> {
-        if let Some(lex) = &mut self.input.last_mut() {
-            if let Tok::Word(name) = lex.next()? {
-                return Ok(name);
-            }
+        match self.next_token()? {
+            Tok::Word(name) => Ok(name),
+            _ => Err(Xerr::ExpectingName),
         }
-        Err(Xerr::ExpectingName)
     }
 
     fn next_token(&mut self) -> Xresult1<Tok> {
-        if let Some(lex) = self.input.last_mut() {
-            let tok = lex.next()?;
-            if tok == Tok::EndOfInput {
-                self.input.pop();
-            }
-            Ok(tok)
-        } else {
-            Ok(Tok::EndOfInput)
+        let lex = self.input.last_mut().expect("input source");
+        let tok = lex.next()?;
+        self.last_token = lex.last_token();
+        if tok == Tok::EndOfInput {
+            self.input.pop();
         }
+        return Ok(tok)
     }
 
     fn context_open(&mut self, mode: ContextMode) -> Xresult {
@@ -684,7 +680,7 @@ impl State {
     fn code_emit(&mut self, op: Opcode) -> Xresult {
         let at = self.code.len();
         let len = self.debug_map.len();
-        let loc = self.input.last().and_then(|x| x.last_token()).unwrap_or_default();
+        let loc = self.last_token.clone().unwrap_or_default();
         if at < len {
             self.debug_map[at] = loc;
         } else if at == len {
@@ -750,7 +746,7 @@ impl State {
         while self.is_running() {
             self.fetch_and_run().map_err(|e| {
                 if self.last_error.is_none() {
-                    let location = self.token_from_current_ip();
+                    let location = self.location_from_current_ip();
                     self.last_error = Some(ErrorContext { err: e.clone(), location });
                 }
                 e
@@ -1920,6 +1916,13 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 else 222 then"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("else 222 if"));
+    }
+
+    #[test]
+    fn test_flow_last_err() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::ControlFlowError), xs.eval(" if "));
+        assert_ne!(None, xs.last_error());
     }
 
     #[test]

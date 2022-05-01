@@ -11,7 +11,7 @@ pub enum Tok {
     Literal(Xcell),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct TokenLocation {
     pub line: usize,
     pub col: usize,
