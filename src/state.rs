@@ -335,7 +335,7 @@ impl State {
         self.build1().map_err(|e| {
             // build-time error
             if self.last_error.is_none() {
-                let tok = self.last_token.as_ref();
+                let tok = self.last_token.take();
                 let location = tok.and_then(|tok| token_location(&self.sources, &tok));
                 self.last_error = Some(ErrorContext {
                     err: e.clone(),
@@ -1995,6 +1995,9 @@ mod tests {
     fn test_flow_last_err() {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.eval(" if "));
+        assert_ne!(None, xs.last_error());
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" ( "));
         assert_ne!(None, xs.last_error());
     }
 
