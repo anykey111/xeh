@@ -1,8 +1,8 @@
-use std::fmt::Write;
 use crate::bitstr::*;
 use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
+use std::fmt::Write;
 
 #[derive(Default, Clone)]
 pub struct BitstrState {
@@ -138,8 +138,12 @@ fn pack_float(xs: &mut Xstate, n: usize) -> Xresult {
 fn word_find(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(xs.pop_data()?)?;
     let rest = rest_bits(xs)?;
-    let pat_bytes = pat.bytestr().ok_or_else(|| Xerr::ToBytestrError(pat.clone()))?;
-    let rest_bytes = rest.slice().ok_or_else(|| Xerr::BitstrSliceError(rest.clone()))?;
+    let pat_bytes = pat
+        .bytestr()
+        .ok_or_else(|| Xerr::ToBytestrError(pat.clone()))?;
+    let rest_bytes = rest
+        .slice()
+        .ok_or_else(|| Xerr::BitstrSliceError(rest.clone()))?;
     if let Some(pos) = twoway::find_bytes(&rest_bytes, &pat_bytes) {
         let offs = rest.start() + pos * 8;
         xs.push_data(Cell::from(offs))
@@ -162,7 +166,10 @@ fn move_offset_checked(xs: &mut Xstate, pos: usize) -> Xresult {
         xs.set_var(xs.bitstr_mod.offset, Cell::from(pos))?;
         OK
     } else {
-        Err(Xerr::SeekError { src: s.clone(), offset: pos })
+        Err(Xerr::SeekError {
+            src: s.clone(),
+            offset: pos,
+        })
     }
 }
 
@@ -174,7 +181,7 @@ fn word_seek(xs: &mut Xstate) -> Xresult {
 fn word_remain(xs: &mut Xstate) -> Xresult {
     let s = current_input(xs)?;
     let offset = current_offset(xs)?;
-    let res= Cell::from(s.end().max(offset) - offset);
+    let res = Cell::from(s.end().max(offset) - offset);
     xs.push_data(res)
 }
 
@@ -191,7 +198,9 @@ fn word_dump(xs: &mut Xstate) -> Xresult {
 fn dump_bitstr_at(xs: &mut Xstate, start: usize, ncols: usize) -> Xresult {
     let s = current_input(xs)?;
     let end = s.end().min(start + 16 * ncols * 8);
-    let ss = s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds(start))?;
+    let ss = s
+        .substr(start, end)
+        .ok_or_else(|| Xerr::OutOfBounds(start))?;
     dump_bitstr(xs, &ss, ncols)
 }
 
@@ -207,8 +216,8 @@ pub fn byte_to_dump_char(x: u8) -> char {
 fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
     let mut buf = String::new();
     let mut pos = s.start();
-    let mut hex  = String::new();
-    let mut ascii  = String::new();
+    let mut hex = String::new();
+    let mut ascii = String::new();
     let mut it = s.iter8();
     while pos < s.end() {
         write_dump_position(&mut buf, pos);
@@ -234,7 +243,7 @@ fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
     }
     OK
 }
-    
+
 fn write_dump_position(buf: &mut String, start: usize) {
     let pos = start / 8;
     write!(buf, "{:05x}", pos).unwrap();
@@ -248,7 +257,8 @@ pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstr) -> Xresult {
     let old_input = xs.get_var(xs.bitstr_mod.input)?.clone();
     xs.set_var(xs.bitstr_mod.offset, Cell::from(s.start()))?;
     xs.set_var(xs.bitstr_mod.input, Cell::from(s))?;
-    let stash = xs.get_var(xs.bitstr_mod.stash)?
+    let stash = xs
+        .get_var(xs.bitstr_mod.stash)?
         .vec()?
         .push_back(old_input.with_tag(old_offset));
     xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))
@@ -311,13 +321,11 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_xstr()?;
     match Bitstr::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => {
-            Err(Xerr::ParseError {
-                msg: arcstr::literal!("hex string parse error"),
-                substr: s.substr(..),
-                pos,
-            })
-        }
+        Err(pos) => Err(Xerr::ParseError {
+            msg: arcstr::literal!("hex string parse error"),
+            substr: s.substr(..),
+            pos,
+        }),
     }
 }
 
@@ -330,13 +338,11 @@ fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_xstr()?;
     match Bitstr::from_bin_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => {
-            Err(Xerr::ParseError {
-                msg: arcstr::literal!("bin string parse error"),
-                substr: s.substr(..),
-                pos,
-            })
-        }
+        Err(pos) => Err(Xerr::ParseError {
+            msg: arcstr::literal!("bin string parse error"),
+            substr: s.substr(..),
+            pos,
+        }),
     }
 }
 
@@ -344,7 +350,6 @@ fn bitstr_to_bin(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?.to_bitstr()?;
     xs.push_data(Cell::from(bs.to_bin_string()))
 }
-
 
 fn into_bitstr(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
@@ -354,7 +359,9 @@ fn into_bitstr(xs: &mut Xstate) -> Xresult {
 
 fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?.to_bitstr()?;
-    let bytes = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
+    let bytes = bs
+        .bytestr()
+        .ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     match String::from_utf8(bytes.into_owned()) {
         Ok(s) => xs.push_data(Cell::from(s)),
         Err(e) => {
@@ -395,7 +402,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
             Ok(Bitstr::from(tmp))
         }
         Cell::Bitstr(s) => Ok(s),
-        _ => Err(Xerr::TypeError)
+        _ => Err(Xerr::TypeError),
     }
 }
 
@@ -404,7 +411,10 @@ fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
 }
 
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
-    xs.set_var(xs.bitstr_mod.big_endian, if bo == LITTLE { ZERO } else { ONE })?;
+    xs.set_var(
+        xs.bitstr_mod.big_endian,
+        if bo == LITTLE { ZERO } else { ONE },
+    )?;
     OK
 }
 
@@ -421,8 +431,16 @@ fn word_expect(xs: &mut Xstate) -> Xresult {
     let pat = bitstring_from(val)?;
     let s = peek_bits(xs, pat.len())?;
     if !s.eq_with(&pat) {
-        let pos = s.bits().zip(pat.bits()).position(|(a, b)| a != b).unwrap_or(0);
-        return Err(Xerr::MatchError { src: s, expect: pat, fail_pos: pos });
+        let pos = s
+            .bits()
+            .zip(pat.bits())
+            .position(|(a, b)| a != b)
+            .unwrap_or(0);
+        return Err(Xerr::MatchError {
+            src: s,
+            expect: pat,
+            fail_pos: pos,
+        });
     }
     move_offset_checked(xs, s.end())
 }
@@ -482,7 +500,10 @@ fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
     if let Some(ss) = s.substr(start, end) {
         Ok(ss)
     } else {
-        Err(Xerr::ReadError { src: s.clone(), len: n })
+        Err(Xerr::ReadError {
+            src: s.clone(),
+            len: n,
+        })
     }
 }
 
@@ -494,7 +515,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     let x = s.to_uint(bo) as Xint;
     move_offset_checked(xs, s.end())?;
     let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo));
-    xs.push_data(val)    
+    xs.push_data(val)
 }
 
 fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
@@ -590,17 +611,17 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("123")).unwrap();
         match xs.eval("\"124\" expect") {
-            Err(Xerr::MatchError{ fail_pos, ..}) => assert_eq!(21, fail_pos),
+            Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(21, fail_pos),
             other => panic!("{:?}", other),
         };
         xs.eval("\"123\" expect").unwrap();
         match xs.eval("[ 0 ] expect") {
-            Err(Xerr::ReadError { len,.. }) => assert_eq!(8, len),
+            Err(Xerr::ReadError { len, .. }) => assert_eq!(8, len),
             other => panic!("{:?}", other),
         }
         let res = xs.eval(" \"111111\" bin>bitstr open-bitstr \"11101\" bin>bitstr expect");
         match &res {
-            Err(Xerr::MatchError{ fail_pos, ..}) => assert_eq!(&3, fail_pos),
+            Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
         }
         assert_eq!(format!("{}", res.err().unwrap()),
@@ -610,7 +631,8 @@ mod tests {
     #[test]
     fn test_bitstr_tags() {
         let mut xs = Xstate::boot().unwrap();
-        xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0])).unwrap();
+        xs.set_binary_input(Xbitstr::from(vec![1, 2, 3, 0]))
+            .unwrap();
         {
             xs.eval("u8").unwrap();
             let val = xs.pop_data().unwrap();
@@ -625,7 +647,7 @@ mod tests {
             assert_eq!(16, s.len());
             assert_eq!(vec![2, 3], s.to_bytes_with_padding());
         }
-        {        
+        {
             xs.eval("2 bits").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(None, val.tag());
@@ -646,10 +668,11 @@ mod tests {
         }
         {
             let f: f64 = 1.0;
-            xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec())).unwrap();
+            xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec()))
+                .unwrap();
             xs.eval("f64be").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&Cell::from(f),  val.value());
+            assert_eq!(&Cell::from(f), val.value());
             assert_eq!(&bitstr_real_tag(64, BIG), val.tag().unwrap());
         }
     }
@@ -657,7 +680,7 @@ mod tests {
     #[test]
     fn test_xbytes() {
         let mut xs = Xstate::boot().unwrap();
-        let s: Vec<u8> = (0..1024*1024+1024).map(|_| 1).collect();
+        let s: Vec<u8> = (0..1024 * 1024 + 1024).map(|_| 1).collect();
         xs.set_binary_input(Xbitstr::from(s)).unwrap();
         xs.eval("1 kbytes 1 mbytes remain").unwrap();
         assert_eq!(0, xs.pop_data().unwrap().to_usize().unwrap());
@@ -733,7 +756,7 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from(vec![100, 200])).unwrap();
         match xs.eval("100 seek") {
-            Err(Xerr::SeekError{offset,..}) => assert_eq!(100, offset),
+            Err(Xerr::SeekError { offset, .. }) => assert_eq!(100, offset),
             other => panic!("{:?}", other),
         }
         assert_ne!(OK, xs.eval("[ ] seek"));
@@ -767,7 +790,8 @@ mod tests {
         xs.eval("[ 56 ] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
         assert_ne!(OK, xs.eval("5 seek [ 56 ] find"));
-        xs.eval("[ 0x31 0x32 0x33 ] open-bitstr \"23\" find").unwrap();
+        xs.eval("[ 0x31 0x32 0x33 ] open-bitstr \"23\" find")
+            .unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 
@@ -775,7 +799,10 @@ mod tests {
     fn test_bitstr_to_utf8() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(" \"just text\" >bitstr bitstr>utf8").unwrap();
-        assert_eq!(Ok(Xstr::from("just text")), xs.pop_data().unwrap().to_xstr());
+        assert_eq!(
+            Ok(Xstr::from("just text")),
+            xs.pop_data().unwrap().to_xstr()
+        );
         let res = xs.eval(" [ \"just  text\" 0xff 0xff 0xff ] >bitstr bitstr>utf8");
         assert!(res.is_err());
     }
@@ -797,7 +824,8 @@ mod tests {
     #[test]
     fn test_bitstr_and() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(" [ 0b1001 ] >bitstr [ 0b0011 ] >bitstr bitstr-and").unwrap();
+        xs.eval(" [ 0b1001 ] >bitstr [ 0b0011 ] >bitstr bitstr-and")
+            .unwrap();
         let res = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(res.to_bytes_with_padding(), vec![0b1001 & 0b0011]);
     }
@@ -805,7 +833,8 @@ mod tests {
     #[test]
     fn test_bitstr_or() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(" [ 0b101 ] >bitstr [ 0b011 ] >bitstr bitstr-or").unwrap();
+        xs.eval(" [ 0b101 ] >bitstr [ 0b011 ] >bitstr bitstr-or")
+            .unwrap();
         let res = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(res.to_bytes_with_padding(), vec![0b101 | 0b011]);
     }
@@ -813,16 +842,21 @@ mod tests {
     #[test]
     fn test_bitstr_xor() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(" [ 0b101 ] >bitstr [ 0b110 ] >bitstr bitstr-xor").unwrap();
+        xs.eval(" [ 0b101 ] >bitstr [ 0b110 ] >bitstr bitstr-xor")
+            .unwrap();
         let res = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(res.to_bytes().unwrap(), vec![0b101 ^ 0b110]);
-        xs.eval(" [ 0xaa 0xbb 0xcc ] >bitstr [ 0x11 ] >bitstr bitstr-xor").unwrap();
+        xs.eval(" [ 0xaa 0xbb 0xcc ] >bitstr [ 0x11 ] >bitstr bitstr-xor")
+            .unwrap();
         let res = xs.pop_data().unwrap().to_bitstr().unwrap();
-        assert_eq!(res.to_bytes().unwrap(), vec![0xaa ^ 0x11, 0xbb ^ 0x11, 0xcc ^ 0x11]);
+        assert_eq!(
+            res.to_bytes().unwrap(),
+            vec![0xaa ^ 0x11, 0xbb ^ 0x11, 0xcc ^ 0x11]
+        );
     }
 
     #[test]
-    fn  test_bitstr_pack() {
+    fn test_bitstr_pack() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval("255 u8!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstr().unwrap();
@@ -830,7 +864,5 @@ mod tests {
         xs.eval("big 123 32 int!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
-        
     }
 }
-

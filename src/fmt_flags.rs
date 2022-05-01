@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
-const FMT_BASE_MASK: usize    = 0xff;
-const FMT_PREFIX_BIT: usize   = 0b00001_00000000;
-const FMT_TAGS_BIT: usize     = 0b00010_00000000;
+const FMT_BASE_MASK: usize = 0xff;
+const FMT_PREFIX_BIT: usize = 0b00001_00000000;
+const FMT_TAGS_BIT: usize = 0b00010_00000000;
 //const FMT_PRETTY_BIT: usize   = 0b00100_00000000;
 //const FMT_UPCASE_BIT: usize   = 0b01000_00000000;
 
@@ -62,5 +62,4 @@ impl FmtFlags {
     pub fn from_raw(flags: usize) -> Self {
         FmtFlags(flags)
     }
-
 }

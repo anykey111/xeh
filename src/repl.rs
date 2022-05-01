@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use getopts::Options;
 use rustyline as rl;
-use rustyline_derive::{ Helper, Highlighter, Validator};
+use rustyline_derive::{Helper, Highlighter, Validator};
 
 struct ReplState {
     trial: Option<String>,
@@ -68,7 +68,8 @@ impl rl::completion::Completer for XsHelper {
     ) -> rl::Result<(usize, Vec<Self::Candidate>)> {
         let pos0 = find_token_start(line, pos).unwrap_or(0);
         let pat = &line[pos0..pos];
-        let words = self.0
+        let words = self
+            .0
             .iter()
             .filter(|s| s.starts_with(pat))
             .map(|s| ComplStr(s.clone()))
@@ -79,9 +80,13 @@ impl rl::completion::Completer for XsHelper {
 struct Xhint(String);
 
 impl rl::hint::Hint for Xhint {
-    fn display(&self) -> &str { self.0.as_str() }
+    fn display(&self) -> &str {
+        self.0.as_str()
+    }
     /// Text to insert in line when right arrow is pressed
-    fn completion(&self) -> Option<&str> { None }
+    fn completion(&self) -> Option<&str> {
+        None
+    }
 }
 
 impl rl::hint::Hinter for XsHelper {
@@ -90,8 +95,9 @@ impl rl::hint::Hinter for XsHelper {
         let _ = (line, pos, ctx);
         let mut st = (*self.1).borrow_mut();
         let repl_cmd = line.trim();
-        if repl_cmd.is_empty() || !st.trial.as_ref().map(|s| s != line).unwrap_or(false) ||
-            REPL_CMD_HINTS.iter().any(|s| s == repl_cmd)
+        if repl_cmd.is_empty()
+            || !st.trial.as_ref().map(|s| s != line).unwrap_or(false)
+            || REPL_CMD_HINTS.iter().any(|s| s == repl_cmd)
         {
             return None;
         }
@@ -136,11 +142,11 @@ fn print_pretty_error(xs: &Xstate, e: &Xerr) {
 }
 
 const CMD_NEXT: Xstr = arcstr::literal!("/next");
-const CMD_RNEXT: Xstr =  arcstr::literal!("/rnext");
-const CMD_LIVE: Xstr =  arcstr::literal!("/live");
-const CMD_REPL: Xstr =  arcstr::literal!("/repl");
-const CMD_SNAPSHOT: Xstr =  arcstr::literal!("/snapshot");
-const CMD_ROLLBACK: Xstr =  arcstr::literal!("/rollback");
+const CMD_RNEXT: Xstr = arcstr::literal!("/rnext");
+const CMD_LIVE: Xstr = arcstr::literal!("/live");
+const CMD_REPL: Xstr = arcstr::literal!("/repl");
+const CMD_SNAPSHOT: Xstr = arcstr::literal!("/snapshot");
+const CMD_ROLLBACK: Xstr = arcstr::literal!("/rollback");
 const REPL_CMD_HINTS: &[Xstr] = &[
     CMD_NEXT,
     CMD_RNEXT,
@@ -191,16 +197,19 @@ fn run_line(st: &mut ReplState, line: &str) {
 }
 
 fn run_tty_repl(xs: Xstate, args: XcmdArgs) -> Xresult {
-    let st_tmp = ReplState { xs, trial: None, snapshots: Vec::new() };
+    let st_tmp = ReplState {
+        xs,
+        trial: None,
+        snapshots: Vec::new(),
+    };
     let st_rc = ReplStateRc::new(ReplStateRef::new(st_tmp));
-    let mut rl_state = rl::Editor::<XsHelper>::with_config(
-        rl::Config::builder().auto_add_history(true).build()
-    );
+    let mut rl_state =
+        rl::Editor::<XsHelper>::with_config(rl::Config::builder().auto_add_history(true).build());
     if let Some(filename) = &args.history_file {
         let _ = rl_state.load_history(filename);
     }
     loop {
-        let (lst,trial) = {
+        let (lst, trial) = {
             let st = (*st_rc).borrow_mut();
             if st.xs.about_to_stop {
                 eprintln!("BYE!");
@@ -212,7 +221,7 @@ fn run_tty_repl(xs: Xstate, args: XcmdArgs) -> Xresult {
             (lst, st.trial.is_some())
         };
         rl_state.set_helper(Some(XsHelper(lst, st_rc.clone())));
-        let prompt = if trial { "LIVE> "} else { "REPL> " };
+        let prompt = if trial { "LIVE> " } else { "REPL> " };
         let res = rl_state.readline(prompt);
         match res {
             Ok(line) => {

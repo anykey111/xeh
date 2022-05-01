@@ -1,10 +1,10 @@
 use crate::bitstr_ext;
+use crate::bitstr_ext::BitstrState;
 use crate::cell::*;
 use crate::error::*;
 use crate::fmt_flags::FmtFlags;
 use crate::lex::*;
 use crate::opcodes::*;
-use crate::bitstr_ext::BitstrState;
 
 use std::fmt::Debug;
 use std::iter::FromIterator;
@@ -130,7 +130,7 @@ pub enum ReverseStep {
     PopSpecial,
     PushSpecial(Special),
     DropLocal(usize),
-    SwapRef(CellRef,Cell),
+    SwapRef(CellRef, Cell),
 }
 
 #[derive(Clone)]
@@ -167,7 +167,6 @@ pub struct State {
 }
 
 impl State {
-    
     pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
         let flags = self
             .get_var(self.fmt_flags)
@@ -178,23 +177,35 @@ impl State {
     pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
         match op {
             Opcode::Call(x) => {
-                let name = self.dict.iter().rev().find(|e| {
-                    match e.entry {
-                        Entry::Function { xf: Xfn::Interp(f), ..} => f == *x,
+                let name = self
+                    .dict
+                    .iter()
+                    .rev()
+                    .find(|e| match e.entry {
+                        Entry::Function {
+                            xf: Xfn::Interp(f), ..
+                        } => f == *x,
                         _ => false,
-                    }
-                }).map(|e| e.name.as_str()).unwrap_or_default();
-                format!("call {:#x} # {}" , x, name)
-            },
-            Opcode::NativeCall(x)=> {
-                let name = self.dict.iter().rev().find(|e| {
-                    match e.entry {
-                        Entry::Function { xf: Xfn::Native(f), ..} => f == *x,
+                    })
+                    .map(|e| e.name.as_str())
+                    .unwrap_or_default();
+                format!("call {:#x} # {}", x, name)
+            }
+            Opcode::NativeCall(x) => {
+                let name = self
+                    .dict
+                    .iter()
+                    .rev()
+                    .find(|e| match e.entry {
+                        Entry::Function {
+                            xf: Xfn::Native(f), ..
+                        } => f == *x,
                         _ => false,
-                    }
-                }).map(|e| e.name.as_str()).unwrap_or_default();
-                format!("nativecall {:#x} # {}" , x.0 as usize, name)
-            },
+                    })
+                    .map(|e| e.name.as_str())
+                    .unwrap_or_default();
+                format!("nativecall {:#x} # {}", x.0 as usize, name)
+            }
             Opcode::Resolve(name) => format!("resolve    {:?}", &name),
             Opcode::Ret => format!("ret"),
             Opcode::JumpIf(rel) => format!("jumpif     #{:#05x}", rel.calculate(ip)),
@@ -220,14 +231,13 @@ impl State {
     }
 
     pub fn last_error(&self) -> Option<(&Xerr, &TokenLocation)> {
-        self.last_error.as_ref().and_then(|ec| {
-            ec.location.as_ref().map(|loc| (&ec.err, loc))
-        })
+        self.last_error
+            .as_ref()
+            .and_then(|ec| ec.location.as_ref().map(|loc| (&ec.err, loc)))
     }
 
     pub fn location_from_current_ip(&self) -> Option<TokenLocation> {
-        self
-            .debug_map
+        self.debug_map
             .get(self.ip())
             .and_then(|tok| token_location(&self.sources, tok))
     }
@@ -327,7 +337,10 @@ impl State {
             if self.last_error.is_none() {
                 let tok = self.last_token.as_ref();
                 let location = tok.and_then(|tok| token_location(&self.sources, &tok));
-                self.last_error = Some(ErrorContext { err: e.clone(), location });
+                self.last_error = Some(ErrorContext {
+                    err: e.clone(),
+                    location,
+                });
             }
             e
         })
@@ -336,9 +349,7 @@ impl State {
     fn build1(&mut self) -> Xresult {
         let ctx_depth = self.nested.len();
         loop {
-            if self.ctx.mode == ContextMode::MetaEval
-                && !self.has_pending_flow()
-            {
+            if self.ctx.mode == ContextMode::MetaEval && !self.has_pending_flow() {
                 self.run()?;
             }
             match self.next_token()? {
@@ -357,9 +368,11 @@ impl State {
                 }
                 Tok::Word(name) => {
                     // search for local variables first
-                    if let Some(i) = self.top_function_flow()
-                        .and_then(|ff| ff.locals.iter().rposition(|x| x == name.as_str())) {
-                            self.code_emit(Opcode::LoadLocal(i))?;
+                    if let Some(i) = self
+                        .top_function_flow()
+                        .and_then(|ff| ff.locals.iter().rposition(|x| x == name.as_str()))
+                    {
+                        self.code_emit(Opcode::LoadLocal(i))?;
                     } else {
                         self.build_word(name)?;
                     }
@@ -370,8 +383,7 @@ impl State {
 
     fn build_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
-            None =>
-                self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
+            None => self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
             Some(Entry::Constant(c)) => {
                 let op = self.load_value_opcode(c.clone());
                 self.code_emit(op)
@@ -421,7 +433,7 @@ impl State {
         if tok == Tok::EndOfInput {
             self.input.pop();
         }
-        return Ok(tok)
+        return Ok(tok);
     }
 
     fn context_open(&mut self, mode: ContextMode) -> Xresult {
@@ -452,7 +464,7 @@ impl State {
                 self.code.truncate(self.ctx.cs_len);
             }
         }
-        let mut prev = self.nested.pop().ok_or_else(||Xerr::ControlFlowError)?;
+        let mut prev = self.nested.pop().ok_or_else(|| Xerr::ControlFlowError)?;
         if prev.mode == self.ctx.mode {
             if self.ctx.mode == ContextMode::Eval {
                 // preserve current ip value
@@ -520,8 +532,14 @@ impl State {
 
     fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult {
         let xf = Xfn::Native(XfnPtr(f));
-        self.dict_insert(DictEntry::new(name.into(),
-            Entry::Function { immediate, xf, len: None }))?;
+        self.dict_insert(DictEntry::new(
+            name.into(),
+            Entry::Function {
+                immediate,
+                xf,
+                len: None,
+            },
+        ))?;
         OK
     }
 
@@ -539,7 +557,7 @@ impl State {
         self.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
         let fn_addr = self.code_origin();
         self.code_emit_value(slf)?;
-        
+
         self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
@@ -549,15 +567,17 @@ impl State {
                 immediate: false,
                 xf: Xfn::Interp(fn_addr),
                 len: Some(len),
-            }))?;
+            },
+        ))?;
         let offs = jump_offset(start, self.code_origin());
         self.backpatch_jump(start, offs)?;
         OK
     }
 
     pub fn set_doc(&mut self, name: Xstr, help: Xstr) -> Xresult {
-        let a = self.dict_find(name.as_str())
-            .ok_or_else(||Xerr::UnknownWord(name))?;
+        let a = self
+            .dict_find(name.as_str())
+            .ok_or_else(|| Xerr::UnknownWord(name))?;
         self.dict[a].help = Some(help);
         OK
     }
@@ -568,8 +588,14 @@ impl State {
     }
 
     fn load_core(&mut self) -> Xresult {
-        self.dict_insert(DictEntry::new(arcstr::literal!("true").into(), Entry::Constant(TRUE)))?;
-        self.dict_insert(DictEntry::new(arcstr::literal!("false").into(), Entry::Constant(FALSE)))?;
+        self.dict_insert(DictEntry::new(
+            arcstr::literal!("true").into(),
+            Entry::Constant(TRUE),
+        ))?;
+        self.dict_insert(DictEntry::new(
+            arcstr::literal!("false").into(),
+            Entry::Constant(FALSE),
+        ))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -665,8 +691,9 @@ impl State {
 
     fn load_value_opcode(&self, val: Cell) -> Opcode {
         match val {
-            Cell::Int(i) if i64::MIN as Xint <= i && i <= i64::MAX as Xint =>
-                Opcode::LoadI64(i as i64),
+            Cell::Int(i) if i64::MIN as Xint <= i && i <= i64::MAX as Xint => {
+                Opcode::LoadI64(i as i64)
+            }
             Cell::Nil => Opcode::LoadNil,
             val => Opcode::LoadCell(CellBox::from(val)),
         }
@@ -698,7 +725,7 @@ impl State {
     }
 
     fn backpatch_jump(&mut self, at: usize, offs: RelativeJump) -> Xresult {
-        let insn = match self.code.get(at).ok_or_else(||Xerr::InternalError)? {
+        let insn = match self.code.get(at).ok_or_else(|| Xerr::InternalError)? {
             Opcode::Jump(_) => Opcode::Jump(offs),
             Opcode::JumpIf(_) => Opcode::JumpIf(offs),
             Opcode::JumpIfNot(_) => Opcode::JumpIfNot(offs),
@@ -709,14 +736,19 @@ impl State {
     }
 
     fn cell_ref(&self, cref: CellRef) -> Xresult1<&Cell> {
-        self.heap.get(cref.index()).ok_or_else(|| Xerr::InvalidAddress)
+        self.heap
+            .get(cref.index())
+            .ok_or_else(|| Xerr::InvalidAddress)
     }
 
     fn swap_cell_ref(&mut self, cref: CellRef, val: Cell) -> Xresult {
         let mut old = val;
         std::mem::swap(
-            self.heap.get_mut(cref.index()).ok_or_else(|| Xerr::InvalidAddress)?,
-            &mut old);
+            self.heap
+                .get_mut(cref.index())
+                .ok_or_else(|| Xerr::InvalidAddress)?,
+            &mut old,
+        );
         if self.is_recording() {
             self.add_reverse_step(ReverseStep::SwapRef(cref, old));
         }
@@ -747,7 +779,10 @@ impl State {
             self.fetch_and_run().map_err(|e| {
                 if self.last_error.is_none() {
                     let location = self.location_from_current_ip();
-                    self.last_error = Some(ErrorContext { err: e.clone(), location });
+                    self.last_error = Some(ErrorContext {
+                        err: e.clone(),
+                        location,
+                    });
                 }
                 e
             })?;
@@ -761,7 +796,7 @@ impl State {
             Opcode::Jump(rel) => {
                 let new_ip = rel.calculate(ip);
                 self.set_ip(new_ip);
-            },
+            }
             Opcode::JumpIf(rel) => {
                 let new_ip = rel.calculate(ip);
                 if self.pop_data()?.cond_true()? {
@@ -803,7 +838,9 @@ impl State {
                 self.set_ip(frame.return_to);
             }
             Opcode::Resolve(ref name) => {
-                let e = self.dict_entry(&name).ok_or_else(|| Xerr::UnknownWord(name.clone()))?;
+                let e = self
+                    .dict_entry(&name)
+                    .ok_or_else(|| Xerr::UnknownWord(name.clone()))?;
                 match e {
                     Entry::Constant(c) => {
                         let op = self.load_value_opcode(c.clone());
@@ -830,7 +867,7 @@ impl State {
                         self.fetch_and_run()?;
                     }
                 }
-            },
+            }
             Opcode::LoadF64(x) => {
                 let val = Cell::from(*x);
                 self.push_data(val)?;
@@ -876,7 +913,11 @@ impl State {
             Opcode::LoadLocal(i) => {
                 let i = *i;
                 let frame = self.top_frame()?;
-                let val = frame.locals.get(i).cloned().ok_or_else(||Xerr::InvalidAddress)?;
+                let val = frame
+                    .locals
+                    .get(i)
+                    .cloned()
+                    .ok_or_else(|| Xerr::InvalidAddress)?;
                 self.push_data(val)?;
                 self.next_ip();
             }
@@ -888,7 +929,7 @@ impl State {
                 } else {
                     self.push_loop(l)?;
                     self.next_ip();
-                }                
+                }
             }
             Opcode::Break(rel) => {
                 let break_ip = rel.calculate(ip);
@@ -924,17 +965,17 @@ impl State {
         }
         while let Some(step) = pop(self) {
             match &step {
-                ReverseStep::SetIp{..} => {
+                ReverseStep::SetIp { .. } => {
                     // this is anohter instruction, queue back to log
                     self.add_reverse_step(step);
                     break;
-                },
-                _ => self.reverse_changes(step)?
+                }
+                _ => self.reverse_changes(step)?,
             }
         }
         OK
     }
-    
+
     pub fn set_recording_enabled(&mut self, yes: bool) {
         if yes {
             if self.reverse_log.is_none() {
@@ -964,7 +1005,7 @@ impl State {
                 if self.data_stack.len() > self.ctx.ds_len {
                     self.data_stack.pop();
                 } else {
-                    return Err(Xerr::StackUnderflow)
+                    return Err(Xerr::StackUnderflow);
                 }
             }
             ReverseStep::PushData(val) => {
@@ -1032,7 +1073,10 @@ impl State {
                 f.locals.pop();
             }
             ReverseStep::SwapRef(cref, val) => {
-                let a = self.heap.get_mut(cref.index()).ok_or_else(|| Xerr::InvalidAddress)?;
+                let a = self
+                    .heap
+                    .get_mut(cref.index())
+                    .ok_or_else(|| Xerr::InvalidAddress)?;
                 let mut b = val;
                 std::mem::swap(a, &mut b);
             }
@@ -1068,7 +1112,7 @@ impl State {
 
     fn pop_flow(&mut self) -> Xresult1<Flow> {
         if self.flow_stack.len() > self.ctx.fs_len {
-            self.flow_stack.pop().ok_or_else(||Xerr::ControlFlowError)
+            self.flow_stack.pop().ok_or_else(|| Xerr::ControlFlowError)
         } else {
             Err(Xerr::ControlFlowError)
         }
@@ -1190,7 +1234,10 @@ impl State {
 
     fn pop_return(&mut self) -> Xresult1<Frame> {
         if self.return_stack.len() > self.ctx.rs_len {
-            let ret = self.return_stack.pop().ok_or_else(|| Xerr::ReturnStackUnderflow)?;
+            let ret = self
+                .return_stack
+                .pop()
+                .ok_or_else(|| Xerr::ReturnStackUnderflow)?;
             if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushReturn(ret.clone()));
             }
@@ -1219,7 +1266,7 @@ impl State {
 
     fn pop_loop(&mut self) -> Xresult1<Loop> {
         if self.loops.len() > self.ctx.ls_len {
-            let l = self.loops.pop().ok_or_else(||Xerr::InternalError)?;
+            let l = self.loops.pop().ok_or_else(|| Xerr::InternalError)?;
             if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushLoop(l.clone()));
             }
@@ -1254,7 +1301,7 @@ impl State {
 
     fn pop_special(&mut self) -> Xresult1<Special> {
         if self.special.len() > self.ctx.ss_ptr {
-            let s = self.special.pop().ok_or_else(||Xerr::InternalError)?;
+            let s = self.special.pop().ok_or_else(|| Xerr::InternalError)?;
             if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushSpecial(s.clone()));
             }
@@ -1277,7 +1324,7 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
             _ => break,
         };
         if t {
-            return Ok(xs.flow_stack.remove(i))
+            return Ok(xs.flow_stack.remove(i));
         }
     }
     Err(Xerr::ControlFlowError)
@@ -1286,7 +1333,7 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
 fn core_word_if(xs: &mut State) -> Xresult {
     let org = xs.code_origin();
     xs.push_flow(Flow::If(org))?;
-    xs.code_emit(Opcode::JumpIfNot(RelativeJump::uninit()))    
+    xs.code_emit(Opcode::JumpIfNot(RelativeJump::uninit()))
 }
 
 fn core_word_else(xs: &mut State) -> Xresult {
@@ -1306,7 +1353,7 @@ fn core_word_endif(xs: &mut State) -> Xresult {
         Flow::If(org) => org,
         Flow::Else(org) => org,
         _ => return Err(Xerr::ControlFlowError),
-    };  
+    };
     let offs = jump_offset(if_org, xs.code_origin());
     xs.backpatch_jump(if_org, offs)
 }
@@ -1470,7 +1517,8 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
             immediate: false,
             xf,
             len: None,
-        }))?;
+        },
+    ))?;
     xs.push_flow(Flow::Fun(FunctionFlow {
         dict_idx,
         start,
@@ -1486,8 +1534,15 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
-            match xs.dict.get_mut(dict_idx).ok_or_else(||Xerr::InvalidAddress)? {
-                DictEntry { entry: Entry::Function { ref mut len, .. }, ..} => *len = Some(fun_len),
+            match xs
+                .dict
+                .get_mut(dict_idx)
+                .ok_or_else(|| Xerr::InvalidAddress)?
+            {
+                DictEntry {
+                    entry: Entry::Function { ref mut len, .. },
+                    ..
+                } => *len = Some(fun_len),
                 _ => panic!("entry type"),
             }
             xs.backpatch_jump(start, offs)
@@ -1507,8 +1562,13 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     let dict_idx = xs
         .top_function_flow()
         .map(|f| f.dict_idx)
-        .ok_or_else(||Xerr::ControlFlowError)?;
-    match xs.dict.get_mut(dict_idx).ok_or_else(||Xerr::InvalidAddress)?.entry {
+        .ok_or_else(|| Xerr::ControlFlowError)?;
+    match xs
+        .dict
+        .get_mut(dict_idx)
+        .ok_or_else(|| Xerr::InvalidAddress)?
+        .entry
+    {
         Entry::Function {
             ref mut immediate, ..
         } => {
@@ -1521,7 +1581,9 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
 
 fn core_word_def_local(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
-    let ff = xs.top_function_flow().ok_or_else(||Xerr::ControlFlowError)?;
+    let ff = xs
+        .top_function_flow()
+        .ok_or_else(|| Xerr::ControlFlowError)?;
     let idx = ff.locals.len();
     ff.locals.push(name);
     xs.code_emit(Opcode::InitLocal(idx))
@@ -1588,7 +1650,9 @@ fn do_init(xs: &mut State) -> Xresult1<Loop> {
     let limit = xs.pop_data()?;
     let start = start.to_isize()?;
     let limit = limit.to_isize()?;
-    Ok(Loop { range: start..limit })
+    Ok(Loop {
+        range: start..limit,
+    })
 }
 
 fn core_word_do(xs: &mut State) -> Xresult {
@@ -1621,7 +1685,8 @@ fn core_word_loop(xs: &mut State) -> Xresult {
 
 fn core_word_help(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?.to_xstr()?;
-    let res = xs.dict_find(name.as_str())
+    let res = xs
+        .dict_find(name.as_str())
         .and_then(|a| xs.dict.get(a))
         .and_then(|e| e.help.clone());
     if let Some(help) = res {
@@ -1640,7 +1705,7 @@ fn core_word_doc(xs: &mut State) -> Xresult {
                 xs.set_doc(name, help.clone())?;
             }
             OK
-        },
+        }
         Cell::Str(name) => xs.set_doc(name.clone(), help),
         _ => Err(Xerr::ExpectingName),
     }
@@ -1652,7 +1717,7 @@ fn counter_value(xs: &mut State, n: usize) -> Xresult {
         .nth_back(n)
         .ok_or_else(|| Xerr::LoopStackUnderflow)?;
     let val = l.range.start;
-    return xs.push_data(Cell::from(val))
+    return xs.push_data(Cell::from(val));
 }
 
 fn core_word_counter_i(xs: &mut State) -> Xresult {
@@ -1832,10 +1897,12 @@ mod tests {
 
     macro_rules! eval_ok {
         ($xs:expr,$e:expr) => {
-            $xs.eval($e).map_err(|err| {
-                println!("*** error: {}", $xs.pretty_error().unwrap_or_default());
-                err
-            }).unwrap()
+            $xs.eval($e)
+                .map_err(|err| {
+                    println!("*** error: {}", $xs.pretty_error().unwrap_or_default());
+                    err
+                })
+                .unwrap()
         };
     }
 
@@ -1898,12 +1965,18 @@ mod tests {
         xs.compile("1 if 222 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
-        assert_eq!(&Opcode::JumpIfNot(RelativeJump::from_i32(2)), it.next().unwrap());
+        assert_eq!(
+            &Opcode::JumpIfNot(RelativeJump::from_i32(2)),
+            it.next().unwrap()
+        );
         let mut xs = State::boot().unwrap();
         xs.compile("1 if 222 else 333 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
-        assert_eq!(&Opcode::JumpIfNot(RelativeJump::from_i32(3)), it.next().unwrap());
+        assert_eq!(
+            &Opcode::JumpIfNot(RelativeJump::from_i32(3)),
+            it.next().unwrap()
+        );
         it.next().unwrap();
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         // test errors
@@ -1941,12 +2014,18 @@ mod tests {
         xs.compile("begin leave again").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
-        assert_eq!(&Opcode::Jump(RelativeJump::from_i32(-1)), it.next().unwrap());
+        assert_eq!(
+            &Opcode::Jump(RelativeJump::from_i32(-1)),
+            it.next().unwrap()
+        );
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 false until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x 0 <> while 0 -> x repeat").unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("if begin endif repeat"));
+        assert_eq!(
+            Err(Xerr::ControlFlowError),
+            xs.compile("if begin endif repeat")
+        );
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));
         assert_eq!(Err(Xerr::ControlFlowError), xs.compile("until begin"));
@@ -1979,10 +2058,10 @@ mod tests {
         let res = xs.compile("begin 1 again leave");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         let mut xs = State::boot().unwrap();
-        xs.compile("begin 1 if leave else leave endif again").unwrap();
+        xs.compile("begin 1 if leave else leave endif again")
+            .unwrap();
     }
 
-    
     #[test]
     fn test_for_loop() {
         let mut xs = State::boot().unwrap();
@@ -2017,9 +2096,9 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         xs.eval("0 0 do i loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        // invalid range        
+        // invalid range
         assert_ne!(OK, xs.eval("0 0.5 do i loop"));
-     }
+    }
 
     #[test]
     fn test_get() {
@@ -2068,7 +2147,6 @@ mod tests {
         assert_eq!(Some("0b11".to_string()), xs.read_stdout());
     }
 
-
     #[test]
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
@@ -2079,7 +2157,8 @@ mod tests {
         assert_eq!(Some("ff".to_string()), xs.read_stdout());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
-        xs.eval(" [ 0xff 0xee ] >bitstr NO-PREFIX BIN print").unwrap();
+        xs.eval(" [ 0xff 0xee ] >bitstr NO-PREFIX BIN print")
+            .unwrap();
         assert_eq!(Some("[ 11111111 11101110 ]".to_string()), xs.read_stdout());
         xs.eval(" [ ] >bitstr HEX NO-PREFIX print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
@@ -2133,7 +2212,10 @@ mod tests {
             other => panic!("{:?}", other),
         }
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq ");
+        eval_ok!(
+            xs,
+            " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq "
+        );
     }
 
     #[test]
@@ -2154,10 +2236,15 @@ mod tests {
     #[test]
     fn test_defwordself() {
         let mut xs = State::boot().unwrap();
-        xs.defwordself( "self1", |xs| {
-            assert_eq!(Ok(ONE), xs.pop_data());
-            xs.push_data(ZERO)
-        }, ONE).unwrap();
+        xs.defwordself(
+            "self1",
+            |xs| {
+                assert_eq!(Ok(ONE), xs.pop_data());
+                xs.push_data(ZERO)
+            },
+            ONE,
+        )
+        .unwrap();
         xs.eval("self1").unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
     }
@@ -2165,11 +2252,14 @@ mod tests {
     #[test]
     fn test_caseof() {
         let mut xs = State::boot().unwrap();
-        xs.eval("2 case 1 of 100 endof 2 of 200 endof endcase").unwrap();
+        xs.eval("2 case 1 of 100 endof 2 of 200 endof endcase")
+            .unwrap();
         assert_eq!(Ok(Cell::Int(200)), xs.pop_data());
-        xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase").unwrap();
+        xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase")
+            .unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("10 0 do i i case 5 of leave endof drop endcase loop").unwrap();
+        xs.eval("10 0 do i i case 5 of leave endof drop endcase loop")
+            .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
 
@@ -2196,7 +2286,11 @@ mod tests {
     }
 
     fn collect_ints(xs: &State) -> Vec<isize> {
-        xs.data_stack.iter().cloned().map(|x| x.to_isize().unwrap()).collect()
+        xs.data_stack
+            .iter()
+            .cloned()
+            .map(|x| x.to_isize().unwrap())
+            .collect()
     }
 
     #[test]
@@ -2216,11 +2310,14 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.rnext());
         xs.set_recording_enabled(true);
-        xs.compile(r#"
+        xs.compile(
+            r#"
         100 4 /
         3 *
         5 +
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
         xs.run().unwrap();
         assert_eq!(vec![80], collect_ints(&xs));
         xs.rnext().unwrap();
@@ -2293,12 +2390,11 @@ mod tests {
 
     #[test]
     fn test_reverse_recur() {
-        let snapshot = |xs: &State| (
-             xs.data_stack.clone(),
-             xs.return_stack.clone());
+        let snapshot = |xs: &State| (xs.data_stack.clone(), xs.return_stack.clone());
         let mut xs = State::boot().unwrap();
         xs.set_recording_enabled(true);
-        xs.compile(r#"
+        xs.compile(
+            r#"
        : tower-of-hanoi
             local aux
             local to
@@ -2313,8 +2409,10 @@ mod tests {
             endif
         ;        
         4 "a" "c" "b" tower-of-hanoi
-        "#).unwrap();
-        
+        "#,
+        )
+        .unwrap();
+
         let mut log = Vec::new();
         for _ in 0..3 {
             while xs.ip() != xs.code.len() {
@@ -2344,65 +2442,81 @@ mod tests {
     #[test]
     fn test_error_location() {
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::UnknownWord(Xstr::from("x"))), xs.eval(" \r\n \r\n\n   x"));
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "unknown word x\n",
-            "<buffer#0>:4:4\n",
-            "   x\n",
-            "---^"));
+        assert_eq!(
+            Err(Xerr::UnknownWord(Xstr::from("x"))),
+            xs.eval(" \r\n \r\n\n   x")
+        );
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!("unknown word x\n", "<buffer#0>:4:4\n", "   x\n", "---^")
+        );
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "unknown word z\n",
-            "<buffer#0>:1:1\n",
-            "z\n",
-            "^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!("unknown word z\n", "<buffer#0>:1:1\n", "z\n", "^")
+        );
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "unknown word q\n",
-            "<buffer#0>:2:2\n",
-            " q\n",
-            "-^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!("unknown word q\n", "<buffer#0>:2:2\n", " q\n", "-^")
+        );
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("[\n10 loop\n]");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "control flow error\n",
-            "<buffer#0>:2:4\n",
-            "10 loop\n",
-            "---^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!(
+                "control flow error\n",
+                "<buffer#0>:2:4\n",
+                "10 loop\n",
+                "---^"
+            )
+        );
 
         let mut xs = State::boot().unwrap();
         let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "control flow error\n",
-            "<buffer#0>:2:3\n",
-            "( loop )\n",
-            "--^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!(
+                "control flow error\n",
+                "<buffer#0>:2:3\n",
+                "( loop )\n",
+                "--^"
+            )
+        );
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("\"src/test-location1.xs\" load");
         assert_eq!(Err(Xerr::ControlFlowError), res);
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "control flow error\n",
-            "src/test-location2.xs:2:3\n",
-            "[ again ]\n",
-            "--^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!(
+                "control flow error\n",
+                "src/test-location2.xs:2:3\n",
+                "[ again ]\n",
+                "--^"
+            )
+        );
 
         let mut xs = State::boot().unwrap();
         xs.eval(": test3 0 get ;").unwrap();
         let res = xs.eval("[ ] test3");
         assert_eq!(Err(Xerr::OutOfBounds(0)), res);
-        assert_eq!(xs.pretty_error().unwrap(), concat!(
-            "index 0 out of bounds\n",
-            "<buffer#0>:1:11\n",
-            ": test3 0 get ;\n",
-            "----------^"));
+        assert_eq!(
+            xs.pretty_error().unwrap(),
+            concat!(
+                "index 0 out of bounds\n",
+                "<buffer#0>:1:11\n",
+                ": test3 0 get ;\n",
+                "----------^"
+            )
+        );
     }
 
     #[test]
@@ -2410,14 +2524,18 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.compile(": myword  1 ;").unwrap();
         let a = match xs.dict_entry("myword").unwrap() {
-            Entry::Function { xf: Xfn::Interp(a), .. } => Some(*a),
+            Entry::Function {
+                xf: Xfn::Interp(a), ..
+            } => Some(*a),
             _ => None,
         };
         let s = format!("call {:#x} # myword", a.unwrap());
         assert_eq!(s, xs.fmt_opcode(0, &Opcode::Call(a.unwrap())));
 
         let f = match xs.dict_entry("drop").unwrap() {
-            Entry::Function { xf: Xfn::Native(f), .. } => Some(*f),
+            Entry::Function {
+                xf: Xfn::Native(f), ..
+            } => Some(*f),
             _ => None,
         };
         let s = format!("nativecall {:#x} # drop", f.unwrap().0 as usize);

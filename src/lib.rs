@@ -2,29 +2,29 @@ mod arith;
 pub mod bitstr;
 pub mod bitstr_ext;
 pub mod cell;
+pub mod d2_plugin;
 pub mod error;
+mod file;
+mod fmt_flags;
 pub mod lex;
 mod opcodes;
 #[cfg(feature = "stdio")]
 pub mod repl;
 pub mod state;
-mod file;
-mod fmt_flags;
-pub mod d2_plugin;
 
 pub mod prelude {
     pub use std::convert::TryInto;
     pub type Xstate = crate::state::State;
-    pub use crate::error::*;
     pub use crate::cell::*;
+    pub use crate::error::*;
     pub type Xlex = crate::lex::Lex;
     pub type Xcell = crate::cell::Cell;
-    pub use crate::lex::TokenLocation;
     pub use crate::cell::Xstr;
+    pub use crate::lex::TokenLocation;
 }
 
 pub mod c_api {
-    use std::ptr::{null_mut};
+    use std::ptr::null_mut;
 
     use crate::prelude::{Xcell, Xstate};
 
@@ -40,7 +40,7 @@ pub mod c_api {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_close(xs: *mut Xstate)  {
+    pub unsafe extern "C" fn xeh_close(xs: *mut Xstate) {
         if xs != null_mut() {
             Box::from_raw(xs);
         }
@@ -66,7 +66,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_nil(x: *const Xcell) -> bool {
         match *x {
             Xcell::Nil => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -74,7 +74,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_int(x: *const Xcell) -> bool {
         match *x {
             Xcell::Int(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -82,7 +82,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_real(x: *const Xcell) -> bool {
         match *x {
             Xcell::Real(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -90,7 +90,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_string(x: *const Xcell) -> bool {
         match *x {
             Xcell::Str(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -98,7 +98,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_vector(x: *const Xcell) -> bool {
         match *x {
             Xcell::Vector(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -106,7 +106,7 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_is_bitstr(x: *const Xcell) -> bool {
         match *x {
             Xcell::Bitstr(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -114,20 +114,21 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_vector_len(x: *const Xcell) -> usize {
         match &*x {
             Xcell::Vector(v) => v.len(),
-            _ => 0
+            _ => 0,
         }
     }
 
     #[no_mangle]
     pub unsafe extern "C" fn xeh_vector_at(x: *const Xcell, i: usize) -> *mut Xcell {
         match &*x {
-            Xcell::Vector(v) => 
+            Xcell::Vector(v) => {
                 if let Some(c) = v.get(i) {
                     Box::into_raw(Box::new(c.clone()))
                 } else {
                     null_mut()
-                },
-            _ => null_mut()
+                }
+            }
+            _ => null_mut(),
         }
     }
 
@@ -135,5 +136,4 @@ pub mod c_api {
     pub unsafe extern "C" fn xeh_release(x: *mut Xcell) {
         Box::from_raw(x);
     }
-
 }

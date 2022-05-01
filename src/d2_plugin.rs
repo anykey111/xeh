@@ -74,7 +74,8 @@ fn data_set(xs: &mut Xstate) -> Xresult {
     let x = xs.pop_data()?.to_usize()?;
     let index = y * d2.width + x;
     let color = if let Some(pal) = &d2.pal {
-        *pal.get(d2.color as usize).ok_or(Xerr::OutOfBounds(d2.color as usize))?
+        *pal.get(d2.color as usize)
+            .ok_or(Xerr::OutOfBounds(d2.color as usize))?
     } else {
         d2.color
     };
@@ -144,7 +145,8 @@ mod tests {
     fn test_d2_rgba() {
         let mut xs = Xstate::boot().unwrap();
         self::load(&mut xs).unwrap();
-        xs.eval("
+        xs.eval(
+            "
         3 var W
         2 var H
         W H d2-resize
@@ -155,7 +157,9 @@ mod tests {
             loop
         loop
         d2-capture-rgba
-        ").unwrap();
+        ",
+        )
+        .unwrap();
         let mut bs = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(3 * 2 * 32, bs.len());
         for y in 0..2 {

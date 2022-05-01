@@ -12,16 +12,11 @@ pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
     }
 }
 
-
 #[cfg(feature = "mmap")]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
-    let file = File::open(&path).map_err(|e| {
-        ioerror_with_path(Xstr::from(path), &e)
-    })?;
+    let file = File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
     let (mm, slice) = unsafe {
-        let mm = Mmap::map(&file).map_err(|e| {
-            ioerror_with_path(Xstr::from(path), &e)
-        })?;
+        let mm = Mmap::map(&file).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
         let ptr = mm.as_ptr();
         let slice = std::slice::from_raw_parts(ptr, mm.len());
         (mm, slice)
@@ -33,19 +28,15 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
 #[cfg(not(feature = "mmap"))]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     use std::io::Read;
-    let mut file = File::open(path).map_err(|e| {
-        ioerror_with_path(Xstr::from(path), &e)
-    })?;
+    let mut file = File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf).map_err(|e| {
-        ioerror_with_path(Xstr::from(path), &e)
-    })?;
+    file.read_to_end(&mut buf)
+        .map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
     xs.set_binary_input(Xbitstr::from(buf))
 }
 
 pub fn read_source_file(path: &str) -> Xresult1<String> {
-    std::fs::read_to_string(path)
-        .map_err(|e| ioerror_with_path(Xstr::from(path), &e))
+    std::fs::read_to_string(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))
 }
 
 pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
@@ -59,19 +50,15 @@ pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
             .truncate(true)
             .open(path.as_str())
     };
-    let mut file = open().map_err(|e| {
-        ioerror_with_path(path.clone(), &e)
-    })?;
+    let mut file = open().map_err(|e| ioerror_with_path(path.clone(), &e))?;
     if let Some(data) = s.slice() {
-        file.write_all(data).map_err(|e| {
-            ioerror_with_path(path.clone(), &e)
-        })?;
+        file.write_all(data)
+            .map_err(|e| ioerror_with_path(path.clone(), &e))?;
     } else {
         let mut buf = BufWriter::new(file);
         for x in s.iter8() {
-            buf.write_all(&[x.0]).map_err(|e| {
-                ioerror_with_path(path.clone(), &e)
-            })?;
+            buf.write_all(&[x.0])
+                .map_err(|e| ioerror_with_path(path.clone(), &e))?;
         }
     }
     OK

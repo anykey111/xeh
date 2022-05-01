@@ -75,18 +75,24 @@ fn arithmetic_ops_real(
             let a = a.to_xint()?;
             let c = Cell::from(ops_int(a, *b));
             xs.push_data(c)
-        },
+        }
         Cell::Real(b) => {
             let a = a.to_real()?;
             let c = Cell::from(ops_real(a, *b));
             xs.push_data(c)
         }
-        _ => Err(Xerr::TypeErrorMsg{msg: NUM_TYPE_NAME, val: b })
+        _ => Err(Xerr::TypeErrorMsg {
+            msg: NUM_TYPE_NAME,
+            val: b,
+        }),
     }
 }
 
 fn num_type_error(val: Cell) -> Xerr {
-    Xerr::TypeErrorMsg{ msg: NUM_TYPE_NAME, val }
+    Xerr::TypeErrorMsg {
+        msg: NUM_TYPE_NAME,
+        val,
+    }
 }
 
 fn core_word_add(xs: &mut State) -> Xresult {
@@ -123,19 +129,19 @@ fn core_word_div(xs: &mut State) -> Xresult {
                 xs.push_data(c)
             }
         }
-        _ => Err(num_type_error(b))
+        _ => Err(num_type_error(b)),
     }
 }
 
 fn core_word_negate(xs: &mut State) -> Xresult {
-    let a = xs.pop_data()?; 
+    let a = xs.pop_data()?;
     match a.value() {
         Cell::Int(a) => {
             let neg = a.checked_neg().ok_or_else(|| Xerr::IntegerOverflow)?;
             xs.push_data(Cell::Int(neg))
-        },
+        }
         Cell::Real(a) => xs.push_data(Cell::Real(-a)),
-        _ => Err(num_type_error(a))
+        _ => Err(num_type_error(a)),
     }
 }
 
@@ -144,7 +150,7 @@ fn core_word_abs(xs: &mut State) -> Xresult {
     match a.value() {
         Cell::Int(a) => xs.push_data(Cell::Int(a.abs())),
         Cell::Real(a) => xs.push_data(Cell::Real(a.abs())),
-        _ => Err(num_type_error(a))
+        _ => Err(num_type_error(a)),
     }
 }
 
@@ -172,7 +178,7 @@ fn compare_cells(xs: &mut State) -> Xresult1<Ordering> {
             let a = a.to_real()?;
             Ok(compare_reals(a, *b))
         }
-        _ => Err(num_type_error(b))
+        _ => Err(num_type_error(b)),
     }
 }
 
@@ -248,11 +254,11 @@ fn core_word_is_negative(xs: &mut State) -> Xresult {
 }
 
 fn core_word_min(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, |a, b| a.min(b), |a,b| a.min(b))
+    arithmetic_ops_real(xs, |a, b| a.min(b), |a, b| a.min(b))
 }
 
 fn core_word_max(xs: &mut State) -> Xresult {
-    arithmetic_ops_real(xs, |a, b| a.max(b), |a,b| a.max(b))
+    arithmetic_ops_real(xs, |a, b| a.max(b), |a, b| a.max(b))
 }
 
 fn core_word_rem(xs: &mut State) -> Xresult {
@@ -318,7 +324,7 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 +"));
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("+"));
         match xs.eval("\"s\" 1 +") {
-            Err(Xerr::TypeErrorMsg{..}) => (),
+            Err(Xerr::TypeErrorMsg { .. }) => (),
             other => panic!("result {:?}", other),
         }
         xs.eval("1 1 and").unwrap();
@@ -371,7 +377,7 @@ mod tests {
         xs.eval("-1.0 0.0 min").unwrap();
         assert_eq!(Ok(Cell::from(-1.0)), xs.pop_data());
         xs.eval("-1 0 max").unwrap();
-        assert_eq!(Ok(Cell::from(0u32)), xs.pop_data());        
+        assert_eq!(Ok(Cell::from(0u32)), xs.pop_data());
     }
 
     #[test]
@@ -399,8 +405,14 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.eval(&format!("{} negate", Xint::MAX)));
         assert_ne!(OK, xs.eval(&format!("{} negate", Xint::MIN)));
-        assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MAX))));
-        assert_eq!(OK, xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MIN))));
+        assert_eq!(
+            OK,
+            xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MAX)))
+        );
+        assert_eq!(
+            OK,
+            xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MIN)))
+        );
     }
 
     #[test]

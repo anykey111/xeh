@@ -1,12 +1,20 @@
-use crate::prelude::{Xbitstr, Xstr, Xsubstr, Cell};
+use crate::prelude::{Cell, Xbitstr, Xstr, Xsubstr};
 
 use std::fmt;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Xerr {
     UnknownWord(Xstr),
-    ParseError { msg: Xstr, substr: Xsubstr, pos: usize },
-    StrDecodeError { msg: Xstr, bytes: Vec<u8>, pos: usize },
+    ParseError {
+        msg: Xstr,
+        substr: Xsubstr,
+        pos: usize,
+    },
+    StrDecodeError {
+        msg: Xstr,
+        bytes: Vec<u8>,
+        pos: usize,
+    },
     ExpectingName,
     ControlFlowError,
     IntegerOverflow,
@@ -16,20 +24,39 @@ pub enum Xerr {
     LoopStackUnderflow,
     SpecialStackUnderflow,
     TypeError,
-    TypeErrorMsg { val: Cell, msg: Xstr },
+    TypeErrorMsg {
+        val: Cell,
+        msg: Xstr,
+    },
     InvalidAddress,
-    IOError { filename: Xstr, reason: Xstr, },
+    IOError {
+        filename: Xstr,
+        reason: Xstr,
+    },
     OutOfBounds(usize),
     AssertFailed,
-    AssertEqFailed { a: Cell, b: Cell },
+    AssertEqFailed {
+        a: Cell,
+        b: Cell,
+    },
     InternalError,
     // bitstring errors
-    ReadError { src: Xbitstr, len: usize },
-    SeekError { src: Xbitstr, offset: usize },
-    MatchError { src: Xbitstr, expect: Xbitstr, fail_pos: usize },
+    ReadError {
+        src: Xbitstr,
+        len: usize,
+    },
+    SeekError {
+        src: Xbitstr,
+        offset: usize,
+    },
+    MatchError {
+        src: Xbitstr,
+        expect: Xbitstr,
+        fail_pos: usize,
+    },
     ToBytestrError(Xbitstr),
     BitstrSliceError(Xbitstr),
-    // just text error 
+    // just text error
     ErrorMsg(Xstr),
     // Stop interpreter execution
     Exit(isize),
@@ -50,8 +77,13 @@ impl fmt::Display for Xerr {
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
             Xerr::SpecialStackUnderflow => f.write_str("unbalanced vector"),
             Xerr::TypeError => f.write_str("unexpected type"),
-            Xerr::TypeErrorMsg { val, msg } => write!(f, "expected {}, found {}\n# {:?}",
-                msg, val.type_name(), val),
+            Xerr::TypeErrorMsg { val, msg } => write!(
+                f,
+                "expected {}, found {}\n# {:?}",
+                msg,
+                val.type_name(),
+                val
+            ),
             Xerr::ExpectingName => f.write_str("expecting a word name"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
@@ -60,21 +92,40 @@ impl fmt::Display for Xerr {
             Xerr::AssertEqFailed { a, b } => {
                 f.write_str("assertion failed:")?;
                 writeln!(f, "# {:?}", a)?;
-                write!(f,   "# {:?}", b)
-            },
+                write!(f, "# {:?}", b)
+            }
             Xerr::InternalError => f.write_str("InternalError"),
-            Xerr::ToBytestrError {..} => f.write_str("bytestr need to be divisible by 8"),
-            Xerr::BitstrSliceError {..} => f.write_str("bitstr not aligned to byte boundary"),
-            Xerr::Exit{..} => f.write_str("Exit"),
+            Xerr::ToBytestrError { .. } => f.write_str("bytestr need to be divisible by 8"),
+            Xerr::BitstrSliceError { .. } => f.write_str("bitstr not aligned to byte boundary"),
+            Xerr::Exit { .. } => f.write_str("Exit"),
             Xerr::ReadError { src, len } => {
-                write!(f, "trying to read {} bits while only {} remain", len, src.len())
+                write!(
+                    f,
+                    "trying to read {} bits while only {} remain",
+                    len,
+                    src.len()
+                )
             }
             Xerr::SeekError { src, offset } => {
-                write!(f, "bitstr offset {} out of range {}..{}", offset, src.start(), src.end())
+                write!(
+                    f,
+                    "bitstr offset {} out of range {}..{}",
+                    offset,
+                    src.start(),
+                    src.end()
+                )
             }
-            Xerr::MatchError { src, expect, fail_pos} => {
+            Xerr::MatchError {
+                src,
+                expect,
+                fail_pos,
+            } => {
                 let fail_pos = *fail_pos;
-                writeln!(f, "source bits are differ from pattern at offset {}", fail_pos)?;
+                writeln!(
+                    f,
+                    "source bits are differ from pattern at offset {}",
+                    fail_pos
+                )?;
                 write!(f, " [")?;
                 let (_, src_diff) = src.split_at(fail_pos).unwrap();
                 for (x, _) in src_diff.iter8().take(8) {
@@ -83,7 +134,7 @@ impl fmt::Display for Xerr {
                 writeln!(f, " ] source at {}", src.start() + fail_pos)?;
                 write!(f, " [")?;
                 let (_, pat_diff) = expect.split_at(fail_pos).unwrap();
-                for (x, _) in pat_diff.iter8().take(8){
+                for (x, _) in pat_diff.iter8().take(8) {
                     write!(f, " {:02X}", x)?
                 }
                 write!(f, " ] pattern at {}", expect.start() + fail_pos)

@@ -2,7 +2,6 @@ use crate::cell::*;
 
 pub type CellBox = std::rc::Rc<Cell>;
 
-
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct RelativeJump(i32);
 
@@ -71,11 +70,9 @@ mod tests {
         assert_eq!(24, std::mem::size_of::<Xbitstr>());
     }
 
-
     #[test]
     fn test_jump_offset() {
         assert_eq!(RelativeJump(2), RelativeJump::from_to(2, 4));
         assert_eq!(RelativeJump(-2), RelativeJump::from_to(4, 2));
     }
-
 }
