@@ -57,11 +57,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", word_dump_at)?;
     xs.defword("bits", word_bits)?;
     xs.defword("bytes", word_bytes)?;
-    xs.defword("kbytes", word_kbytes)?;
-    xs.defword("mbytes", word_mbytes)?;
-    xs.defword("b>", to_num_bytes)?;
-    xs.defword("kb>", to_num_kbytes)?;
-    xs.defword("mb>", to_num_mbytes)?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-not", word_bitstr_not)?;
     xs.defword("bitstr-and", bitstring_and)?;
@@ -457,31 +452,6 @@ fn word_bytes(xs: &mut Xstate) -> Xresult {
     read_bits(xs, n * 8)
 }
 
-fn word_kbytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    read_bits(xs, n * 8 * 1024)
-}
-
-fn word_mbytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    read_bits(xs, n * 8 * 1024 * 1024)
-}
-
-fn to_num_bytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    xs.push_data(Cell::from(n * 8))
-}
-
-fn to_num_kbytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    xs.push_data(Cell::from(n * 8 * 1024))
-}
-
-fn to_num_mbytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
-    xs.push_data(Cell::from(n * 8 * 1024 * 1024))
-}
-
 fn word_bits(xs: &mut Xstate) -> Xresult {
     let n = take_length(xs)?;
     read_bits(xs, n)
@@ -678,15 +648,6 @@ mod tests {
     }
 
     #[test]
-    fn test_xbytes() {
-        let mut xs = Xstate::boot().unwrap();
-        let s: Vec<u8> = (0..1024 * 1024 + 1024).map(|_| 1).collect();
-        xs.set_binary_input(Xbitstr::from(s)).unwrap();
-        xs.eval("1 kbytes 1 mbytes remain").unwrap();
-        assert_eq!(0, xs.pop_data().unwrap().to_usize().unwrap());
-    }
-
-    #[test]
     fn test_bytestr_slice() {
         let bs = Bitstr::from(vec![1, 2]);
         assert!(bs.slice().is_some());
@@ -704,17 +665,6 @@ mod tests {
             Some(Cow::Borrowed(_)) => (),
             other => panic!("{:?}", other),
         }
-    }
-
-    #[test]
-    fn test_to_num_bytes() {
-        let mut xs = Xstate::boot().unwrap();
-        xs.eval("2 b>").unwrap();
-        assert_eq!(16, xs.pop_data().unwrap().to_usize().unwrap());
-        xs.eval("4 kb>").unwrap();
-        assert_eq!(32768, xs.pop_data().unwrap().to_usize().unwrap());
-        xs.eval("3 mb>").unwrap();
-        assert_eq!(25165824, xs.pop_data().unwrap().to_usize().unwrap());
     }
 
     #[test]
