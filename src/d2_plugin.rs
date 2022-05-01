@@ -152,8 +152,8 @@ mod tests {
         W H d2-resize
         H 0 do
             W 0 do
-                j W * i + d2-color!
-                i j d2-data!
+                J W * I + d2-color!
+                I J d2-data!
             loop
         loop
         d2-capture-rgba

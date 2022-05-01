@@ -626,9 +626,9 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.defword("doc", core_word_doc)?;
         self.defword("help", core_word_help)?;
-        self.defword("i", core_word_counter_i)?;
-        self.defword("j", core_word_counter_j)?;
-        self.defword("k", core_word_counter_k)?;
+        self.defword("I", core_word_counter_i)?;
+        self.defword("J", core_word_counter_j)?;
+        self.defword("K", core_word_counter_k)?;
         self.defword("length", core_word_length)?;
         self.defword("get", core_word_get)?;
         self.defword("sort", core_word_sort)?;
@@ -2068,26 +2068,26 @@ mod tests {
     fn test_for_loop() {
         let mut xs = State::boot().unwrap();
         // short form for [0 3]
-        xs.eval("3 0 do i loop").unwrap();
+        xs.eval("3 0 do I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start with negative
         let mut xs = State::boot().unwrap();
-        xs.eval(" 1 -1 do i loop").unwrap();
+        xs.eval(" 1 -1 do I loop").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // start from zero
         let mut xs = State::boot().unwrap();
-        xs.eval(" 3 0 do i loop").unwrap();
+        xs.eval(" 3 0 do I loop").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // counters
         let mut xs = State::boot().unwrap();
-        xs.eval(" 6 5 do 3 2 do 1 0 do i j k loop loop loop")
+        xs.eval(" 6 5 do 3 2 do 1 0 do I J K loop loop loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
@@ -2183,7 +2183,7 @@ mod tests {
         eval_ok!(xs, "( 2 2 + )");
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
         eval_ok!(xs, "10 var x  ( ( x nil assert-eq  ) )");
-        eval_ok!(xs, "(  [ x 0 do i loop ] )");
+        eval_ok!(xs, "(  [ x 0 do I loop ] )");
         let v = xs.pop_data().unwrap().to_vec().unwrap();
         assert_eq!(10, v.len());
         eval_ok!(xs, ": f [ ( 3 3 * ) ] ; f 0 get");
@@ -2260,7 +2260,7 @@ mod tests {
         xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase")
             .unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("10 0 do i i case 5 of leave endof drop endcase loop")
+        xs.eval("10 0 do I I case 5 of leave endof drop endcase loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }
@@ -2357,7 +2357,7 @@ mod tests {
         let snapshot = |xs: &State| (xs.data_stack.clone(), xs.loops.clone());
         let mut xs = State::boot().unwrap();
         xs.set_recording_enabled(true);
-        xs.compile("[ 3 0 do i loop ] length").unwrap();
+        xs.compile("[ 3 0 do I loop ] length").unwrap();
         let mut log = Vec::new();
         for _ in 0..3 {
             while xs.ip() != xs.code.len() {

@@ -107,7 +107,7 @@ The index of the innermost loop can be accessed with *i*
 "
 dup "do" doc
 dup "loop" doc
-dup "i" doc
-dup "j" doc
- "k" doc
+dup "I" doc
+dup "J" doc
+ "K" doc
 )
