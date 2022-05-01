@@ -11,4 +11,4 @@ dup tag-of "b" assert-eq
 
 dup tag-of tag-of "c" assert-eq
 
-22 33 , tag-of 33 assert-eq
+22 33 with-tag tag-of 33 assert-eq

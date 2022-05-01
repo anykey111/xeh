@@ -13,11 +13,6 @@
 Stick tag to the val. If value already has a tag drop the old one."
 "with-tag" doc-for-tags!
 
-
-"( val tag -- val )
-Shorthand for \"with-tag\"."
-"," doc-for-tags!
-
 "( val -- tag )
 Read tag of the value or nil if tag is absent."
 "tag-of" doc-for-tags!

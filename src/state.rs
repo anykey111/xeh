@@ -650,7 +650,6 @@ impl State {
         self.defword("load", core_word_load)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
-        self.defword(",", core_word_with_tag)?;
         self.defword("insert-tagged", core_word_insert_tagged)?;
         self.defword("get-tagged", core_word_get_tagged)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
