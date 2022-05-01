@@ -134,7 +134,7 @@ pub enum ReverseStep {
 }
 
 #[derive(Clone)]
-struct ErrorContext {
+pub struct ErrorContext {
     err: Xerr,
     location: Option<TokenLocation>,
 }
@@ -230,10 +230,11 @@ impl State {
         Vec::from_iter(self.dict.iter().map(|e| e.name.clone()))
     }
 
-    pub fn last_error(&self) -> Option<(&Xerr, &TokenLocation)> {
-        self.last_error
-            .as_ref()
-            .and_then(|ec| ec.location.as_ref().map(|loc| (&ec.err, loc)))
+    pub fn last_error(&self) -> Option<&Xerr> {
+        self.last_error.as_ref().map(|x| &x.err)
+    }
+    pub fn last_err_location(&self) -> Option<&TokenLocation> {
+        self.last_error.as_ref().and_then(|x| x.location.as_ref())
     }
 
     pub fn location_from_current_ip(&self) -> Option<TokenLocation> {
@@ -428,12 +429,12 @@ impl State {
 
     fn next_token(&mut self) -> Xresult1<Tok> {
         let lex = self.input.last_mut().expect("input source");
-        let tok = lex.next()?;
+        let res = lex.next();
         self.last_token = lex.last_token();
-        if tok == Tok::EndOfInput {
+        if res == Ok(Tok::EndOfInput) {
             self.input.pop();
         }
-        return Ok(tok);
+        res
     }
 
     fn context_open(&mut self, mode: ContextMode) -> Xresult {
@@ -1991,13 +1992,19 @@ mod tests {
     }
 
     #[test]
-    fn test_flow_last_err() {
+    fn test_last_err_loc() {
+        // control flow
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::ControlFlowError), xs.eval(" if "));
-        assert_ne!(None, xs.last_error());
+        assert_ne!(None, xs.last_err_location());
+        // end of file
         let mut xs = State::boot().unwrap();
         assert_ne!(OK, xs.eval(" ( "));
-        assert_ne!(None, xs.last_error());
+        assert_ne!(None, xs.last_err_location());
+        // parse error test
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" 2d "));
+        assert_ne!(None, xs.last_err_location());
     }
 
     #[test]
