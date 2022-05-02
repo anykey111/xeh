@@ -430,8 +430,8 @@ impl State {
     fn next_token(&mut self) -> Xresult1<Tok> {
         let lex = self.input.last_mut().expect("input source");
         let res = lex.next();
-        self.last_token = lex.last_token();
-        if res == Ok(Tok::EndOfInput) {
+        self.last_token = Some(lex.last_substr());
+        if let Ok(Tok::EndOfInput) = &res {
             self.input.pop();
         }
         res

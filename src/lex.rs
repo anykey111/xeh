@@ -32,8 +32,8 @@ impl fmt::Debug for TokenLocation {
 pub struct Lex {
     buf: Xstr,
     pos: usize,
-    last_substr: Option<Xsubstr>,
     tmp: String,
+    start_pos: usize,
 }
 
 const PARSE_INT_ERRMSG: Xstr = arcstr::literal!("parse int error");
@@ -47,13 +47,9 @@ impl Lex {
         Self {
             buf,
             pos: 0,
-            last_substr: None,
+            start_pos: 0,
             tmp: String::new(),
         }
-    }
-
-    pub fn last_token(&self) -> Option<Xsubstr> {
-        self.last_substr.clone()
     }
 
     fn peek_char(&self) -> Option<char> {
@@ -84,8 +80,13 @@ impl Lex {
         }
     }
 
+    pub fn last_substr(&self) -> Xsubstr {
+        self.buf.substr(self.start_pos..self.pos)
+    }
+
     pub fn next(&mut self) -> Xresult1<Tok> {
         self.skip_whitespaces();
+        self.start_pos = self.pos;
         let start = self.pos;
         match self.take_char() {
             None => Ok(Tok::EndOfInput),
@@ -115,8 +116,6 @@ impl Lex {
                             }
                         }
                     } else if c == '"' {
-                        let ss = self.buf.substr(start..self.pos);
-                        self.last_substr = Some(ss);
                         let val = Xcell::Str(Xstr::from(&self.tmp));
                         let ws = self
                             .peek_char()
@@ -184,28 +183,27 @@ impl Lex {
                     }
                     self.take_char();
                 }
-                let ss = self.buf.substr(start..self.pos);
-                self.last_substr = Some(ss.clone());
+                let substr = self.buf.substr(start..self.pos);
                 if !num_prefix {
-                    return Ok(Tok::Word(ss));
+                    return Ok(Tok::Word(substr));
                 }
                 let val = if has_dot && radix == 10 {
                     if radix != 10 {
                         return Err(Xerr::ParseError {
                             msg: PARSE_FLOAT_ERRMSG,
-                            substr: self.buf.substr(start..self.pos),
+                            substr,
                         });
                     }
                     let r: Xreal = self.tmp.parse().map_err(|_| Xerr::ParseError {
                         msg: PARSE_FLOAT_ERRMSG,
-                        substr: self.buf.substr(start..self.pos),
+                        substr,
                     })?;
                     Cell::Real(r)
                 } else {
                     let i =
                         Xint::from_str_radix(&self.tmp, radix).map_err(|_| Xerr::ParseError {
                             msg: PARSE_INT_ERRMSG,
-                            substr: self.buf.substr(start..self.pos),
+                            substr,
                         })?;
                     Cell::Int(i)
                 };
