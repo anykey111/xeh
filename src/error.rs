@@ -8,7 +8,6 @@ pub enum Xerr {
     ParseError {
         msg: Xstr,
         substr: Xsubstr,
-        pos: usize,
     },
     StrDecodeError {
         msg: Xstr,
