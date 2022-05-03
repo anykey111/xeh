@@ -6,7 +6,7 @@ use crate::fmt_flags::FmtFlags;
 use crate::lex::*;
 use crate::opcodes::*;
 
-use std::fmt::Debug;
+use std::fmt;
 use std::iter::FromIterator;
 use std::ops::Range;
 
@@ -39,14 +39,14 @@ impl DictEntry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct FunctionFlow {
+pub(crate) struct FunctionFlow {
     dict_idx: usize,
     start: usize,
     locals: Vec<Xsubstr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Flow {
+pub(crate) enum Flow {
     If(usize),
     Else(usize),
     Begin(usize),
@@ -356,11 +356,10 @@ impl State {
             match self.next_token()? {
                 Tok::EndOfInput => {
                     if self.nested.len() != ctx_depth {
-                        let msg = arcstr::literal!("unexpect end of file");
-                        break Err(Xerr::ErrorMsg(msg));
+                        break Err(Xerr::unbalanced_context());
                     }
                     if self.has_pending_flow() {
-                        break Err(Xerr::ControlFlowError);
+                        break Err(Xerr::unbalanced_flow2(self.flow_stack.last()));
                     }
                     break OK;
                 }
@@ -465,7 +464,7 @@ impl State {
                 self.code.truncate(self.ctx.cs_len);
             }
         }
-        let mut prev = self.nested.pop().ok_or_else(|| Xerr::ControlFlowError)?;
+        let mut prev = self.nested.pop().ok_or_else(|| Xerr::unbalanced_context())?;
         if prev.mode == self.ctx.mode {
             if self.ctx.mode == ContextMode::Eval {
                 // preserve current ip value
@@ -1110,11 +1109,11 @@ impl State {
         self.ctx.ip += 1;
     }
 
-    fn pop_flow(&mut self) -> Xresult1<Flow> {
+    fn pop_flow(&mut self) -> Option<Flow> {
         if self.flow_stack.len() > self.ctx.fs_len {
-            self.flow_stack.pop().ok_or_else(|| Xerr::ControlFlowError)
+            self.flow_stack.pop()
         } else {
-            Err(Xerr::ControlFlowError)
+            None
         }
     }
 
@@ -1299,15 +1298,15 @@ impl State {
         OK
     }
 
-    fn pop_special(&mut self) -> Xresult1<Special> {
+    fn pop_special(&mut self) -> Option<Special> {
         if self.special.len() > self.ctx.ss_ptr {
-            let s = self.special.pop().ok_or_else(|| Xerr::InternalError)?;
+            let s = self.special.pop().unwrap();
             if self.is_recording() {
                 self.add_reverse_step(ReverseStep::PushSpecial(s.clone()));
             }
-            Ok(s)
+            Some(s)
         } else {
-            Err(Xerr::SpecialStackUnderflow)
+            None
         }
     }
 }
@@ -1400,12 +1399,12 @@ fn core_word_begin(xs: &mut State) -> Xresult {
 }
 
 fn core_word_until(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::Begin(begin_org) => {
+    match xs.pop_flow() {
+        Some(Flow::Begin(begin_org)) => {
             let offs = jump_offset(xs.code_origin(), begin_org);
             xs.code_emit(Opcode::JumpIf(offs))
         }
-        _ => Err(Xerr::ControlFlowError),
+        _ => Err(Xerr::unbalanced_flow())
     }
 }
 
@@ -1417,41 +1416,42 @@ fn core_word_while(xs: &mut State) -> Xresult {
 
 fn core_word_again(xs: &mut State) -> Xresult {
     loop {
-        match xs.pop_flow()? {
-            Flow::Leave(org) => {
+        match xs.pop_flow() {
+            Some(Flow::Leave(org)) => {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
-            Flow::Begin(begin_org) => {
+            Some(Flow::Begin(begin_org)) => {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
-            _ => break Err(Xerr::ControlFlowError),
+            _ => break Err(Xerr::unbalanced_flow())
         }
     }
 }
 
 fn core_word_repeat(xs: &mut State) -> Xresult {
     loop {
-        match xs.pop_flow()? {
-            Flow::Leave(org) => {
+        match xs.pop_flow() {
+            Some(Flow::Leave(org)) => {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
-            Flow::Begin(begin_org) => {
+            // todo: forbig begin ... repeat endless loop ?
+            Some(Flow::Begin(begin_org)) => {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
-            Flow::While(cond_org) => match xs.pop_flow()? {
-                Flow::Begin(begin_org) => {
+            Some(Flow::While(cond_org)) => match xs.pop_flow() {
+                Some(Flow::Begin(begin_org)) => {
                     let offs = jump_offset(cond_org, xs.code_origin() + 1);
                     xs.backpatch_jump(cond_org, offs)?;
                     let offs = jump_offset(xs.code_origin(), begin_org);
                     break xs.code_emit(Opcode::Jump(offs));
                 }
-                _ => break Err(Xerr::ControlFlowError),
+                _ => break Err(Xerr::unbalanced_flow()),
             },
-            _ => break Err(Xerr::ControlFlowError),
+            _ => break Err(Xerr::unbalanced_flow()),
         }
     }
 }
@@ -1472,9 +1472,9 @@ fn core_word_vec_begin(xs: &mut State) -> Xresult {
 }
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::Vec => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end))),
-        _ => Err(Xerr::ControlFlowError),
+    match xs.pop_flow() {
+        Some(Flow::Vec) => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end))),
+        _ => Err(Xerr::unbalanced_vec_builder())
     }
 }
 
@@ -1484,12 +1484,11 @@ fn vec_builder_begin(xs: &mut State) -> Xresult {
 }
 
 fn vec_builder_end(xs: &mut State) -> Xresult {
-    match xs.pop_special()? {
-        Special::VecStackStart(stack_ptr) => {
+    match xs.pop_special() {
+        Some(Special::VecStackStart(stack_ptr)) => {
             let top_ptr = xs.data_stack.len();
             if top_ptr < stack_ptr {
-                const ERRMSG: Xstr = arcstr::literal!("vector stack unbalanced");
-                Err(Xerr::ErrorMsg(ERRMSG))
+                Err(Xerr::vec_stack_underflow())
             } else {
                 let mut v = Xvec::new();
                 for x in &xs.data_stack[stack_ptr..] {
@@ -1501,6 +1500,7 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
                 xs.push_data(Cell::from(v))
             }
         }
+        _ => Err(Xerr::unbalanced_vec_builder()),
     }
 }
 
@@ -1527,10 +1527,10 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_end(xs: &mut State) -> Xresult {
-    match xs.pop_flow()? {
-        Flow::Fun(FunctionFlow {
+    match xs.pop_flow() {
+        Some(Flow::Fun(FunctionFlow {
             start, dict_idx, ..
-        }) => {
+        })) => {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
             let fun_len = xs.code_origin() - start;
@@ -1547,7 +1547,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             }
             xs.backpatch_jump(start, offs)
         }
-        _ => Err(Xerr::ControlFlowError),
+        _ => Err(Xerr::unbalanced_flow()),
     }
 }
 
@@ -1667,18 +1667,18 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::Loop(RelativeJump::uninit()))?;
     let stop_org = xs.code_origin();
     loop {
-        match xs.pop_flow()? {
-            Flow::Leave(org) => {
+        match xs.pop_flow() {
+            Some(Flow::Leave(org)) => {
                 let stop_rel = jump_offset(org, stop_org);
                 xs.backpatch(org, Opcode::Break(stop_rel))?;
             }
-            Flow::Do { for_org, body_org } => {
+            Some(Flow::Do { for_org, body_org }) => {
                 let stop_rel = jump_offset(for_org, stop_org);
                 xs.backpatch(for_org, Opcode::Do(stop_rel))?;
                 let body_rel = jump_offset(loop_org, body_org);
                 break xs.backpatch(loop_org, Opcode::Loop(body_rel));
             }
-            _ => break Err(Xerr::ControlFlowError),
+            _ => break Err(Xerr::unbalanced_flow()),
         }
     }
 }
@@ -1894,6 +1894,13 @@ fn core_word_get_tagged(xs: &mut State) -> Xresult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! eval_boot {
+        ($e:expr) => {{
+            let mut xs = State::boot().unwrap();
+            xs.eval($e)
+        }}
+    }
 
     macro_rules! eval_ok {
         ($xs:expr,$e:expr) => {
@@ -2446,6 +2453,13 @@ mod tests {
     fn test_tagged() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, include_str!("test-tagged.xeh"));
+    }
+
+    #[test]
+    fn test_unbalanced_flow() {
+        assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("[1 2 ]"));
+        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
+        assert_eq!(Err(Xerr::unbalanced_flow()), eval_boot!(" ) "));
     }
 
     #[test]

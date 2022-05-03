@@ -1,4 +1,5 @@
 use crate::prelude::{Cell, Xbitstr, Xstr, Xsubstr};
+use crate::state::Flow;
 
 use std::fmt;
 
@@ -15,7 +16,7 @@ pub enum Xerr {
         pos: usize,
     },
     ExpectingName,
-    ControlFlowError,
+    ControlFlowError,// { msg: Xstr },
     IntegerOverflow,
     DivisionByZero,
     StackUnderflow,
@@ -70,7 +71,7 @@ impl fmt::Display for Xerr {
             Xerr::StrDecodeError { msg, .. } => write!(f, "{}", msg),
             Xerr::IntegerOverflow => f.write_str("integer overflow"),
             Xerr::DivisionByZero => f.write_str("division by zero"),
-            Xerr::ControlFlowError => f.write_str("control flow error"),
+            Xerr::ControlFlowError{..} => f.write_str("control flow error"),
             Xerr::StackUnderflow => f.write_str("stack underflow"),
             Xerr::ReturnStackUnderflow => f.write_str("return stack underflow"),
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
@@ -142,8 +143,58 @@ impl fmt::Display for Xerr {
     }
 }
 
+macro_rules! errmsg {
+    ($msg:expr) => {{
+        const MSG: Xstr = arcstr::literal!($msg);
+        MSG
+    }};
+}
+
+impl Xerr {
+    pub(crate) fn unbalanced_flow() -> Xerr {
+        let msg = errmsg!("unbalanced control flow");
+        Xerr::ControlFlowError
+    }
+    
+    pub(crate) fn unbalanced_flow2(_flow: Option<&Flow>) -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_vec_builder() -> Xerr {
+        //let msg = errmsg!("unbalanced vector builder");
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn vec_stack_underflow() -> Xerr {
+        // "vector builder stack underflow"
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_context() -> Xerr {
+        Xerr::ErrorMsg(errmsg!("unbalanced context"))
+    }
+}
 pub type Xresult = Xresult1<()>;
 
 pub type Xresult1<T> = Result<T, Xerr>;
 
 pub const OK: Xresult = Ok(());
+
+
+// impl fmt::Display for Flow {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             Flow::If{..} => write!(f, "if"),
+//             Flow::Else{..} => write!(f, "else"),
+//             Flow::Begin{..} => write!(f, "begin"),
+//             Flow::While{..} => write!(f, "while"),
+//             Flow::Leave{..} => write!(f, "leave"),
+//             Flow::Case{..} => write!(f, "case"),
+//             Flow::CaseOf{..} => write!(f, "of"),
+//             Flow::CaseEndOf{..} => write!(f, "endof"),
+//             Flow::Vec{..} => write!(f, "vector"),
+//             Flow::Fun{..} => write!(f, "function"),
+//             Flow::Do{..} => write!(f, "do"),
+//         }
+//     }
+// }
