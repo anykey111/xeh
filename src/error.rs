@@ -16,13 +16,12 @@ pub enum Xerr {
         pos: usize,
     },
     ExpectingName,
-    ControlFlowError,// { msg: Xstr },
+    ControlFlowError { msg: Xstr },
     IntegerOverflow,
     DivisionByZero,
     StackUnderflow,
     ReturnStackUnderflow,
     LoopStackUnderflow,
-    SpecialStackUnderflow,
     TypeError,
     TypeErrorMsg {
         val: Cell,
@@ -71,11 +70,10 @@ impl fmt::Display for Xerr {
             Xerr::StrDecodeError { msg, .. } => write!(f, "{}", msg),
             Xerr::IntegerOverflow => f.write_str("integer overflow"),
             Xerr::DivisionByZero => f.write_str("division by zero"),
-            Xerr::ControlFlowError{..} => f.write_str("control flow error"),
+            Xerr::ControlFlowError { msg} => f.write_str(msg),
             Xerr::StackUnderflow => f.write_str("stack underflow"),
             Xerr::ReturnStackUnderflow => f.write_str("return stack underflow"),
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
-            Xerr::SpecialStackUnderflow => f.write_str("unbalanced vector"),
             Xerr::TypeError => f.write_str("unexpected type"),
             Xerr::TypeErrorMsg { val, msg } => write!(
                 f,
@@ -151,51 +149,100 @@ macro_rules! errmsg {
 }
 
 impl Xerr {
-    pub(crate) fn unbalanced_flow() -> Xerr {
-        let msg = errmsg!("unbalanced control flow");
-        Xerr::ControlFlowError
+
+    pub(crate) fn unbalanced_flow(flow: Option<&Flow>) -> Xerr {
+        match flow {
+            Some(Flow::If{..}) => Self::unbalanced_endif(),
+            Some(Flow::Else{..}) => Self::unbalanced_endif(),
+            Some(Flow::Begin{..}) => Self::unbalanced_repeat(),
+            Some(Flow::While{..}) => Self::unbalanced_repeat(),
+            Some(Flow::Leave{..}) => Self::unbalanced_leave(),
+            Some(Flow::Case{..}) => Self::unbalanced_endcase(),
+            Some(Flow::CaseOf{..}) => Self::unbalanced_endof(),
+            Some(Flow::CaseEndOf{..}) => Self::unbalanced_endcase(),
+            Some(Flow::Vec{..}) => Self::unbalanced_vec_builder(),
+            Some(Flow::Fun{..}) => Self::unbalanced_fn_builder(),
+            Some(Flow::Do{..}) => Self::unbalanced_loop(),
+            None => {
+                let msg = errmsg!("unbalanced control flow");
+                Xerr::ControlFlowError { msg }
+            }
+        }
     }
-    
-    pub(crate) fn unbalanced_flow2(_flow: Option<&Flow>) -> Xerr {
-        Xerr::ControlFlowError
+
+    pub(crate) fn conditional_var_definition() -> Xerr {
+        let msg = errmsg!("variable definition must be unconditional");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn expect_fn_context() -> Xerr {
+        let msg = errmsg!("has no effect outside of the function control flow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_fn_builder() -> Xerr {
+        let msg = errmsg!("balance ; with preceding :");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_vec_builder() -> Xerr {
-        //let msg = errmsg!("unbalanced vector builder");
-        Xerr::ControlFlowError
+        let msg = errmsg!("unbalanced vector builder");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn vec_stack_underflow() -> Xerr {
-        // "vector builder stack underflow"
-        Xerr::ControlFlowError
+        let msg = errmsg!("vector stack underflow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_leave() -> Xerr {
+        let msg = errmsg!("leave used outside of the loop control flow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_loop() -> Xerr {
+        let msg = errmsg!("balance loop with preceding do");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_again() -> Xerr {
+        let msg = errmsg!("balance again with preceding begin");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_repeat() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance repeat with preceding begin/while");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_while() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance while with preceding begin");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_until() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance util with preceding begin");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_else() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance else with preceding if");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endif() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance endif with preceding if/else");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endcase() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance endcase with preceding case");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endof() -> Xerr {
-        Xerr::ControlFlowError
+        let msg = errmsg!("balance endof with preceding of");
+        Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_context() -> Xerr {
@@ -208,21 +255,3 @@ pub type Xresult1<T> = Result<T, Xerr>;
 
 pub const OK: Xresult = Ok(());
 
-
-// impl fmt::Display for Flow {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Flow::If{..} => write!(f, "if"),
-//             Flow::Else{..} => write!(f, "else"),
-//             Flow::Begin{..} => write!(f, "begin"),
-//             Flow::While{..} => write!(f, "while"),
-//             Flow::Leave{..} => write!(f, "leave"),
-//             Flow::Case{..} => write!(f, "case"),
-//             Flow::CaseOf{..} => write!(f, "of"),
-//             Flow::CaseEndOf{..} => write!(f, "endof"),
-//             Flow::Vec{..} => write!(f, "vector"),
-//             Flow::Fun{..} => write!(f, "function"),
-//             Flow::Do{..} => write!(f, "do"),
-//         }
-//     }
-// }

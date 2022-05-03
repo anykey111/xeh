@@ -358,7 +358,7 @@ impl State {
                         break Err(Xerr::unbalanced_context());
                     }
                     if self.has_pending_flow() {
-                        break Err(Xerr::unbalanced_flow2(self.flow_stack.last()));
+                        break Err(Xerr::unbalanced_flow(self.flow_stack.last()));
                     }
                     break OK;
                 }
@@ -1063,7 +1063,7 @@ impl State {
                 if self.special.len() > self.ctx.ss_ptr {
                     self.special.pop();
                 } else {
-                    return Err(Xerr::SpecialStackUnderflow);
+                    return Err(Xerr::unbalanced_vec_builder());
                 }
             }
             ReverseStep::DropLocal(_) => {
@@ -1424,7 +1424,7 @@ fn core_word_again(xs: &mut State) -> Xresult {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
-            _ => break Err(Xerr::unbalanced_flow())
+            _ => break Err(Xerr::unbalanced_again())
         }
     }
 }
@@ -1546,7 +1546,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             }
             xs.backpatch_jump(start, offs)
         }
-        _ => Err(Xerr::unbalanced_flow()),
+        _ => Err(Xerr::unbalanced_fn_builder()),
     }
 }
 
@@ -1561,20 +1561,19 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     let dict_idx = xs
         .top_function_flow()
         .map(|f| f.dict_idx)
-        .ok_or_else(|| Xerr::ControlFlowError)?;
+        .ok_or_else(|| Xerr::expect_fn_context())?;
     match xs
         .dict
         .get_mut(dict_idx)
-        .ok_or_else(|| Xerr::InvalidAddress)?
-        .entry
     {
-        Entry::Function {
-            ref mut immediate, ..
-        } => {
+        Some(DictEntry {
+            entry: Entry::Function { ref mut immediate, .. },
+            ..
+        }) => {
             *immediate = true;
             OK
         }
-        _ => Err(Xerr::ControlFlowError),
+        _ => Err(Xerr::expect_fn_context()),
     }
 }
 
@@ -1582,7 +1581,7 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     let ff = xs
         .top_function_flow()
-        .ok_or_else(|| Xerr::ControlFlowError)?;
+        .ok_or_else(|| Xerr::expect_fn_context())?;
     let idx = ff.locals.len();
     ff.locals.push(name);
     xs.code_emit(Opcode::InitLocal(idx))
@@ -1591,8 +1590,7 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
 fn core_word_variable(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if !xs.flow_stack.is_empty() {
-        //FIXME: do something with variables
-        return Err(Xerr::ControlFlowError);
+        return Err(Xerr::conditional_var_definition());
     }
     let a = xs.alloc_cell(Cell::Nil)?;
     xs.dict_insert(DictEntry::new(name, Entry::Variable(a)))?;
@@ -1626,7 +1624,7 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     if xs.ctx.mode != ContextMode::MetaEval {
         Err(Xerr::unbalanced_context())
     } else if xs.has_pending_flow() {
-        Err(Xerr::unbalanced_flow2(xs.flow_stack.last()))
+        Err(Xerr::unbalanced_flow(xs.flow_stack.last()))
     } else {
         debug_assert!(xs.loops.len() == xs.ctx.ls_len);
         xs.context_close()
@@ -1678,7 +1676,7 @@ fn core_word_loop(xs: &mut State) -> Xresult {
                 let body_rel = jump_offset(loop_org, body_org);
                 break xs.backpatch(loop_org, Opcode::Loop(body_rel));
             }
-            _ => break Err(Xerr::unbalanced_flow()),
+            _ => break Err(Xerr::unbalanced_loop()),
         }
     }
 }
@@ -1988,21 +1986,21 @@ mod tests {
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         // test errors
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222 else 333"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222 else 333"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222 else"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222 else"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 if 222"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("1 else 222 then"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("else 222 if"));
+        assert_eq!(Err(Xerr::unbalanced_else()), xs.compile("1 else 222 endif"));
+        assert_eq!(Err(Xerr::unbalanced_else()), xs.compile("else 222 if"));
     }
 
     #[test]
     fn test_last_err_loc() {
         // control flow
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::ControlFlowError), xs.eval(" if "));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval(" if "));
         assert_ne!(None, xs.last_err_location());
         // end of file
         let mut xs = State::boot().unwrap();
@@ -2017,8 +2015,8 @@ mod tests {
     #[test]
     fn test_if_var() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("0 if 100 var X endif");
-        assert_eq!(Err(Xerr::ControlFlowError), res);
+        let res = xs.eval("nil if 100 var X endif 10 -> X");
+        assert_eq!(Err(Xerr::conditional_var_definition()), res);
     }
 
     #[test]
@@ -2039,14 +2037,14 @@ mod tests {
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x 0 <> while 0 -> x repeat").unwrap();
         assert_eq!(
-            Err(Xerr::ControlFlowError),
+            Err(Xerr::unbalanced_endif()),
             xs.compile("if begin endif repeat")
         );
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("again begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin endif while"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("until begin"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin again until"));
-        assert_eq!(Err(Xerr::ControlFlowError), xs.compile("begin until again"));
+        assert_eq!(Err(Xerr::unbalanced_again()), xs.compile("again begin"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("begin endif while"));
+        assert_eq!(Err(Xerr::unbalanced_until()), xs.compile("until begin"));
+        assert_eq!(Err(Xerr::unbalanced_until()), xs.compile("begin again until"));
+        assert_eq!(Err(Xerr::unbalanced_again()), xs.compile("begin until again"));
     }
 
     #[test]
@@ -2072,7 +2070,7 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
         let res = xs.compile("begin 1 again leave");
-        assert_eq!(Err(Xerr::ControlFlowError), res);
+        assert_eq!(Err(Xerr::unbalanced_leave()), res);
         let mut xs = State::boot().unwrap();
         xs.compile("begin 1 if leave else leave endif again")
             .unwrap();
@@ -2458,9 +2456,10 @@ mod tests {
     #[test]
     fn test_unbalanced_flow() {
         assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("[1 2 ]"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), eval_boot!("[ endif ]"));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
-        assert_eq!(Err(Xerr::unbalanced_flow()), eval_boot!(" ( do ) loop "));
+        assert_eq!(Err(Xerr::unbalanced_loop()), eval_boot!(" ( do ) loop "));
     }
 
     #[test]
@@ -2491,7 +2490,7 @@ mod tests {
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("[\n10 loop\n]");
-        assert_eq!(Err(Xerr::ControlFlowError), res);
+        assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
@@ -2503,7 +2502,7 @@ mod tests {
 
         let mut xs = State::boot().unwrap();
         let res = xs.compile("( [\n( loop )\n] )");
-        assert_eq!(Err(Xerr::ControlFlowError), res);
+        assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
@@ -2515,7 +2514,7 @@ mod tests {
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("\"src/test-location1.xs\" load");
-        assert_eq!(Err(Xerr::ControlFlowError), res);
+        assert_eq!(Err(Xerr::unbalanced_again()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
