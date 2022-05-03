@@ -153,7 +153,8 @@ pub struct State {
     special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
-    reverse_log: Option<Vec<ReverseStep>>,
+    // expose for rrlog debug
+    pub reverse_log: Option<Vec<ReverseStep>>,
     stdout: Option<String>,
     last_error: Option<ErrorContext>,
     last_token: Option<Xsubstr>,
@@ -462,6 +463,7 @@ impl State {
             if self.ctx.mode == ContextMode::MetaEval {
                 // purge meta context code after evaluation
                 self.code.truncate(self.ctx.cs_len);
+                self.debug_map.truncate(self.ctx.cs_len);
             }
         }
         if prev.mode == self.ctx.mode {
@@ -2460,6 +2462,14 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
         assert_eq!(Err(Xerr::unbalanced_loop()), eval_boot!(" ( do ) loop "));
+    }
+
+    #[test]
+    fn test_nested_debug_token() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("( 1 2 +  )"));
+        assert_eq!(xs.debug_map[0], ")");
+        assert_eq!(xs.code.len(), 1);
     }
 
     #[test]
