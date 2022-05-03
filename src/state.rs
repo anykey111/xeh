@@ -6,7 +6,6 @@ use crate::fmt_flags::FmtFlags;
 use crate::lex::*;
 use crate::opcodes::*;
 
-use std::fmt;
 use std::iter::FromIterator;
 use std::ops::Range;
 
@@ -457,6 +456,7 @@ impl State {
     }
 
     fn context_close(&mut self) -> Xresult {
+        let mut prev = self.nested.pop().ok_or_else(|| Xerr::unbalanced_context())?;
         if self.ctx.mode != ContextMode::Compile {
             self.run()?;
             if self.ctx.mode == ContextMode::MetaEval {
@@ -464,7 +464,6 @@ impl State {
                 self.code.truncate(self.ctx.cs_len);
             }
         }
-        let mut prev = self.nested.pop().ok_or_else(|| Xerr::unbalanced_context())?;
         if prev.mode == self.ctx.mode {
             if self.ctx.mode == ContextMode::Eval {
                 // preserve current ip value
@@ -1311,7 +1310,7 @@ impl State {
     }
 }
 
-fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
+fn take_first_cond_flow(xs: &mut State) -> Option<Flow> {
     for i in (xs.ctx.fs_len..xs.flow_stack.len()).rev() {
         let t = match xs.flow_stack[i] {
             Flow::If(_) => true,
@@ -1323,10 +1322,10 @@ fn take_first_cond_flow(xs: &mut State) -> Xresult1<Flow> {
             _ => break,
         };
         if t {
-            return Ok(xs.flow_stack.remove(i));
+            return Some(xs.flow_stack.remove(i));
         }
     }
-    Err(Xerr::ControlFlowError)
+    None
 }
 
 fn core_word_if(xs: &mut State) -> Xresult {
@@ -1336,9 +1335,9 @@ fn core_word_if(xs: &mut State) -> Xresult {
 }
 
 fn core_word_else(xs: &mut State) -> Xresult {
-    let if_org = match take_first_cond_flow(xs)? {
-        Flow::If(org) => org,
-        _ => return Err(Xerr::ControlFlowError),
+    let if_org = match take_first_cond_flow(xs) {
+        Some(Flow::If(org)) => org,
+        _ => return Err(Xerr::unbalanced_else()),
     };
     let else_org = xs.code_origin();
     xs.push_flow(Flow::Else(else_org))?;
@@ -1348,10 +1347,10 @@ fn core_word_else(xs: &mut State) -> Xresult {
 }
 
 fn core_word_endif(xs: &mut State) -> Xresult {
-    let if_org = match take_first_cond_flow(xs)? {
-        Flow::If(org) => org,
-        Flow::Else(org) => org,
-        _ => return Err(Xerr::ControlFlowError),
+    let if_org = match take_first_cond_flow(xs) {
+        Some(Flow::If(org)) => org,
+        Some(Flow::Else(org)) => org,
+        _ => return Err(Xerr::unbalanced_endif())
     };
     let offs = jump_offset(if_org, xs.code_origin());
     xs.backpatch_jump(if_org, offs)
@@ -1364,13 +1363,13 @@ fn case_word(xs: &mut State) -> Xresult {
 fn endcase_word(xs: &mut State) -> Xresult {
     let endcase_org = xs.code_origin();
     loop {
-        match take_first_cond_flow(xs)? {
-            Flow::CaseEndOf(endof_org) => {
+        match take_first_cond_flow(xs) {
+            Some(Flow::CaseEndOf(endof_org)) => {
                 let rel = jump_offset(endof_org, endcase_org);
                 xs.backpatch_jump(endof_org, rel)?;
             }
-            Flow::Case => break OK,
-            _ => break Err(Xerr::ControlFlowError),
+            Some(Flow::Case) => break OK,
+            _ => break Err(Xerr::unbalanced_endcase()),
         }
     }
 }
@@ -1382,15 +1381,15 @@ fn of_word(xs: &mut State) -> Xresult {
 }
 
 fn endof_word(xs: &mut State) -> Xresult {
-    match take_first_cond_flow(xs)? {
-        Flow::CaseOf(of_org) => {
+    match take_first_cond_flow(xs) {
+        Some(Flow::CaseOf(of_org)) => {
             let endof_org = xs.code_origin();
             xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
             let next_case_rel = jump_offset(of_org, xs.code_origin());
             xs.backpatch_jump(of_org, next_case_rel)?;
             xs.push_flow(Flow::CaseEndOf(endof_org))
         }
-        _ => Err(Xerr::ControlFlowError),
+        _ => Err(Xerr::unbalanced_endof()),
     }
 }
 
@@ -1404,7 +1403,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
             let offs = jump_offset(xs.code_origin(), begin_org);
             xs.code_emit(Opcode::JumpIf(offs))
         }
-        _ => Err(Xerr::unbalanced_flow())
+        _ => Err(Xerr::unbalanced_until())
     }
 }
 
@@ -1449,9 +1448,9 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
                     let offs = jump_offset(xs.code_origin(), begin_org);
                     break xs.code_emit(Opcode::Jump(offs));
                 }
-                _ => break Err(Xerr::unbalanced_flow()),
+                _ => break Err(Xerr::unbalanced_while()),
             },
-            _ => break Err(Xerr::unbalanced_flow()),
+            _ => break Err(Xerr::unbalanced_repeat()),
         }
     }
 }
@@ -1624,13 +1623,14 @@ fn core_word_nested_begin(xs: &mut State) -> Xresult {
 }
 
 fn core_word_nested_end(xs: &mut State) -> Xresult {
-    if xs.ctx.mode != ContextMode::MetaEval
-        || xs.flow_stack.len() > xs.ctx.fs_len
-        || xs.loops.len() > xs.ctx.ls_len
-    {
-        return Err(Xerr::ControlFlowError);
+    if xs.ctx.mode != ContextMode::MetaEval {
+        Err(Xerr::unbalanced_context())
+    } else if xs.has_pending_flow() {
+        Err(Xerr::unbalanced_flow2(xs.flow_stack.last()))
+    } else {
+        debug_assert!(xs.loops.len() == xs.ctx.ls_len);
+        xs.context_close()
     }
-    xs.context_close()
 }
 
 fn core_word_const(xs: &mut State) -> Xresult {
@@ -2459,7 +2459,8 @@ mod tests {
     fn test_unbalanced_flow() {
         assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("[1 2 ]"));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
-        assert_eq!(Err(Xerr::unbalanced_flow()), eval_boot!(" ) "));
+        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
+        assert_eq!(Err(Xerr::unbalanced_flow()), eval_boot!(" ( do ) loop "));
     }
 
     #[test]
@@ -2470,31 +2471,30 @@ mod tests {
             xs.eval(" \r\n \r\n\n   x")
         );
         assert_eq!(
-            xs.pretty_error().unwrap(),
-            concat!("unknown word x\n", "<buffer#0>:4:4\n", "   x\n", "---^")
+            format!("{:?}", xs.last_err_location().unwrap()),
+            concat!("<buffer#0>:4:4\n", "   x\n", "---^")
         );
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("z".into())), xs.eval("z"));
         assert_eq!(
-            xs.pretty_error().unwrap(),
-            concat!("unknown word z\n", "<buffer#0>:1:1\n", "z\n", "^")
+            format!("{:?}", xs.last_err_location().unwrap()),
+            concat!("<buffer#0>:1:1\n", "z\n", "^")
         );
 
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("q".into())), xs.eval("\n q\n"));
         assert_eq!(
-            xs.pretty_error().unwrap(),
-            concat!("unknown word q\n", "<buffer#0>:2:2\n", " q\n", "-^")
+            format!("{:?}", xs.last_err_location().unwrap()),
+            concat!("<buffer#0>:2:2\n", " q\n", "-^")
         );
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("[\n10 loop\n]");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(
-            xs.pretty_error().unwrap(),
+            format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
-                "control flow error\n",
                 "<buffer#0>:2:4\n",
                 "10 loop\n",
                 "---^"
@@ -2505,9 +2505,8 @@ mod tests {
         let res = xs.compile("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(
-            xs.pretty_error().unwrap(),
+            format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
-                "control flow error\n",
                 "<buffer#0>:2:3\n",
                 "( loop )\n",
                 "--^"
@@ -2518,9 +2517,8 @@ mod tests {
         let res = xs.eval("\"src/test-location1.xs\" load");
         assert_eq!(Err(Xerr::ControlFlowError), res);
         assert_eq!(
-            xs.pretty_error().unwrap(),
+            format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
-                "control flow error\n",
                 "src/test-location2.xs:2:3\n",
                 "[ again ]\n",
                 "--^"
@@ -2532,9 +2530,8 @@ mod tests {
         let res = xs.eval("[ ] test3");
         assert_eq!(Err(Xerr::OutOfBounds(0)), res);
         assert_eq!(
-            xs.pretty_error().unwrap(),
+            format!("{:?}", xs.last_err_location().unwrap()),
             concat!(
-                "index 0 out of bounds\n",
                 "<buffer#0>:1:11\n",
                 ": test3 0 get ;\n",
                 "----------^"

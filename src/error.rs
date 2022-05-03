@@ -170,6 +170,34 @@ impl Xerr {
         Xerr::ControlFlowError
     }
 
+    pub(crate) fn unbalanced_repeat() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_while() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_until() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_else() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_endif() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_endcase() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
+    pub(crate) fn unbalanced_endof() -> Xerr {
+        Xerr::ControlFlowError
+    }
+
     pub(crate) fn unbalanced_context() -> Xerr {
         Xerr::ErrorMsg(errmsg!("unbalanced context"))
     }
