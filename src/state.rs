@@ -230,6 +230,10 @@ impl State {
         Vec::from_iter(self.dict.iter().map(|e| e.name.clone()))
     }
 
+    fn clear_last_error(&mut self) {
+        self.last_error = None;
+    }
+
     pub fn last_error(&self) -> Option<&Xerr> {
         self.last_error.as_ref().map(|x| &x.err)
     }
@@ -332,7 +336,7 @@ impl State {
     }
 
     fn build0(&mut self) -> Xresult {
-        self.last_error.take();
+        self.clear_last_error();
         self.build1().map_err(|e| {
             // build-time error
             if self.last_error.is_none() {
@@ -781,20 +785,24 @@ impl State {
     }
 
     pub fn run(&mut self) -> Xresult {
-        self.last_error.take();
+        self.clear_last_error();
         while self.is_running() {
             self.fetch_and_run().map_err(|e| {
-                if self.last_error.is_none() {
-                    let location = self.location_from_current_ip();
-                    self.last_error = Some(ErrorContext {
-                        err: e.clone(),
-                        location,
-                    });
-                }
+                self.set_runtime_err_location(&e);
                 e
             })?;
         }
         OK
+    }
+
+    fn set_runtime_err_location(&mut self, e: &Xerr) {
+        if self.last_error.is_none() {
+            let location = self.location_from_current_ip();
+            self.last_error = Some(ErrorContext {
+                err: e.clone(),
+                location,
+            });
+        }
     }
 
     fn fetch_and_run(&mut self) -> Xresult {
@@ -958,7 +966,11 @@ impl State {
 
     pub fn next(&mut self) -> Xresult {
         if self.is_running() {
-            self.fetch_and_run()?;
+            self.clear_last_error();
+            self.fetch_and_run().map_err(|e| {
+                self.set_runtime_err_location(&e);
+                e
+            })?;
         }
         OK
     }
@@ -968,6 +980,7 @@ impl State {
         // so rollback aleast one. Then stop on first SetIp.
         let pop = |xs: &mut State| xs.reverse_log.as_mut().and_then(|log| log.pop());
         if let Some(r) = pop(self) {
+            self.clear_last_error();
             self.reverse_changes(r)?;
         }
         while let Some(step) = pop(self) {
