@@ -420,9 +420,16 @@ impl State {
     }
 
     fn next_name(&mut self) -> Xresult1<Xsubstr> {
+        let prev_token = self.last_token.clone();
         match self.next_token()? {
             Tok::Word(name) => Ok(name),
-            _ => Err(Xerr::ExpectingName),
+            _ => {
+                if prev_token.is_some() {
+                    // move error marker to prev token
+                    self.last_token = prev_token;
+                }
+                Err(Xerr::ExpectingName)
+            },
         }
     }
 
