@@ -3,6 +3,7 @@ use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
 use std::fmt::Write;
+use memchr::memmem;
 
 #[derive(Default, Clone)]
 pub struct BitstrState {
@@ -139,7 +140,7 @@ fn word_find(xs: &mut Xstate) -> Xresult {
     let rest_bytes = rest
         .slice()
         .ok_or_else(|| Xerr::BitstrSliceError(rest.clone()))?;
-    if let Some(pos) = twoway::find_bytes(&rest_bytes, &pat_bytes) {
+    if let Some(pos) = memmem::find(&rest_bytes, &pat_bytes) {
         let offs = rest.start() + pos * 8;
         xs.push_data(Cell::from(offs))
     } else {
