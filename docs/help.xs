@@ -47,18 +47,18 @@ If FLAG is zero then CODE is not executed."
 "endif" doc-for-cond!
 
 
-"
+"Select one case of the multiple different choices.
+
     X case
         X1 of CODE1 endof
-        X2 of CODE2 endof
+        XN of CODEN endof
         DEFAULT
     endcase
 
-Compare X with X1, X2 and so on.
-If X equals to X1 then CODE1 is executed.
-If X equals to X2 then CODE2 is executed.
-Otherwise DEFAULT is executed.
-DEFAULT is not mandatory and migth be empty."
+Compare X with X1, if X equals to X1 then CODE1 is executed.
+Compare X with XN, if X equals to XN then CODEN is executed.
+Otherwise DEFAULT is executed."
+
 dup "case" doc-for-cond!
 dup "endcase" doc-for-cond!
 dup "of" doc-for-cond!
@@ -101,9 +101,19 @@ Restart loop until FLAG evaluates to false."
     
     LIMIT START do CODE loop
 
-The index of the innermost loop can be accessed with *i*
+The current loop index can be accessed with I.
+J is used to access the outer loop index and the outermost loop index is K.
 
-    10 0 do i println
+    10 0 do I println loop
+
+    5 var num-rows
+    10 var num-columns
+    num-rows 0 do
+        num-columns do
+            \"row=\" print J print
+            \"col=\" print I println
+        loop
+    loop
 "
 dup "do" doc
 dup "loop" doc
