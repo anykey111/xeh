@@ -150,23 +150,27 @@ macro_rules! errmsg {
 
 impl Xerr {
 
-    pub(crate) fn unbalanced_flow(flow: Option<&Flow>) -> Xerr {
+    pub(crate) fn control_flow_error(flow: Option<&Flow>) -> Xresult {
+        let flow = flow.ok_or_else(|| {
+            let msg = errmsg!("unbalanced control flow");
+            Xerr::ControlFlowError { msg }
+        })?;
+        Err(Xerr::unbalanced_flow(&flow))
+    }
+
+    pub(crate) fn unbalanced_flow(flow: &Flow) -> Xerr {
         match flow {
-            Some(Flow::If{..}) => Self::unbalanced_endif(),
-            Some(Flow::Else{..}) => Self::unbalanced_endif(),
-            Some(Flow::Begin{..}) => Self::unbalanced_repeat(),
-            Some(Flow::While{..}) => Self::unbalanced_repeat(),
-            Some(Flow::Leave{..}) => Self::unbalanced_leave(),
-            Some(Flow::Case{..}) => Self::unbalanced_endcase(),
-            Some(Flow::CaseOf{..}) => Self::unbalanced_endof(),
-            Some(Flow::CaseEndOf{..}) => Self::unbalanced_endcase(),
-            Some(Flow::Vec{..}) => Self::unbalanced_vec_builder(),
-            Some(Flow::Fun{..}) => Self::unbalanced_fn_builder(),
-            Some(Flow::Do{..}) => Self::unbalanced_loop(),
-            None => {
-                let msg = errmsg!("unbalanced control flow");
-                Xerr::ControlFlowError { msg }
-            }
+            Flow::If{..} => Self::unbalanced_endif(),
+            Flow::Else{..} => Self::unbalanced_endif(),
+            Flow::Begin{..} => Self::unbalanced_repeat(),
+            Flow::While{..} => Self::unbalanced_repeat(),
+            Flow::Leave{..} => Self::unbalanced_leave(),
+            Flow::Case{..} => Self::unbalanced_endcase(),
+            Flow::CaseOf{..} => Self::unbalanced_endof(),
+            Flow::CaseEndOf{..} => Self::unbalanced_endcase(),
+            Flow::Vec{..} => Self::unbalanced_vec_builder(),
+            Flow::Fun{..} => Self::unbalanced_fn_builder(),
+            Flow::Do{..} => Self::unbalanced_do(),
         }
     }
 
@@ -197,6 +201,11 @@ impl Xerr {
 
     pub(crate) fn unbalanced_leave() -> Xerr {
         let msg = errmsg!("leave used outside of the loop control flow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_do() -> Xerr {
+        let msg = errmsg!("balance do with closing loop");
         Xerr::ControlFlowError { msg }
     }
 

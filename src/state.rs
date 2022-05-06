@@ -363,7 +363,7 @@ impl State {
                         break Err(Xerr::unbalanced_context());
                     }
                     if self.has_pending_flow() {
-                        break Err(Xerr::unbalanced_flow(self.flow_stack.last()));
+                        break Xerr::control_flow_error(self.flow_stack.last());
                     }
                     break OK;
                 }
@@ -1646,7 +1646,7 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     if xs.ctx.mode != ContextMode::MetaEval {
         Err(Xerr::unbalanced_context())
     } else if xs.has_pending_flow() {
-        Err(Xerr::unbalanced_flow(xs.flow_stack.last()))
+        Xerr::control_flow_error(xs.flow_stack.last())
     } else {
         debug_assert!(xs.loops.len() == xs.ctx.ls_len);
         xs.context_close()
@@ -2481,7 +2481,7 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_endif()), eval_boot!("[ endif ]"));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
-        assert_eq!(Err(Xerr::unbalanced_loop()), eval_boot!(" ( do ) loop "));
+        assert_eq!(Err(Xerr::unbalanced_do()), eval_boot!(" ( do ) loop "));
     }
 
     #[test]
