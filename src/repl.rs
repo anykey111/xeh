@@ -38,9 +38,9 @@ type ReplStateRef = std::cell::RefCell<ReplState>;
 type ReplStateRc = std::rc::Rc<ReplStateRef>;
 
 #[derive(Helper, Highlighter, Validator)]
-struct XsHelper(Vec<Xsubstr>, ReplStateRc);
+struct XsHelper(Vec<Xstr>, ReplStateRc);
 
-struct ComplStr(Xsubstr);
+struct ComplStr(Xstr);
 impl rl::completion::Candidate for ComplStr {
     fn display(&self) -> &str {
         self.0.as_str()
@@ -216,7 +216,7 @@ fn run_tty_repl(xs: Xstate, args: XcmdArgs) -> Xresult {
                 break;
             }
             let mut lst = st.xs.word_list();
-            lst.extend(REPL_CMD_HINTS.iter().map(|s| s.substr(..)));
+            lst.extend(REPL_CMD_HINTS.iter().cloned());
             lst.sort();
             (lst, st.trial.is_some())
         };

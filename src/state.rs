@@ -22,19 +22,9 @@ enum Entry {
 
 #[derive(Clone)]
 struct DictEntry {
-    name: Xsubstr,
+    name: Xstr,
     entry: Entry,
-    help: Option<Xstr>,
-}
-
-impl DictEntry {
-    fn new(name: Xsubstr, entry: Entry) -> Self {
-        Self {
-            name,
-            entry,
-            help: None,
-        }
-    }
+    help: CellRef,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -226,7 +216,7 @@ impl State {
         }
     }
 
-    pub fn word_list(&self) -> Vec<Xsubstr> {
+    pub fn word_list(&self) -> Vec<Xstr> {
         Vec::from_iter(self.dict.iter().map(|e| e.name.clone()))
     }
 
@@ -517,7 +507,7 @@ impl State {
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
         let cref = self.alloc_cell(val)?;
-        self.dict_insert(DictEntry::new(name.into(), Entry::Variable(cref)))?;
+        self.dict_insert(name, Entry::Variable(cref))?;
         Ok(cref)
     }
 
@@ -544,14 +534,14 @@ impl State {
 
     fn dict_add_word(&mut self, name: &str, f: XfnType, immediate: bool) -> Xresult {
         let xf = Xfn::Native(XfnPtr(f));
-        self.dict_insert(DictEntry::new(
+        self.dict_insert(
             name.into(),
             Entry::Function {
                 immediate,
                 xf,
                 len: None,
             },
-        ))?;
+        )?;
         OK
     }
 
@@ -573,41 +563,33 @@ impl State {
         self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
-        self.dict_insert(DictEntry::new(
+        self.dict_insert(
             name.into(),
             Entry::Function {
                 immediate: false,
                 xf: Xfn::Interp(fn_addr),
                 len: Some(len),
             },
-        ))?;
+        )?;
         let offs = jump_offset(start, self.code_origin());
         self.backpatch_jump(start, offs)?;
         OK
     }
 
-    pub fn set_doc(&mut self, name: Xstr, help: Xstr) -> Xresult {
-        let a = self
-            .dict_find(name.as_str())
-            .ok_or_else(|| Xerr::UnknownWord(name))?;
-        self.dict[a].help = Some(help);
-        OK
-    }
-
-    pub fn help(&self, name: &str) -> Option<&Xstr> {
-        let a = self.dict_find(name)?;
-        self.dict.get(a).and_then(|x| x.help.as_ref())
+    pub fn help_str(&self, name: &str) -> Option<&Cell> {
+        let cref = self.dict_key(name)?.help;
+        self.get_var(cref).ok()
     }
 
     fn load_core(&mut self) -> Xresult {
-        self.dict_insert(DictEntry::new(
-            arcstr::literal!("true").into(),
+        self.dict_insert(
+            arcstr::literal!("true").as_str(),
             Entry::Constant(TRUE),
-        ))?;
-        self.dict_insert(DictEntry::new(
-            arcstr::literal!("false").into(),
+        )?;
+        self.dict_insert(
+            arcstr::literal!("false").as_str(),
             Entry::Constant(FALSE),
-        ))?;
+        )?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -638,6 +620,7 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.defword("doc", core_word_doc)?;
         self.defword("help", core_word_help)?;
+        self.defword("help-str", core_word_help_str)?;
         self.defword("I", core_word_counter_i)?;
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
@@ -675,25 +658,23 @@ impl State {
         OK
     }
 
-    fn dict_insert(&mut self, e: DictEntry) -> Xresult1<usize> {
+    fn dict_insert(&mut self, name: &str, entry: Entry) -> Xresult1<usize> {
         let wa = self.dict.len();
-        self.dict.push(e);
+        let help = self.defvar_anonymous(NIL)?;
+        self.dict.push(DictEntry {
+            name: Xstr::from(name),
+            entry,
+            help,
+        });
         Ok(wa)
     }
 
     fn dict_entry(&self, name: &str) -> Option<&Entry> {
-        self.dict.iter().rfind(|x| x.name == name).map(|x| &x.entry)
+        self.dict_key(name).map(|x| &x.entry)
     }
 
-    fn dict_find(&self, name: &str) -> Option<usize> {
-        self.dict.iter().rposition(|e| e.name == name)
-    }
-
-    pub fn dict_get_help(&self, index: usize) -> Option<(&str, &str)> {
-        self.dict.get(index).map(|e| {
-            let h = e.help.as_ref().map(|s| s.as_str());
-            (e.name.as_str(), h.unwrap_or_default())
-        })
+    fn dict_key(&self, name: &str) -> Option<&DictEntry> {
+        self.dict.iter().rfind(|x| x.name == name)
     }
 
     fn code_origin(&self) -> usize {
@@ -1532,14 +1513,14 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
-    let dict_idx = xs.dict_insert(DictEntry::new(
-        name,
+    let dict_idx = xs.dict_insert(
+        &name,
         Entry::Function {
             immediate: false,
             xf,
             len: None,
         },
-    ))?;
+    )?;
     xs.push_flow(Flow::Fun(FunctionFlow {
         dict_idx,
         start,
@@ -1615,7 +1596,7 @@ fn core_word_variable(xs: &mut State) -> Xresult {
         return Err(Xerr::conditional_var_definition());
     }
     let a = xs.alloc_cell(Cell::Nil)?;
-    xs.dict_insert(DictEntry::new(name, Entry::Variable(a)))?;
+    xs.dict_insert(&name, Entry::Variable(a))?;
     xs.code_emit(Opcode::Store(a))
 }
 
@@ -1660,7 +1641,7 @@ fn core_word_const(xs: &mut State) -> Xresult {
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
-        xs.dict_insert(DictEntry::new(name.into(), Entry::Constant(val)))?;
+        xs.dict_insert(&name, Entry::Constant(val))?;
         OK
     }
 }
@@ -1703,32 +1684,28 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_help_str(xs: &mut State) -> Xresult {
+    let name = xs.pop_data()?.to_xstr()?;
+    let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?.clone();
+    xs.push_data(help)
+}
+
 fn core_word_help(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?.to_xstr()?;
-    let res = xs
-        .dict_find(name.as_str())
-        .and_then(|a| xs.dict.get(a))
-        .and_then(|e| e.help.clone());
-    if let Some(help) = res {
-        xs.print(help.as_str());
+    let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?;
+    if let Ok(s) = help.to_xstr() {
+        xs.print(&s);
     }
     OK
 }
 
 fn core_word_doc(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?;
-    let help = xs.pop_data()?.to_xstr()?;
-    match name.value() {
-        Cell::Vector(v) => {
-            for x in v.iter() {
-                let name = x.to_xstr()?;
-                xs.set_doc(name, help.clone())?;
-            }
-            OK
-        }
-        Cell::Str(name) => xs.set_doc(name.clone(), help),
-        _ => Err(Xerr::ExpectingName),
-    }
+    let help = xs.pop_data()?;
+    let _testtype = help.str()?;
+    let name = name.to_xstr()?;
+    let cref = xs.dict_key(&name).ok_or_else(|| Xerr::UnknownWord(name))?.help;
+    xs.set_var(cref, help)
 }
 
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
@@ -2596,9 +2573,18 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
         xs.compile(": ff ; ( \"test-help\" \"ff\" doc )").unwrap();
-        assert_eq!(xs.help("ff"), Some(&Xstr::from("test-help")));
         xs.eval("\"ff\" help").unwrap();
         assert_eq!(xs.read_stdout(), Some("test-help".to_string()));
+    }
+
+    #[test]
+    fn test_help_str() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc \"ee\" help-str"));
+        let help = xs.help_str("ee").unwrap();
+        assert_eq!(Some(&Cell::Int(3)), help.tag());
+        assert_eq!(&Cell::from("123"), help.value());
+        assert_eq!(Ok(Cell::from("123")), xs.pop_data());
     }
 
     #[test]
