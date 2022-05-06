@@ -375,7 +375,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
         Cell::Vector(v) => {
             let mut tmp = Xbitstr::new();
             for x in v.iter() {
-                match x {
+                match x.value() {
                     Cell::Int(i) => {
                         if 0 <= *i && *i <= 255 {
                             tmp = tmp.append(&Xbitstr::from(vec![*i as u8]));
@@ -388,6 +388,10 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
                     }
                     Cell::Bitstr(s) => {
                         tmp = tmp.append(&s);
+                    }
+                    Cell::Vector(v) => {
+                        let tmp2 = bitstring_from(Cell::Vector(v.clone()))?;
+                        tmp = tmp.append(&tmp2);
                     }
                     _ => return Err(Xerr::TypeError),
                 }
@@ -562,6 +566,8 @@ mod tests {
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         xs.eval("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
+        xs.eval("[ \"X\" [ 0x1a [ 0x30 ] ] ] >bitstr").unwrap();
+        assert_eq!(xs.pop_data().unwrap(), Cell::Bitstr(Xbitstr::from(vec!['X' as u8 , 0x1a, 0x30 ])));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ 256 ] >bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ -1 ] >bitstr"));
     }
