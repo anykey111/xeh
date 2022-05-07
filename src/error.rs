@@ -257,6 +257,10 @@ impl Xerr {
     pub(crate) fn unbalanced_context() -> Xerr {
         Xerr::ErrorMsg(errmsg!("unbalanced context"))
     }
+
+    pub(crate) fn const_context() -> Xerr {
+        Xerr::ErrorMsg(errmsg!("the meta-eval context can operate only with const variables"))
+    }
 }
 pub type Xresult = Xresult1<()>;
 

@@ -281,7 +281,6 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
 fn spawn_state(args: &XcmdArgs) -> Xresult1<Xstate> {
     let mut xs = Xstate::boot()?;
     crate::d2_plugin::load(&mut xs)?;
-    xs.load_help()?;
     if let Some(ref path) = args.binary_path {
         crate::file::load_binary(&mut xs, path)?;
     }

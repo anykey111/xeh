@@ -498,12 +498,6 @@ impl State {
         Ok(xs)
     }
 
-    pub fn load_help(&mut self) -> Xresult {
-        let src = include_str!("../docs/help.xs").into();
-        self.intern_source(src, Some("docs/help.xs"))?;
-        self.build0()
-    }
-
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
         let cref = self.alloc_cell(val)?;
@@ -660,7 +654,11 @@ impl State {
 
     fn dict_insert(&mut self, name: &str, entry: Entry) -> Xresult1<usize> {
         let wa = self.dict.len();
-        let help = self.defvar_anonymous(NIL)?;
+        let help = if self.ctx.mode == ContextMode::MetaEval {
+            CellRef::default()
+        } else {
+            self.defvar_anonymous(NIL)?
+        };
         self.dict.push(DictEntry {
             name: Xstr::from(name),
             entry,
@@ -734,6 +732,9 @@ impl State {
     }
 
     fn swap_cell_ref(&mut self, cref: CellRef, val: Cell) -> Xresult {
+        if self.ctx.mode == ContextMode::MetaEval {
+            return Err(Xerr::const_context());
+        }
         let mut old = val;
         std::mem::swap(
             self.heap
@@ -748,6 +749,9 @@ impl State {
     }
 
     fn alloc_cell(&mut self, val: Cell) -> Xresult1<CellRef> {
+        if self.ctx.mode == ContextMode::MetaEval {
+            return Err(Xerr::const_context());
+        }
         let idx = self.heap.len();
         self.heap.push(val);
         Ok(CellRef::from_index(idx))
@@ -1507,6 +1511,9 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_begin(xs: &mut State) -> Xresult {
+    if xs.ctx.mode == ContextMode::MetaEval {
+        return Err(Xerr::const_context());
+    }
     // jump over function body
     let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
@@ -1637,7 +1644,7 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
 fn core_word_const(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
-        let s = arcstr::literal!("const word used out of meta context");
+        let s = arcstr::literal!("const word used out of meta-eval context");
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
@@ -2202,6 +2209,20 @@ mod tests {
     }
 
     #[test]
+    fn test_nested_fn_purge() {
+        let mut xs = State::boot().unwrap();
+        let res = xs.eval(" ( : f 2 ; ) f println");
+        assert_eq!(Err(Xerr::const_context()), res);
+    }
+    
+    #[test]
+    fn test_nested_var_purge() {
+        let mut xs = State::boot().unwrap();
+        let res = xs.eval(" ( 2 var x ) x println");
+        assert_eq!(Err(Xerr::const_context()), res);
+    }
+
+    #[test]
     fn test_recursive_def() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, ": a  : b  23 ; b ; a 23 assert-eq");
@@ -2572,7 +2593,7 @@ mod tests {
     fn test_doc_help() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.compile(": ff ; ( \"test-help\" \"ff\" doc )").unwrap();
+        xs.eval(": ff ;  \"test-help\" \"ff\" doc ").unwrap();
         xs.eval("\"ff\" help").unwrap();
         assert_eq!(xs.read_stdout(), Some("test-help".to_string()));
     }
@@ -2590,7 +2611,9 @@ mod tests {
     #[test]
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
-        xs.load_help().unwrap();
+        let res = xs.eval_from_file("docs/help.xs");
+        assert_eq!(None, xs.last_err_location());
+        assert_eq!(OK, res);
     }
 
     #[test]

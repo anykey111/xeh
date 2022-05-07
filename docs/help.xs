@@ -1,13 +1,12 @@
 
-: doc-for-stack! immediate # "Stack Manipulation" 
+
+: doc-for-stack!  # "Stack Manipulation" 
     doc ;
-: doc-for-cond! immediate # "Conditional Execution"  
+: doc-for-cond!  # "Conditional Execution"  
     doc ;
-: doc-for-tags! immediate # "Tags" 
+: doc-for-tags!  # "Tags" 
     doc ;
 
-
-(
 
 "( val tag -- val )
 Stick tag to the val. If value already has a tag drop the old one."
@@ -120,4 +119,4 @@ dup "loop" doc
 dup "I" doc
 dup "J" doc
  "K" doc
-)
+
