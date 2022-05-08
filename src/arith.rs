@@ -41,7 +41,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("not", logical_not)?;
     xs.defword("bit-and", core_word_bitand)?;
     xs.defword("bit-or", core_word_bitor)?;
-    xs.defword("bit-xor",core_word_bitxor)?;
+    xs.defword("bit-xor", core_word_bitxor)?;
     xs.defword("bit-not", core_word_bitnot)?;
     xs.defword("bit-shl", core_word_bitshl)?;
     xs.defword("bit-shr", core_word_bitshr)?;

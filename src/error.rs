@@ -16,7 +16,10 @@ pub enum Xerr {
         pos: usize,
     },
     ExpectingName,
-    ControlFlowError { msg: Xstr },
+    ExpectingLiteral,
+    ControlFlowError {
+        msg: Xstr,
+    },
     IntegerOverflow,
     DivisionByZero,
     StackUnderflow,
@@ -70,7 +73,7 @@ impl fmt::Display for Xerr {
             Xerr::StrDecodeError { msg, .. } => write!(f, "{}", msg),
             Xerr::IntegerOverflow => f.write_str("integer overflow"),
             Xerr::DivisionByZero => f.write_str("division by zero"),
-            Xerr::ControlFlowError { msg} => f.write_str(msg),
+            Xerr::ControlFlowError { msg } => f.write_str(msg),
             Xerr::StackUnderflow => f.write_str("stack underflow"),
             Xerr::ReturnStackUnderflow => f.write_str("return stack underflow"),
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
@@ -83,6 +86,7 @@ impl fmt::Display for Xerr {
                 val
             ),
             Xerr::ExpectingName => f.write_str("expecting a word name"),
+            Xerr::ExpectingLiteral => f.write_str("expecting literal value"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
@@ -142,7 +146,6 @@ impl fmt::Display for Xerr {
 }
 
 impl Xerr {
-
     pub(crate) fn control_flow_error(flow: Option<&Flow>) -> Xresult {
         let flow = flow.ok_or_else(|| {
             let msg = xstr_literal!("unbalanced control flow");
@@ -153,17 +156,18 @@ impl Xerr {
 
     pub(crate) fn unbalanced_flow(flow: &Flow) -> Xerr {
         match flow {
-            Flow::If{..} => Self::unbalanced_endif(),
-            Flow::Else{..} => Self::unbalanced_endif(),
-            Flow::Begin{..} => Self::unbalanced_repeat(),
-            Flow::While{..} => Self::unbalanced_repeat(),
-            Flow::Leave{..} => Self::unbalanced_leave(),
-            Flow::Case{..} => Self::unbalanced_endcase(),
-            Flow::CaseOf{..} => Self::unbalanced_endof(),
-            Flow::CaseEndOf{..} => Self::unbalanced_endcase(),
-            Flow::Vec{..} => Self::unbalanced_vec_builder(),
-            Flow::Fun{..} => Self::unbalanced_fn_builder(),
-            Flow::Do{..} => Self::unbalanced_do(),
+            Flow::If { .. } => Self::unbalanced_endif(),
+            Flow::Else { .. } => Self::unbalanced_endif(),
+            Flow::Begin { .. } => Self::unbalanced_repeat(),
+            Flow::While { .. } => Self::unbalanced_repeat(),
+            Flow::Leave { .. } => Self::unbalanced_leave(),
+            Flow::Case { .. } => Self::unbalanced_endcase(),
+            Flow::CaseOf { .. } => Self::unbalanced_endof(),
+            Flow::CaseEndOf { .. } => Self::unbalanced_endcase(),
+            Flow::Vec { .. } => Self::unbalanced_vec_builder(),
+            Flow::TagVec { .. } => Self::unbalanced_tag_vec_builder(),
+            Flow::Fun { .. } => Self::unbalanced_fn_builder(),
+            Flow::Do { .. } => Self::unbalanced_do(),
         }
     }
 
@@ -184,6 +188,11 @@ impl Xerr {
 
     pub(crate) fn unbalanced_vec_builder() -> Xerr {
         let msg = xstr_literal!("unbalanced vector builder");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_tag_vec_builder() -> Xerr {
+        let msg = xstr_literal!("unbalanced tag vector builder");
         Xerr::ControlFlowError { msg }
     }
 
@@ -252,7 +261,9 @@ impl Xerr {
     }
 
     pub(crate) fn const_context() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!("the meta-eval context can operate only with const variables"))
+        Xerr::ErrorMsg(xstr_literal!(
+            "the meta-eval context can operate only with const variables"
+        ))
     }
 }
 pub type Xresult = Xresult1<()>;
@@ -260,4 +271,3 @@ pub type Xresult = Xresult1<()>;
 pub type Xresult1<T> = Result<T, Xerr>;
 
 pub const OK: Xresult = Ok(());
-

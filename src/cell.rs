@@ -64,7 +64,7 @@ pub enum Cell {
     WithTag(std::rc::Rc<WithTag>),
 }
 
-use std::fmt;
+use std::fmt::{self, Write};
 
 impl fmt::Debug for XfnPtr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -117,6 +117,9 @@ impl fmt::Debug for Cell {
             Cell::WithTag(rc) if flags.show_tags() => {
                 rc.value.fmt(f)?;
                 f.write_str(" @")?;
+                if !rc.tag.vec().is_ok() {
+                    f.write_char(' ')?;
+                }
                 rc.tag.fmt(f)
             }
             Cell::WithTag(rc) => rc.value.fmt(f),

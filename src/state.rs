@@ -45,6 +45,7 @@ pub(crate) enum Flow {
     CaseOf(usize),
     CaseEndOf(usize),
     Vec,
+    TagVec,
     Fun(FunctionFlow),
     Do { for_org: usize, body_org: usize },
 }
@@ -423,18 +424,21 @@ impl State {
                     self.last_token = prev_token;
                 }
                 Err(Xerr::ExpectingName)
-            },
+            }
         }
     }
 
     fn next_token(&mut self) -> Xresult1<Tok> {
-        let lex = self.input.last_mut().expect("input source");
-        let res = lex.next();
-        self.last_token = Some(lex.last_substr());
-        if let Ok(Tok::EndOfInput) = &res {
-            self.input.pop();
+        if let Some(lex) = self.input.last_mut() {
+            let res = lex.next();
+            self.last_token = Some(lex.last_substr());
+            if let Ok(Tok::EndOfInput) = &res {
+                self.input.pop();
+            }
+            res
+        } else {
+            Ok(Tok::EndOfInput)
         }
-        res
     }
 
     fn context_open(&mut self, mode: ContextMode) -> Xresult {
@@ -458,7 +462,10 @@ impl State {
     }
 
     fn context_close(&mut self) -> Xresult {
-        let mut prev = self.nested.pop().ok_or_else(|| Xerr::unbalanced_context())?;
+        let mut prev = self
+            .nested
+            .pop()
+            .ok_or_else(|| Xerr::unbalanced_context())?;
         if self.ctx.mode != ContextMode::Compile {
             self.run()?;
             if self.ctx.mode == ContextMode::MetaEval {
@@ -576,14 +583,8 @@ impl State {
     }
 
     fn load_core(&mut self) -> Xresult {
-        self.dict_insert(
-            xstr_literal!("true").as_str(),
-            Entry::Constant(TRUE),
-        )?;
-        self.dict_insert(
-            xstr_literal!("false").as_str(),
-            Entry::Constant(FALSE),
-        )?;
+        self.dict_insert(xstr_literal!("true").as_str(), Entry::Constant(TRUE))?;
+        self.dict_insert(xstr_literal!("false").as_str(), Entry::Constant(FALSE))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -612,6 +613,8 @@ impl State {
         self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
+        self.def_immediate("@", core_word_with_literal_tag)?;
+        self.def_immediate("@[", core_word_tag_vec)?;
         self.defword("doc", core_word_doc)?;
         self.defword("help", core_word_help)?;
         self.defword("help-str", core_word_help_str)?;
@@ -1357,7 +1360,7 @@ fn core_word_endif(xs: &mut State) -> Xresult {
     let if_org = match take_first_cond_flow(xs) {
         Some(Flow::If(org)) => org,
         Some(Flow::Else(org)) => org,
-        _ => return Err(Xerr::unbalanced_endif())
+        _ => return Err(Xerr::unbalanced_endif()),
     };
     let offs = jump_offset(if_org, xs.code_origin());
     xs.backpatch_jump(if_org, offs)
@@ -1410,7 +1413,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
             let offs = jump_offset(xs.code_origin(), begin_org);
             xs.code_emit(Opcode::JumpIf(offs))
         }
-        _ => Err(Xerr::unbalanced_until())
+        _ => Err(Xerr::unbalanced_until()),
     }
 }
 
@@ -1431,7 +1434,7 @@ fn core_word_again(xs: &mut State) -> Xresult {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
             }
-            _ => break Err(Xerr::unbalanced_again())
+            _ => break Err(Xerr::unbalanced_again()),
         }
     }
 }
@@ -1472,6 +1475,16 @@ fn jump_offset(origin: usize, dest: usize) -> RelativeJump {
     RelativeJump::from_to(origin, dest)
 }
 
+fn core_word_tag_vec(xs: &mut State) -> Xresult {
+    xs.push_flow(Flow::TagVec)?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_begin)))
+}
+
+fn collect_tag_vec(xs: &mut State) -> Xresult {
+    vec_builder_end(xs)?;
+    core_word_with_tag(xs)
+}
+
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Vec)?;
     xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_begin)))
@@ -1480,7 +1493,8 @@ fn core_word_vec_begin(xs: &mut State) -> Xresult {
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
         Some(Flow::Vec) => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end))),
-        _ => Err(Xerr::unbalanced_vec_builder())
+        Some(Flow::TagVec) => xs.code_emit(Opcode::NativeCall(XfnPtr(collect_tag_vec))),
+        _ => Err(Xerr::unbalanced_vec_builder()),
     }
 }
 
@@ -1572,12 +1586,11 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
         .top_function_flow()
         .map(|f| f.dict_idx)
         .ok_or_else(|| Xerr::expect_fn_context())?;
-    match xs
-        .dict
-        .get_mut(dict_idx)
-    {
+    match xs.dict.get_mut(dict_idx) {
         Some(DictEntry {
-            entry: Entry::Function { ref mut immediate, .. },
+            entry: Entry::Function {
+                ref mut immediate, ..
+            },
             ..
         }) => {
             *immediate = true;
@@ -1693,7 +1706,10 @@ fn core_word_loop(xs: &mut State) -> Xresult {
 
 fn core_word_help_str(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?.to_xstr()?;
-    let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?.clone();
+    let help = xs
+        .help_str(&name)
+        .ok_or_else(|| Xerr::UnknownWord(name))?
+        .clone();
     xs.push_data(help)
 }
 
@@ -1711,7 +1727,10 @@ fn core_word_doc(xs: &mut State) -> Xresult {
     let help = xs.pop_data()?;
     let _testtype = help.str()?;
     let name = name.to_xstr()?;
-    let cref = xs.dict_key(&name).ok_or_else(|| Xerr::UnknownWord(name))?.help;
+    let cref = xs
+        .dict_key(&name)
+        .ok_or_else(|| Xerr::UnknownWord(name))?
+        .help;
     xs.set_var(cref, help)
 }
 
@@ -1895,6 +1914,16 @@ fn core_word_get_tagged(xs: &mut State) -> Xresult {
     xs.push_data(item.unwrap_or_else(|| NIL))
 }
 
+fn core_word_with_literal_tag(xs: &mut State) -> Xresult {
+    match xs.next_token()? {
+        Tok::Literal(val) => {
+            xs.code_emit_value(val)?;
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_with_tag)))
+        }
+        _ => Err(Xerr::ExpectingLiteral),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1903,7 +1932,7 @@ mod tests {
         ($e:expr) => {{
             let mut xs = State::boot().unwrap();
             xs.eval($e)
-        }}
+        }};
     }
 
     macro_rules! eval_ok {
@@ -1992,7 +2021,10 @@ mod tests {
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         // test errors
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222 else 333"));
+        assert_eq!(
+            Err(Xerr::unbalanced_endif()),
+            xs.compile("1 if 222 else 333")
+        );
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222 else"));
         let mut xs = State::boot().unwrap();
@@ -2047,10 +2079,19 @@ mod tests {
             xs.compile("if begin endif repeat")
         );
         assert_eq!(Err(Xerr::unbalanced_again()), xs.compile("again begin"));
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("begin endif while"));
+        assert_eq!(
+            Err(Xerr::unbalanced_endif()),
+            xs.compile("begin endif while")
+        );
         assert_eq!(Err(Xerr::unbalanced_until()), xs.compile("until begin"));
-        assert_eq!(Err(Xerr::unbalanced_until()), xs.compile("begin again until"));
-        assert_eq!(Err(Xerr::unbalanced_again()), xs.compile("begin until again"));
+        assert_eq!(
+            Err(Xerr::unbalanced_until()),
+            xs.compile("begin again until")
+        );
+        assert_eq!(
+            Err(Xerr::unbalanced_again()),
+            xs.compile("begin until again")
+        );
     }
 
     #[test]
@@ -2214,7 +2255,7 @@ mod tests {
         let res = xs.eval(" ( : f 2 ; ) f println");
         assert_eq!(Err(Xerr::const_context()), res);
     }
-    
+
     #[test]
     fn test_nested_var_purge() {
         let mut xs = State::boot().unwrap();
@@ -2462,6 +2503,28 @@ mod tests {
     }
 
     #[test]
+    fn test_named_tag() {
+        assert_eq!(eval_boot!("10 @"), Err(Xerr::ExpectingLiteral));
+        assert_eq!(eval_boot!("10 @ x "), Err(Xerr::ExpectingLiteral));
+        assert_eq!(eval_boot!("10 @ \"a\" "), OK);
+        assert_eq!(eval_boot!(" @ 1 "), Err(Xerr::StackUnderflow));
+        assert_eq!(
+            eval_boot!("10 @ \"x\" dup 10 assert-eq tag-of \"x\" assert-eq"),
+            OK
+        );
+    }
+
+    #[test]
+    fn test_tag_vec() {
+        assert_eq!(eval_boot!("@[ 1 ]"), Err(Xerr::StackUnderflow));
+        assert_eq!(eval_boot!("@[ 1 "), Err(Xerr::unbalanced_tag_vec_builder()));
+        assert_eq!(
+            eval_boot!("10 @[ 1 ] dup 10 assert-eq tag-of [ 1 ] assert-eq "),
+            OK
+        );
+    }
+
+    #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, include_str!("test-tag.xs"));
@@ -2488,6 +2551,7 @@ mod tests {
         assert_eq!(OK, xs.eval("( 1 2 +  )"));
         assert_eq!(xs.debug_map[0], ")");
         assert_eq!(xs.code.len(), 1);
+        assert_ne!(OK, xs.eval("( 1 2 +  ) : "));
     }
 
     #[test]
@@ -2521,11 +2585,7 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!(
-                "<buffer#0>:2:4\n",
-                "10 loop\n",
-                "---^"
-            )
+            concat!("<buffer#0>:2:4\n", "10 loop\n", "---^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -2533,11 +2593,7 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!(
-                "<buffer#0>:2:3\n",
-                "( loop )\n",
-                "--^"
-            )
+            concat!("<buffer#0>:2:3\n", "( loop )\n", "--^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -2545,11 +2601,7 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_again()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!(
-                "src/test-location2.xs:2:3\n",
-                "[ again ]\n",
-                "--^"
-            )
+            concat!("src/test-location2.xs:2:3\n", "[ again ]\n", "--^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -2558,11 +2610,7 @@ mod tests {
         assert_eq!(Err(Xerr::OutOfBounds(0)), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!(
-                "<buffer#0>:1:11\n",
-                ": test3 0 get ;\n",
-                "----------^"
-            )
+            concat!("<buffer#0>:1:11\n", ": test3 0 get ;\n", "----------^")
         );
     }
 
@@ -2601,7 +2649,10 @@ mod tests {
     #[test]
     fn test_help_str() {
         let mut xs = State::boot().unwrap();
-        assert_eq!(OK, xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc \"ee\" help-str"));
+        assert_eq!(
+            OK,
+            xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc \"ee\" help-str")
+        );
         let help = xs.help_str("ee").unwrap();
         assert_eq!(Some(&Cell::Int(3)), help.tag());
         assert_eq!(&Cell::from("123"), help.value());

@@ -394,7 +394,7 @@ mod tests {
             Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr.range(), 3..5);
                 assert_eq!(msg, ESCAPE_SEQ_ERRMSG);
-            },
+            }
             e => panic!("{:?}", e),
         }
         match tokenize_input(r#""aaa\"#) {
@@ -402,14 +402,14 @@ mod tests {
                 assert_eq!(substr, "\\");
                 assert_eq!(substr.range(), 4..5);
                 assert_eq!(msg, EOF_ERRMSG);
-            },
+            }
             e => panic!("{:?}", e),
         }
         match tokenize_input(r#""aaa\""#) {
             Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr.range(), 6..6);
                 assert_eq!(msg, EOF_ERRMSG);
-            } ,
+            }
             e => panic!("{:?}", e),
         }
     }
@@ -417,18 +417,18 @@ mod tests {
     #[test]
     fn test_str_tok() {
         match tokenize_input(r#" 1"a" "#) {
-            Err(Xerr::ParseError { msg, substr  }) => {
+            Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr, "1\"a\"");
                 assert_eq!(substr.range(), 1..5);
                 assert_eq!(msg, PARSE_INT_ERRMSG);
-            },
+            }
             e => panic!("{:?}", e),
         }
         match tokenize_input(r#" "abc"2 "#) {
             Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr.range(), 1..6);
                 assert_eq!(msg, EXPECT_WS_ERRMSG);
-            },
+            }
             e => panic!("{:?}", e),
         }
     }

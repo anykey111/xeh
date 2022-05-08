@@ -2,8 +2,8 @@ use crate::bitstr::*;
 use crate::cell::*;
 use crate::error::*;
 use crate::prelude::*;
-use std::fmt::Write;
 use memchr::memmem;
+use std::fmt::Write;
 
 #[derive(Default, Clone)]
 pub struct BitstrState {
@@ -568,7 +568,10 @@ mod tests {
         xs.eval("i8").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
         xs.eval("[ \"X\" [ 0x1a [ 0x30 ] ] ] >bitstr").unwrap();
-        assert_eq!(xs.pop_data().unwrap(), Cell::Bitstr(Xbitstr::from(vec!['X' as u8 , 0x1a, 0x30 ])));
+        assert_eq!(
+            xs.pop_data().unwrap(),
+            Cell::Bitstr(Xbitstr::from(vec!['X' as u8, 0x1a, 0x30]))
+        );
         assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ 256 ] >bitstr"));
         assert_eq!(Err(Xerr::IntegerOverflow), xs.eval("[ -1 ] >bitstr"));
     }
