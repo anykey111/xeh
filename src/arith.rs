@@ -35,6 +35,10 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         xs.push_data(Cell::from(t))
     })?;
     xs.defword("rem", core_word_rem)?;
+    xs.defword("and", logical_and)?;
+    xs.defword("or", logical_or)?;
+    xs.defword("xor", logical_xor)?;
+    xs.defword("not", logical_not)?;
     xs.defword("bit-and", core_word_bitand)?;
     xs.defword("bit-or", core_word_bitor)?;
     xs.defword("bit-xor",core_word_bitxor)?;
@@ -253,6 +257,32 @@ fn core_word_is_negative(xs: &mut State) -> Xresult {
     }
 }
 
+fn logical_not(xs: &mut State) -> Xresult {
+    let f = xs.pop_data()?.flag()?;
+    xs.push_data(Cell::from(!f))
+}
+
+fn logical_and(xs: &mut State) -> Xresult {
+    let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
+    let c = a.flag()? & b.flag()?;
+    xs.push_data(Cell::from(c))
+}
+
+fn logical_or(xs: &mut State) -> Xresult {
+    let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
+    let c = a.flag()? | b.flag()?;
+    xs.push_data(Cell::from(c))
+}
+
+fn logical_xor(xs: &mut State) -> Xresult {
+    let b = xs.pop_data()?;
+    let a = xs.pop_data()?;
+    let c = a.flag()? ^ b.flag()?;
+    xs.push_data(Cell::from(c))
+}
+
 fn core_word_min(xs: &mut State) -> Xresult {
     arithmetic_ops_real(xs, |a, b| a.min(b), |a, b| a.min(b))
 }
@@ -343,6 +373,29 @@ mod tests {
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
         xs.eval("-1 negate").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
+    }
+
+    #[test]
+    fn test_logical_ops() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(OK, xs.eval("true false and"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("true true and"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("true false or"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("false false or"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("true true xor"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("true false xor"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(OK, xs.eval("true not"));
+        assert_eq!(Ok(FALSE), xs.pop_data());
+        assert_eq!(OK, xs.eval("false not"));
+        assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_ne!(OK, xs.eval("1 not"));
+        assert_ne!(OK, xs.eval("1 1 and"));
     }
 
     #[test]
