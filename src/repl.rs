@@ -273,7 +273,7 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
         reverse_debug: matches.opt_present("r"),
         binary_path: matches.opt_str("i"),
         eval: matches.opt_str("e"),
-        history_file: Some("history.txt".to_string()),
+        history_file: Some("xeh_history.txt".to_string()),
         sources: matches.free,
     })
 }
