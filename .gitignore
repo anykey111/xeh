@@ -1,2 +1,6 @@
 /target
+/notes
 **/*.rs.bk
+xeh_history.txt
+.DS_Store
+
