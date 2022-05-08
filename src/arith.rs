@@ -35,12 +35,12 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         xs.push_data(Cell::from(t))
     })?;
     xs.defword("rem", core_word_rem)?;
-    xs.defword("and", core_word_bitand)?;
-    xs.defword("or", core_word_bitor)?;
-    xs.defword("xor", core_word_bitxor)?;
-    xs.defword("shl", core_word_bitshl)?;
-    xs.defword("shr", core_word_bitshr)?;
-    xs.defword("not", core_word_bitnot)?;
+    xs.defword("bit-and", core_word_bitand)?;
+    xs.defword("bit-or", core_word_bitor)?;
+    xs.defword("bit-xor",core_word_bitxor)?;
+    xs.defword("bit-not", core_word_bitnot)?;
+    xs.defword("bit-shl", core_word_bitshl)?;
+    xs.defword("bit-shr", core_word_bitshr)?;
     xs.defword("round", core_word_round)?;
     xs.defword("random", core_word_random)?;
     xs.defword("min", core_word_min)?;
@@ -327,17 +327,17 @@ mod tests {
             Err(Xerr::TypeErrorMsg { .. }) => (),
             other => panic!("result {:?}", other),
         }
-        xs.eval("1 1 and").unwrap();
+        xs.eval("1 1 bit-and").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 2 or").unwrap();
+        xs.eval("1 2 bit-or").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.eval("1 3 xor").unwrap();
+        xs.eval("1 3 bit-xor").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.eval("0 not").unwrap();
+        xs.eval("0 bit-not").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.eval("1 3 shl").unwrap();
+        xs.eval("1 3 bit-shl").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.eval("16 3 shr").unwrap();
+        xs.eval("16 3 bit-shr").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         xs.eval("1 negate").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
