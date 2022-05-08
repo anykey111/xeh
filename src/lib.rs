@@ -1,3 +1,11 @@
+
+macro_rules! xstr_literal {
+    ($msg:literal) => {{
+        const MSG: Xstr = arcstr::literal!($msg);
+        MSG
+    }};
+}
+
 mod arith;
 pub mod bitstr;
 pub mod bitstr_ext;
@@ -11,6 +19,8 @@ mod opcodes;
 #[cfg(feature = "stdio")]
 pub mod repl;
 pub mod state;
+mod help;
+
 
 pub mod prelude {
     pub use std::convert::TryInto;

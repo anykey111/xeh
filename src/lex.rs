@@ -36,11 +36,11 @@ pub struct Lex {
     start_pos: usize,
 }
 
-const PARSE_INT_ERRMSG: Xstr = arcstr::literal!("parse int error");
-const PARSE_FLOAT_ERRMSG: Xstr = arcstr::literal!("parse float error");
-const EOF_ERRMSG: Xstr = arcstr::literal!("unexpected end of file");
-const ESCAPE_SEQ_ERRMSG: Xstr = arcstr::literal!("unknown string escape sequence");
-const EXPECT_WS_ERRMSG: Xstr = arcstr::literal!("expect whitespace word separator");
+const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
+const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
+const EOF_ERRMSG: Xstr = xstr_literal!("unexpected end of file");
+const ESCAPE_SEQ_ERRMSG: Xstr = xstr_literal!("unknown string escape sequence");
+const EXPECT_WS_ERRMSG: Xstr = xstr_literal!("expect whitespace word separator");
 
 impl Lex {
     pub fn new(buf: Xstr) -> Lex {

@@ -318,7 +318,7 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     match Bitstr::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
         Err(pos) => Err(Xerr::ParseError {
-            msg: arcstr::literal!("hex string parse error"),
+            msg: xstr_literal!("hex string parse error"),
             substr: s.substr(pos..),
         }),
     }
@@ -334,7 +334,7 @@ fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
     match Bitstr::from_bin_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
         Err(pos) => Err(Xerr::ParseError {
-            msg: arcstr::literal!("bin string parse error"),
+            msg: xstr_literal!("bin string parse error"),
             substr: s.substr(pos..),
         }),
     }
@@ -362,7 +362,7 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
             let pos = e.utf8_error().valid_up_to();
             let bytes = e.into_bytes();
             Err(Xerr::StrDecodeError {
-                msg: arcstr::literal!("utf8 bytes parse error"),
+                msg: xstr_literal!("utf8 bytes parse error"),
                 bytes,
                 pos,
             })

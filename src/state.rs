@@ -577,11 +577,11 @@ impl State {
 
     fn load_core(&mut self) -> Xresult {
         self.dict_insert(
-            arcstr::literal!("true").as_str(),
+            xstr_literal!("true").as_str(),
             Entry::Constant(TRUE),
         )?;
         self.dict_insert(
-            arcstr::literal!("false").as_str(),
+            xstr_literal!("false").as_str(),
             Entry::Constant(FALSE),
         )?;
         self.def_immediate("if", core_word_if)?;
@@ -1616,7 +1616,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Store(a))
         }
         _ => {
-            const ERRMSG: Xstr = arcstr::literal!("word is readonly");
+            const ERRMSG: Xstr = xstr_literal!("word is readonly");
             Err(Xerr::ErrorMsg(ERRMSG))
         }
     }
@@ -1644,7 +1644,7 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
 fn core_word_const(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
-        let s = arcstr::literal!("const word used out of meta-eval context");
+        let s = xstr_literal!("const word used out of meta-eval context");
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;

@@ -57,7 +57,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     OK
 }
 
-const NUM_TYPE_NAME: Xstr = arcstr::literal!("num");
+const NUM_TYPE_NAME: Xstr = xstr_literal!("num");
 
 // (a b -- c)
 fn arithmetic_ops_int(xs: &mut State, ops_int: fn(Xint, Xint) -> Xint) -> Xresult {

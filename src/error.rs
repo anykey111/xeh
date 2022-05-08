@@ -1,4 +1,4 @@
-use crate::prelude::{Cell, Xbitstr, Xstr, Xsubstr};
+use crate::cell::*;
 use crate::state::Flow;
 
 use std::fmt;
@@ -141,18 +141,11 @@ impl fmt::Display for Xerr {
     }
 }
 
-macro_rules! errmsg {
-    ($msg:expr) => {{
-        const MSG: Xstr = arcstr::literal!($msg);
-        MSG
-    }};
-}
-
 impl Xerr {
 
     pub(crate) fn control_flow_error(flow: Option<&Flow>) -> Xresult {
         let flow = flow.ok_or_else(|| {
-            let msg = errmsg!("unbalanced control flow");
+            let msg = xstr_literal!("unbalanced control flow");
             Xerr::ControlFlowError { msg }
         })?;
         Err(Xerr::unbalanced_flow(&flow))
@@ -175,91 +168,91 @@ impl Xerr {
     }
 
     pub(crate) fn conditional_var_definition() -> Xerr {
-        let msg = errmsg!("variable definition must be unconditional");
+        let msg = xstr_literal!("variable definition must be unconditional");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn expect_fn_context() -> Xerr {
-        let msg = errmsg!("has no effect outside of the function control flow");
+        let msg = xstr_literal!("has no effect outside of the function control flow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_fn_builder() -> Xerr {
-        let msg = errmsg!("balance ; with preceding :");
+        let msg = xstr_literal!("balance ; with preceding :");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_vec_builder() -> Xerr {
-        let msg = errmsg!("unbalanced vector builder");
+        let msg = xstr_literal!("unbalanced vector builder");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn vec_stack_underflow() -> Xerr {
-        let msg = errmsg!("vector stack underflow");
+        let msg = xstr_literal!("vector stack underflow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_leave() -> Xerr {
-        let msg = errmsg!("leave used outside of the loop control flow");
+        let msg = xstr_literal!("leave used outside of the loop control flow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_do() -> Xerr {
-        let msg = errmsg!("balance do with closing loop");
+        let msg = xstr_literal!("balance do with closing loop");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_loop() -> Xerr {
-        let msg = errmsg!("balance loop with preceding do");
+        let msg = xstr_literal!("balance loop with preceding do");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_again() -> Xerr {
-        let msg = errmsg!("balance again with preceding begin");
+        let msg = xstr_literal!("balance again with preceding begin");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_repeat() -> Xerr {
-        let msg = errmsg!("balance repeat with preceding begin/while");
+        let msg = xstr_literal!("balance repeat with preceding begin/while");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_while() -> Xerr {
-        let msg = errmsg!("balance while with preceding begin");
+        let msg = xstr_literal!("balance while with preceding begin");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_until() -> Xerr {
-        let msg = errmsg!("balance util with preceding begin");
+        let msg = xstr_literal!("balance util with preceding begin");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_else() -> Xerr {
-        let msg = errmsg!("balance else with preceding if");
+        let msg = xstr_literal!("balance else with preceding if");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endif() -> Xerr {
-        let msg = errmsg!("balance endif with preceding if/else");
+        let msg = xstr_literal!("balance endif with preceding if/else");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endcase() -> Xerr {
-        let msg = errmsg!("balance endcase with preceding case");
+        let msg = xstr_literal!("balance endcase with preceding case");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endof() -> Xerr {
-        let msg = errmsg!("balance endof with preceding of");
+        let msg = xstr_literal!("balance endof with preceding of");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_context() -> Xerr {
-        Xerr::ErrorMsg(errmsg!("unbalanced context"))
+        Xerr::ErrorMsg(xstr_literal!("unbalanced context"))
     }
 
     pub(crate) fn const_context() -> Xerr {
-        Xerr::ErrorMsg(errmsg!("the meta-eval context can operate only with const variables"))
+        Xerr::ErrorMsg(xstr_literal!("the meta-eval context can operate only with const variables"))
     }
 }
 pub type Xresult = Xresult1<()>;

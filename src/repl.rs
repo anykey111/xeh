@@ -141,12 +141,12 @@ fn print_pretty_error(xs: &Xstate, e: &Xerr) {
     eprintln!("{}", s);
 }
 
-const CMD_NEXT: Xstr = arcstr::literal!("/next");
-const CMD_RNEXT: Xstr = arcstr::literal!("/rnext");
-const CMD_LIVE: Xstr = arcstr::literal!("/live");
-const CMD_REPL: Xstr = arcstr::literal!("/repl");
-const CMD_SNAPSHOT: Xstr = arcstr::literal!("/snapshot");
-const CMD_ROLLBACK: Xstr = arcstr::literal!("/rollback");
+const CMD_NEXT: Xstr = xstr_literal!("/next");
+const CMD_RNEXT: Xstr = xstr_literal!("/rnext");
+const CMD_LIVE: Xstr = xstr_literal!("/live");
+const CMD_REPL: Xstr = xstr_literal!("/repl");
+const CMD_SNAPSHOT: Xstr = xstr_literal!("/snapshot");
+const CMD_ROLLBACK: Xstr = xstr_literal!("/rollback");
 const REPL_CMD_HINTS: &[Xstr] = &[
     CMD_NEXT,
     CMD_RNEXT,

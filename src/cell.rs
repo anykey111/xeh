@@ -169,16 +169,16 @@ impl Ord for Cell {
 }
 impl Eq for Cell {}
 
-const NIL_TYPE_NAME: Xstr = arcstr::literal!("nil");
-const FLAG_TYPE_NAME: Xstr = arcstr::literal!("flag");
-const INT_TYPE_NAME: Xstr = arcstr::literal!("int");
-const REAL_TYPE_NAME: Xstr = arcstr::literal!("real");
-const STR_TYPE_NAME: Xstr = arcstr::literal!("str");
-const VEC_TYPE_NAME: Xstr = arcstr::literal!("vec");
-const FUN_TYPE_NAME: Xstr = arcstr::literal!("fun");
-const BITSTR_TYPE_NAME: Xstr = arcstr::literal!("bitstr");
-const ANY_TYPE_NAME: Xstr = arcstr::literal!("any");
-const TAG_TYPE_NAME: Xstr = arcstr::literal!("tag");
+const NIL_TYPE_NAME: Xstr = xstr_literal!("nil");
+const FLAG_TYPE_NAME: Xstr = xstr_literal!("flag");
+const INT_TYPE_NAME: Xstr = xstr_literal!("int");
+const REAL_TYPE_NAME: Xstr = xstr_literal!("real");
+const STR_TYPE_NAME: Xstr = xstr_literal!("str");
+const VEC_TYPE_NAME: Xstr = xstr_literal!("vec");
+const FUN_TYPE_NAME: Xstr = xstr_literal!("fun");
+const BITSTR_TYPE_NAME: Xstr = xstr_literal!("bitstr");
+const ANY_TYPE_NAME: Xstr = xstr_literal!("any");
+const TAG_TYPE_NAME: Xstr = xstr_literal!("tag");
 
 fn cell_type_error(msg: Xstr, val: Cell) -> Xerr {
     Xerr::TypeErrorMsg { msg, val }
