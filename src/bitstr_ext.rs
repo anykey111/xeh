@@ -16,17 +16,9 @@ pub struct BitstrState {
 macro_rules! def_data_word {
     ($xs:ident, $n:expr) => {
         $xs.defword(concat!("u", $n), |xs| read_unsigned_n(xs, $n))?;
-        $xs.defword(concat!("u", $n, "le"), |xs| read_unsigned(xs, $n, LITTLE))?;
-        $xs.defword(concat!("u", $n, "be"), |xs| read_unsigned(xs, $n, BIG))?;
         $xs.defword(concat!("i", $n), |xs| read_signed_n(xs, $n))?;
-        $xs.defword(concat!("i", $n, "le"), |xs| read_signed(xs, $n, LITTLE))?;
-        $xs.defword(concat!("i", $n, "be"), |xs| read_signed(xs, $n, BIG))?;
         $xs.defword(concat!("u", $n, "!"), |xs| pack_int(xs, $n))?;
-        $xs.defword(concat!("u", $n, "le!"), |xs| pack_int_bo(xs, $n, LITTLE))?;
-        $xs.defword(concat!("u", $n, "be!"), |xs| pack_int_bo(xs, $n, BIG))?;
         $xs.defword(concat!("i", $n, "!"), |xs| pack_int(xs, $n))?;
-        $xs.defword(concat!("i", $n, "le!"), |xs| pack_int_bo(xs, $n, LITTLE))?;
-        $xs.defword(concat!("i", $n, "be!"), |xs| pack_int_bo(xs, $n, BIG))?;
     };
 }
 
