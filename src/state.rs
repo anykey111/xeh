@@ -1411,7 +1411,7 @@ fn core_word_until(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
         Some(Flow::Begin(begin_org)) => {
             let offs = jump_offset(xs.code_origin(), begin_org);
-            xs.code_emit(Opcode::JumpIf(offs))
+            xs.code_emit(Opcode::JumpIfNot(offs))
         }
         _ => Err(Xerr::unbalanced_until()),
     }
@@ -2071,7 +2071,7 @@ mod tests {
             it.next().unwrap()
         );
         let mut xs = State::boot().unwrap();
-        xs.eval("begin 1 false until").unwrap();
+        xs.eval("begin 1 true until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x 0 <> while 0 -> x repeat").unwrap();
         assert_eq!(
