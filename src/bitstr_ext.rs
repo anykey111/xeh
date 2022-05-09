@@ -33,11 +33,7 @@ macro_rules! def_data_word {
 macro_rules! def_data_word_real {
     ($xs:ident, $n:expr) => {
         $xs.defword(concat!("f", $n), |xs| read_float_n(xs, $n))?;
-        $xs.defword(concat!("f", $n, "le"), |xs| read_float(xs, $n, LITTLE))?;
-        $xs.defword(concat!("f", $n, "be"), |xs| read_float(xs, $n, BIG))?;
         $xs.defword(concat!("f", $n, "!"), |xs| pack_float(xs, $n))?;
-        $xs.defword(concat!("f", $n, "le!"), |xs| pack_float_bo(xs, $n, LITTLE))?;
-        $xs.defword(concat!("f", $n, "be!"), |xs| pack_float_bo(xs, $n, BIG))?;
     };
 }
 
@@ -79,13 +75,23 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     def_data_word!(xs, 64);
     def_data_word_real!(xs, 32);
     def_data_word_real!(xs, 64);
+    xs.defword("float", |xs| {
+        let n = xs.pop_data()?.to_usize()?;
+        let bo = current_byteorder(xs)?;
+        read_float(xs, n, bo)
+    })?;
+    xs.defword("float!", |xs| {
+        let n = xs.pop_data()?.to_usize()?;
+        let bo = current_byteorder(xs)?;
+        pack_float_bo(xs, n, bo)
+    })?;
     xs.defword("int", |xs| {
-        let n = take_length(xs)?;
+        let n = xs.pop_data()?.to_usize()?;
         let bo = current_byteorder(xs)?;
         read_signed(xs, n, bo)
     })?;
     xs.defword("uint", |xs| {
-        let n = take_length(xs)?;
+        let n = xs.pop_data()?.to_usize()?;
         let bo = current_byteorder(xs)?;
         read_unsigned(xs, n, bo)
     })?;
@@ -404,10 +410,6 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
     }
 }
 
-fn take_length(xs: &mut Xstate) -> Xresult1<usize> {
-    xs.pop_data()?.to_usize()
-}
-
 fn set_byteorder(xs: &mut Xstate, bo: Byteorder) -> Xresult {
     xs.set_var(
         xs.bitstr_mod.big_endian,
@@ -451,12 +453,12 @@ fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
 }
 
 fn word_bytes(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
+    let n = xs.pop_data()?.to_usize()?;
     read_bits(xs, n * 8)
 }
 
 fn word_bits(xs: &mut Xstate) -> Xresult {
-    let n = take_length(xs)?;
+    let n = xs.pop_data()?.to_usize()?;
     read_bits(xs, n)
 }
 
@@ -648,7 +650,7 @@ mod tests {
             let f: f64 = 1.0;
             xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec()))
                 .unwrap();
-            xs.eval("f64be").unwrap();
+            xs.eval("64 big float").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::from(f), val.value());
             assert_eq!(&bitstr_real_tag(64, BIG), val.tag().unwrap());
