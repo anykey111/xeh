@@ -11,6 +11,7 @@ pub struct BitstrState {
     offset: CellRef,
     input: CellRef,
     stash: CellRef,
+    output: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -33,9 +34,11 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrState::default();
     let empty = Cell::from(Xbitstr::new());
     m.big_endian = xs.defvar("big?", ZERO)?;
-    m.input = xs.defvar("current-bitstr", empty)?;
+    m.input = xs.defvar("input", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
+    //todo: intercept output 
+    //m.output = xs.defvar("output", NIL)?;
     xs.bitstr_mod = m;
     xs.defword("open-bitstr", word_open_bitstr)?;
     xs.defword("close-bitstr", word_close_bitstr)?;
@@ -60,6 +63,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("expect", word_expect)?;
+    xs.defword("emit", word_emit)?;
 
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -415,6 +419,17 @@ fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
         Ok(LITTLE)
     } else {
         Ok(BIG)
+    }
+}
+
+fn word_emit(xs: &mut Xstate) -> Xresult {
+    let bs = bitstring_from(xs.pop_data()?)?;
+    let buf = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
+    let cref = xs.bitstr_mod.output;
+    if cref.is_initialized() {
+        panic!("todo");
+    } else {
+        crate::file::write_to_stdout(&buf)
     }
 }
 

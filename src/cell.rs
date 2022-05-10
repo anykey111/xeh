@@ -48,6 +48,9 @@ impl CellRef {
     pub fn index(&self) -> usize {
         self.0
     }
+    pub fn is_initialized(&self) -> bool {
+        self != &Self::default()
+    }
 }
 
 #[derive(Clone)]
