@@ -1789,8 +1789,9 @@ fn core_word_get(xs: &mut State) -> Xresult {
 
 fn core_word_sort(xs: &mut State) -> Xresult {
     let v = xs.pop_data()?.to_vec()?;
-    let m: std::collections::BTreeSet<Cell> = v.iter().cloned().collect();
-    let sorted = Xvec::from_iter(m.into_iter());
+    let mut tmp: Vec<Cell> = v.iter().cloned().collect();
+    tmp.sort();
+    let sorted = Xvec::from_iter(tmp.into_iter());
     xs.push_data(Cell::from(sorted))
 }
 
@@ -2352,9 +2353,10 @@ mod tests {
     #[test]
     fn test_sort() {
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 2 3 1 ] sort").unwrap();
+        xs.eval("[ 2 3 2 1 ] sort").unwrap();
         let mut v = Xvec::new();
         v.push_back_mut(Cell::Int(1));
+        v.push_back_mut(Cell::Int(2));
         v.push_back_mut(Cell::Int(2));
         v.push_back_mut(Cell::Int(3));
         assert_eq!(Ok(&v), xs.pop_data().unwrap().vec());
