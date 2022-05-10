@@ -12,8 +12,8 @@ pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
     }
 }
 
-#[cfg(not (feature = "stdio"))]
-pub fn write_to_stdout(xs: &mut Xstate, text: &str) -> Xresult {
+#[cfg(not(feature = "stdio"))]
+pub fn write_to_stdout(_buf: &[u8]) -> Xresult {
     Err(Xerr::InternalError)
 }
 
