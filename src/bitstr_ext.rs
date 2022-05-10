@@ -62,7 +62,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstr>utf8", bitstr_to_utf8)?;
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
-    xs.defword("expect", word_expect)?;
+    xs.defword("magic", word_magic)?;
     xs.defword("emit", word_emit)?;
 
     def_data_word!(xs, 8);
@@ -433,7 +433,7 @@ fn word_emit(xs: &mut Xstate) -> Xresult {
     }
 }
 
-fn word_expect(xs: &mut Xstate) -> Xresult {
+fn word_magic(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let pat = bitstring_from(val)?;
     let s = peek_bits(xs, pat.len())?;
@@ -597,16 +597,16 @@ mod tests {
     fn test_exact_match() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("123")).unwrap();
-        match xs.eval("\"124\" expect") {
+        match xs.eval("\"124\" magic") {
             Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(21, fail_pos),
             other => panic!("{:?}", other),
         };
-        xs.eval("\"123\" expect").unwrap();
-        match xs.eval("[ 0 ] expect") {
+        xs.eval("\"123\" magic").unwrap();
+        match xs.eval("[ 0 ] magic") {
             Err(Xerr::ReadError { len, .. }) => assert_eq!(8, len),
             other => panic!("{:?}", other),
         }
-        let res = xs.eval(" \"111111\" bin>bitstr open-input \"11101\" bin>bitstr expect");
+        let res = xs.eval(" \"111111\" bin>bitstr open-input \"11101\" bin>bitstr magic");
         match &res {
             Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
