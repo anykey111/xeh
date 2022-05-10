@@ -230,7 +230,7 @@ fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
         buf.push_str("  ");
         buf.push_str(&ascii);
         buf.push_str("\n");
-        xs.print(&buf);
+        xs.print(&buf)?;
         buf.clear();
         hex.clear();
         ascii.clear();

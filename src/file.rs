@@ -12,6 +12,21 @@ pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
     }
 }
 
+#[cfg(not (feature = "stdio"))]
+pub fn write_to_stdout(xs: &mut Xstate, text: &str) -> Xresult {
+    Err(Xerr::InternalError)
+}
+
+#[cfg(feature = "stdio")]
+pub fn write_to_stdout(buf: &[u8]) -> Xresult {
+    let stdout = std::io::stdout();
+    let mut h = stdout.lock();
+    h.write_all(buf).map_err(|e| Xerr::IOError {
+        filename: xstr_literal!("stdout"),
+        reason: e.to_string().into(),
+    })
+}
+
 #[cfg(feature = "mmap")]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     let file = File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;

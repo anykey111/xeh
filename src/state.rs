@@ -248,12 +248,12 @@ impl State {
         Some(errmsg)
     }
 
-    pub fn print(&mut self, msg: &str) {
+    pub fn print(&mut self, msg: &str) -> Xresult {
         if let Some(out) = self.stdout.as_mut() {
             out.push_str(msg);
+            OK
         } else {
-            #[cfg(feature = "stdio")]
-            print!("{}", msg);
+            crate::file::write_to_stdout(msg.as_bytes())
         }
     }
 
@@ -1717,7 +1717,7 @@ fn core_word_help(xs: &mut State) -> Xresult {
     let name = xs.pop_data()?.to_xstr()?;
     let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?;
     if let Ok(s) = help.to_xstr() {
-        xs.print(&s);
+        xs.print(&s)?;
     }
     OK
 }
@@ -1837,8 +1837,7 @@ fn core_word_display_stack(xs: &mut State) -> Xresult {
         buf.push_str(&s);
         buf.push_str("\n");
     }
-    xs.print(&buf);
-    OK
+    xs.print(&buf)
 }
 
 fn core_word_println(xs: &mut State) -> Xresult {
@@ -1849,13 +1848,11 @@ fn core_word_println(xs: &mut State) -> Xresult {
 fn core_word_print(xs: &mut State) -> Xresult {
     let val = xs.pop_data()?;
     let s = xs.format_cell(&val)?;
-    xs.print(&s);
-    OK
+    xs.print(&s)
 }
 
 fn core_word_newline(xs: &mut State) -> Xresult {
-    xs.print("\n");
-    OK
+    xs.print("\n")
 }
 
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
