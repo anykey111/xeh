@@ -449,7 +449,8 @@ fn word_magic(xs: &mut Xstate) -> Xresult {
             fail_pos: pos,
         });
     }
-    move_offset_checked(xs, s.end())
+    move_offset_checked(xs, s.end())?;
+    xs.push_data(Cell::from(s))
 }
 
 fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
@@ -613,6 +614,9 @@ mod tests {
         }
         assert_eq!(format!("{}", res.err().unwrap()),
         "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3");
+        let mut xs = Xstate::boot().unwrap();
+        xs.set_binary_input(Xbitstr::from("abc")).unwrap();    
+        xs.eval(" \"abc\" magic [ \"abc\" ] >bitstr assert-eq").unwrap();
     }
 
     #[test]
