@@ -40,8 +40,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     //todo: intercept output 
     //m.output = xs.defvar("output", NIL)?;
     xs.bitstr_mod = m;
-    xs.defword("open-bitstr", word_open_bitstr)?;
-    xs.defword("close-bitstr", word_close_bitstr)?;
+    xs.defword("open-input", word_open_input)?;
+    xs.defword("close-input", word_close_input)?;
     xs.defword("seek", word_seek)?;
     xs.defword("remain", word_remain)?;
     xs.defword("find", word_find)?;
@@ -262,12 +262,12 @@ pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstr) -> Xresult {
     xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))
 }
 
-fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
+fn word_open_input(xs: &mut Xstate) -> Xresult {
     let s = bitstring_from(xs.pop_data()?)?;
     open_bitstr(xs, s)
 }
 
-fn word_close_bitstr(xs: &mut Xstate) -> Xresult {
+fn word_close_input(xs: &mut Xstate) -> Xresult {
     let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
     let last = stash.last().ok_or_else(|| Xerr::OutOfBounds(0))?;
     let offset = last.tag().unwrap_or(&ZERO).clone();
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_int_uint() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 0xff 0xff ] open-bitstr 8 uint 8 int").unwrap();
+        xs.eval("[ 0xff 0xff ] open-input 8 uint 8 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
@@ -606,7 +606,7 @@ mod tests {
             Err(Xerr::ReadError { len, .. }) => assert_eq!(8, len),
             other => panic!("{:?}", other),
         }
-        let res = xs.eval(" \"111111\" bin>bitstr open-bitstr \"11101\" bin>bitstr expect");
+        let res = xs.eval(" \"111111\" bin>bitstr open-input \"11101\" bin>bitstr expect");
         match &res {
             Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
@@ -688,7 +688,7 @@ mod tests {
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(include_str!("test-binary-input.xs")).unwrap();
-        assert_eq!(Err(Xerr::OutOfBounds(0)), xs.eval("close-bitstr"));
+        assert_eq!(Err(Xerr::OutOfBounds(0)), xs.eval("close-input"));
     }
 
     #[test]
@@ -748,7 +748,7 @@ mod tests {
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 33 55 77 ] open-bitstr [ 77 ] find").unwrap();
+        xs.eval("[ 33 55 77 ] open-input [ 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
         xs.eval("[ 55 77 ] find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
@@ -757,7 +757,7 @@ mod tests {
         xs.eval("[ 56 ] find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
         assert_ne!(OK, xs.eval("5 seek [ 56 ] find"));
-        xs.eval("[ 0x31 0x32 0x33 ] open-bitstr \"23\" find")
+        xs.eval("[ 0x31 0x32 0x33 ] open-input \"23\" find")
             .unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
