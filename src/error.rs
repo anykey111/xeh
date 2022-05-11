@@ -131,13 +131,13 @@ impl fmt::Display for Xerr {
                 write!(f, " [")?;
                 let (_, src_diff) = src.split_at(fail_pos).unwrap();
                 for (x, _) in src_diff.iter8().take(8) {
-                    write!(f, " {:02X}", x)?;
+                    write!(f, " 0x{:02X}", x)?;
                 }
                 writeln!(f, " ] source at {}", src.start() + fail_pos)?;
                 write!(f, " [")?;
                 let (_, pat_diff) = expect.split_at(fail_pos).unwrap();
                 for (x, _) in pat_diff.iter8().take(8) {
-                    write!(f, " {:02X}", x)?
+                    write!(f, " 0x{:02X}", x)?
                 }
                 write!(f, " ] pattern at {}", expect.start() + fail_pos)
             }
