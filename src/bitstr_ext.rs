@@ -613,7 +613,7 @@ mod tests {
             other => panic!("{:?}", other),
         }
         assert_eq!(format!("{}", res.err().unwrap()),
-        "source bits are differ from pattern at offset 3\n [ 03 ] source at 3\n [ 01 ] pattern at 3");
+        "source bits are differ from pattern at offset 3\n [ 0x03 ] source at 3\n [ 0x01 ] pattern at 3");
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("abc")).unwrap();    
         xs.eval(" \"abc\" magic [ \"abc\" ] >bitstr assert-eq").unwrap();
