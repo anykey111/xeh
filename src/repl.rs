@@ -167,7 +167,7 @@ fn run_line(st: &mut ReplState, line: &str) {
             st.trial = Some(Default::default());
             println!("Trial and error mode!");
             println!("* everyting evaluating on-fly");
-            println!("* hit Enter to save checkpoint");
+            println!("* hit Enter to freeze changes");
             st.snapshot();
         }
         OK
