@@ -518,10 +518,11 @@ impl State {
 
     //#[cfg(test)]
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
-        match self.dict_entry(name) {
-            None => Err(Xerr::UnknownWord(Xstr::from(name))),
-            Some(Entry::Variable(a)) => self.cell_ref(*a),
-            _ => Err(Xerr::TypeError),
+        match self.dict_entry(name).ok_or_else(|| Xerr::UnknownWord(Xstr::from(name)))? {
+            Entry::Variable(a) => self.cell_ref(*a),
+            Entry::Constant(a) => Ok(a),
+            //Entry::Function{xf,..} => Ok(Cell::Fun(xf.clone())),
+            _ => Ok(&NIL),
         }
     }
 
