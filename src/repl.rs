@@ -293,6 +293,10 @@ pub fn run_with_args() -> Xresult {
         eprintln!("startup error: {}", e);
         e
     })?;
+    if let Err(e) = xs.eval(include_str!("../docs/help.xs")) {
+        print_pretty_error(&xs, &e);
+        return Err(e);
+    }
     if args.reverse_debug {
         xs.set_recording_enabled(true);
     }
