@@ -165,9 +165,4 @@ dup "J" doc!
 "Read number of bits as bitstr."
 @[ doc-for-bitstr
     "int -- bitstr" stack-comment
-] "bits" doc!
-
-"Read number of bits as bytestr, must be divisible by 8."
-@[ doc-for-bitstr
-    "int -- bytestr" stack-comment
-] "bytes" doc!
+] "bitstr" doc!

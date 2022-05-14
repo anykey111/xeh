@@ -47,8 +47,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("find", word_find)?;
     xs.defword("dump", word_dump)?;
     xs.defword("dump-at", word_dump_at)?;
-    xs.defword("bits", word_bits)?;
-    xs.defword("bytes", word_bytes)?;
+    xs.defword("bitstr", word_bitstr)?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-not", word_bitstr_not)?;
     xs.defword("bitstr-and", bitstring_and)?;
@@ -460,12 +459,7 @@ fn read_bits(xs: &mut Xstate, n: usize) -> Xresult {
     xs.push_data(val)
 }
 
-fn word_bytes(xs: &mut Xstate) -> Xresult {
-    let n = xs.pop_data()?.to_usize()?;
-    read_bits(xs, n * 8)
-}
-
-fn word_bits(xs: &mut Xstate) -> Xresult {
+fn word_bitstr(xs: &mut Xstate) -> Xresult {
     let n = xs.pop_data()?.to_usize()?;
     read_bits(xs, n)
 }
@@ -631,7 +625,7 @@ mod tests {
             assert_eq!(&bitstr_int_tag(8, NATIVE), val.tag().unwrap());
         }
         {
-            xs.eval("2 bytes").unwrap();
+            xs.eval("16 bitstr").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(None, val.tag());
             let s = val.value().to_bitstr().unwrap();
@@ -639,7 +633,7 @@ mod tests {
             assert_eq!(vec![2, 3], s.to_bytes_with_padding());
         }
         {
-            xs.eval("2 bits").unwrap();
+            xs.eval("2 bitstr").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(None, val.tag());
             let s = val.value().to_bitstr().unwrap();
@@ -743,9 +737,9 @@ mod tests {
         xs.set_binary_input(Xbitstr::from(vec![1, 2])).unwrap();
         xs.eval("remain").unwrap();
         assert_eq!(Cell::Int(16), xs.pop_data().unwrap());
-        xs.eval("5 bits drop remain").unwrap();
+        xs.eval("5 bitstr drop remain").unwrap();
         assert_eq!(Cell::Int(11), xs.pop_data().unwrap());
-        xs.eval("11 bits drop remain").unwrap();
+        xs.eval("11 bitstr drop remain").unwrap();
         assert_eq!(Cell::Int(0), xs.pop_data().unwrap());
     }
 
