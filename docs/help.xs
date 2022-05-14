@@ -11,32 +11,32 @@
 Stick tag to the val. If value already has a tag drop the old one."
 @[ doc-for-tags
     "val tag -- val" stack-comment 
-] "with-tag" doc
+] "with-tag" doc!
 
 "Read tag of the value or nil if tag is absent."
 @[ doc-for-tags
     "val -- tag" stack-comment
-] "tag-of" doc
+] "tag-of" doc!
 
 "Append new value to the vec or replace if
 val with the same tag already exists."
 @[ doc-for-tags
     "vec val -- vec" stack-comment
-] "insert-tagged" doc
+] "insert-tagged" doc!
 
 "Execute code if flag is true, otherwise jump to \"endif\".
     FLAG if CODE endif"
 @[ doc-for-cond
-] "if" doc
+] "if" doc!
 
 "Fallback for the \"if\" conditional branch. Executed when flag is false.
     FLAG if CODE else FALLBACK endif"
 @[ doc-for-cond
-] "else" doc
+] "else" doc!
 
 "End of the \"if\" conditional branch."
 @[ doc-for-cond
-] "endif" doc
+] "endif" doc!
 
 "Select one case of the multiple different choices.
     X case
@@ -48,15 +48,15 @@ Compare X with X1, if X equals to X1 then CODE1 is executed.
 Compare X with XN, if X equals to XN then CODEN is executed.
 Otherwise DEFAULT is executed."
 @[ doc-for-cond
-] dup "of" doc "case" doc
+] dup "of" doc! "case" doc!
 
 "End of the \"case\" conditional select." 
 @[ doc-for-cond
-] "endcase" doc
+] "endcase" doc!
 
 "End of the single case selection." 
 @[ doc-for-cond
-] "endof" doc
+] "endof" doc!
 
 "Loop with pre-condition.
     begin FLAG while CODE repeat
@@ -64,23 +64,23 @@ If FLAG is true CODE is executed and loop is restarted from \"begin\".
 IF FLAG is false execution continue after the \"repeat\".
 The FLAG is tested on every loop iteration."
 @[ doc-for-loop 
-] dup "begin" doc dup "while" doc "repeat" doc
+] dup "begin" doc! dup "while" doc! "repeat" doc!
 
 "Endless loop.
     begin CODE again
 Repat CODE forever, unless \"exit\" or \"leave\" is called."
 @[ doc-for-loop
-] "again" doc
+] "again" doc!
 
 "Loop with post-condition.
     begin CODE FLAG until
 Restart loop until flag is false."
 @[ doc-for-loop
-] "until" doc
+] "until" doc!
 
 "Leave the innermost loop immediatly."
 @[ doc-for-loop
-] "leave" doc
+] "leave" doc!
 
 "Loop for every integer starting from START and up to, but excluding LIMIT.
     LIMIT START do CODE loop
@@ -96,78 +96,78 @@ num-rows 0 do
         \"col=\" print I println
     loop
 loop" doc-example
-] dup "do" doc
-dup "loop" doc
-dup "I" doc
-dup "J" doc
- "K" doc
+] dup "do" doc!
+dup "loop" doc!
+dup "I" doc!
+dup "J" doc!
+ "K" doc!
 
 "Binary data under inspection."
 @[ doc-for-bitstr 
     "-- bitstr" stack-comment
-] "input" doc
+] "input" doc!
 
 "Number of bits consumed."
 @[ doc-for-bitstr
     "-- int" stack-comment
-] "offset" doc
+] "offset" doc!
 
 "Number of bits remain unread."
 @[ doc-for-bitstr
     "-- int" stack-comment
-] "remain" doc
+] "remain" doc!
 
 "Temporary open the new binary until the close-input called."
 @[ doc-for-bitstr 
     "bitstr --" stack-comment
-] "open-input" doc
+] "open-input" doc!
 
 "Drop current binary, restore the previous one from oh-hold."
 @[ doc-for-bitstr 
     "--" stack-comment
-] "close-input" doc
+] "close-input" doc!
 
 "Reposition offset."
 @[ doc-for-bitstr
     "int --" stack-comment
-] "seek" doc
+] "seek" doc!
 
 "True if default endianess is set to big."
 @[ doc-for-bitstr
     "flag --" stack-comment
-] "big?" doc
+] "big?" doc!
 
 "Set big endian as default."
 @[ doc-for-bitstr
     "--" stack-comment
-] "big" doc
+] "big" doc!
 
 "Set little endian as default."
 @[ doc-for-bitstr
     "--" stack-comment
-] "little" doc
+] "little" doc!
  
 "Find the first occurence or nil starting from the current offset."
 @[ doc-for-bitstr
     "bytestr -- int" stack-comment
-] "find" doc
+] "find" doc!
 
 "Print dump from the current offset."
 @[ doc-for-bitstr
     "--" stack-comment
-] "dump" doc
+] "dump" doc!
 
 "Print dump at the given offset."
 @[ doc-for-bitstr
     "int --" stack-comment
-] "dump-at" doc
+] "dump-at" doc!
 
 "Read number of bits as bitstr."
 @[ doc-for-bitstr
     "int -- bitstr" stack-comment
-] "bits" doc
+] "bits" doc!
 
 "Read number of bits as bytestr, must be divisible by 8."
 @[ doc-for-bitstr
     "int -- bytestr" stack-comment
-] "bytes" doc
+] "bytes" doc!

@@ -616,7 +616,7 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.def_immediate("@", core_word_with_literal_tag)?;
         self.def_immediate("@[", core_word_tag_vec)?;
-        self.defword("doc", core_word_doc)?;
+        self.defword("doc!", core_word_doc)?;
         self.defword("help", core_word_help)?;
         self.defword("help-str", core_word_help_str)?;
         self.defword("I", core_word_counter_i)?;
@@ -2641,7 +2641,7 @@ mod tests {
     fn test_doc_help() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval(": ff ;  \"test-help\" \"ff\" doc ").unwrap();
+        xs.eval(": ff ;  \"test-help\" \"ff\" doc! ").unwrap();
         xs.eval("\"ff\" help").unwrap();
         assert_eq!(xs.read_stdout(), Some("test-help".to_string()));
     }
@@ -2651,7 +2651,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(
             OK,
-            xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc \"ee\" help-str")
+            xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc! \"ee\" help-str")
         );
         let help = xs.help_str("ee").unwrap();
         assert_eq!(Some(&Cell::Int(3)), help.tag());
