@@ -5,7 +5,7 @@
 : doc-for-tags "Tags" "section" with-tag ;
 : doc-for-bitstr "Binary Parsing" with-tag ;
 : doc-for-fmt "Formatting" with-tag ;
-: stack-comment "stack-effect" with-tag ;
+: stack-comment "stack-comment" with-tag ;
 : doc-example "example" with-tag ;
 
 "( val tag -- val )
@@ -176,4 +176,4 @@ loop" doc-example
 "Set default formatting base to 10."
 @[ doc-for-fmt ] "DEC" doc!
 
-depth zero? assert
+depth 0 = assert
