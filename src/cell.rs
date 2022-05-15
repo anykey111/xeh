@@ -231,6 +231,10 @@ impl Cell {
         Cell::WithTag(std::rc::Rc::new(WithTag { tag, value: self }))
     }
 
+    pub fn get_tagged(&self, key: &Cell) -> Option<&Cell> {
+        self.tag()?.vec().ok()?.iter().find(|x| x.tag() == Some(&key))
+    }
+
     pub fn value(&self) -> &Cell {
         match self {
             Cell::WithTag(rc) => rc.value.value(),
@@ -449,5 +453,17 @@ mod tests {
         let c = ONE.with_tag(tag_a.clone());
         assert_eq!(Some(&tag_a), c.tag());
         assert_eq!(ONE, c);
+    }
+
+    #[test]
+    fn test_get_tagged() {
+        let a = Cell::from("1").with_tag(Cell::from("a"));
+        assert_eq!(a.get_tagged(&Cell::from("a")), None);
+        let b = Cell::from("2").with_tag(Cell::from(rpds::vector![
+                Cell::from("c"),
+                a.clone()
+            ]));
+        assert_eq!(Some(&a), b.get_tagged(&Cell::from("a")));
+        assert_eq!(None, b.get_tagged(&Cell::from("c")));
     }
 }
