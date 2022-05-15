@@ -77,7 +77,7 @@ impl Default for ContextMode {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 struct Context {
     ds_len: usize,
     cs_len: usize,
@@ -85,6 +85,7 @@ struct Context {
     fs_len: usize,
     ls_len: usize,
     ss_ptr: usize,
+    di_len: usize,
     ip: usize,
     mode: ContextMode,
 }
@@ -449,6 +450,7 @@ impl State {
             fs_len: self.flow_stack.len(),
             ls_len: self.loops.len(),
             ss_ptr: self.special.len(),
+            di_len: self.dict.len(),
             ip: self.code_origin(),
             mode,
         };
@@ -468,22 +470,30 @@ impl State {
             .ok_or_else(|| Xerr::unbalanced_context())?;
         if self.ctx.mode != ContextMode::Compile {
             self.run()?;
-            if self.ctx.mode == ContextMode::MetaEval {
+            if prev.mode == self.ctx.mode {
+                if prev.mode == ContextMode::Eval {
+                    // preserve current ip value
+                    prev.ip = self.ctx.ip;
+                }
+            } else if self.ctx.mode == ContextMode::MetaEval {
                 // purge meta context code after evaluation
                 self.code.truncate(self.ctx.cs_len);
                 self.debug_map.truncate(self.ctx.cs_len);
-            }
-        }
-        if prev.mode == self.ctx.mode {
-            if self.ctx.mode == ContextMode::Eval {
-                // preserve current ip value
-                prev.ip = self.ctx.ip;
-            }
-        } else if self.ctx.mode == ContextMode::MetaEval {
-            // emit meta-evaluation result
-            while self.data_stack.len() > self.ctx.ds_len {
-                let val = self.pop_data()?;
-                self.code_emit_value(val)?;
+                // remove non-constant words
+                let mut i = self.ctx.di_len;
+                while i < self.dict.len() {
+                    if let Entry::Constant(_) = &self.dict[i].entry {
+                        i += 1;
+                    } else {
+                        self.dict.swap_remove(i);
+                    }
+                }
+                prev.di_len = i;
+                // emit meta-evaluation result
+                while self.data_stack.len() > self.ctx.ds_len {
+                    let val = self.pop_data()?;
+                    self.code_emit_value(val)?;
+                }
             }
         }
         self.ctx = prev;
@@ -1526,9 +1536,6 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_begin(xs: &mut State) -> Xresult {
-    if xs.ctx.mode == ContextMode::MetaEval {
-        return Err(Xerr::const_context());
-    }
     // jump over function body
     let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
@@ -1658,7 +1665,7 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
 fn core_word_const(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
-        let s = xstr_literal!("const word used out of meta-eval context");
+        let s = xstr_literal!("const word used out of the meta-eval context");
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
@@ -2249,14 +2256,21 @@ mod tests {
     }
 
     #[test]
-    fn test_nested_fn_purge() {
+    fn test_meta_purge() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval(" ( : f 2 ; ) f println");
-        assert_eq!(Err(Xerr::const_context()), res);
+        eval_ok!(xs, "
+        ( 1 const aaa )
+        ( : init ( 2 aaa + ) ;
+          ( init const yyy )
+         )
+         yyy var ddd
+         3 ddd assert-eq
+        ");
+        assert_ne!(OK, xs.eval("init"));
     }
 
     #[test]
-    fn test_nested_var_purge() {
+    fn test_meta_var() {
         let mut xs = State::boot().unwrap();
         let res = xs.eval(" ( 2 var x ) x println");
         assert_eq!(Err(Xerr::const_context()), res);
