@@ -97,7 +97,7 @@ num-rows 0 do
         \"col=\" print I println
     loop
 loop" doc-example
-] dup "do" doc! dup "loop" doc!
+] dup "do" doc!  "loop" doc!
 
 "Innermost loop index"
 @[ doc-for-loop "-- int" stack-comment ] "I" doc!
@@ -175,3 +175,5 @@ loop" doc-example
 
 "Set default formatting base to 10."
 @[ doc-for-fmt ] "DEC" doc!
+
+depth zero? assert

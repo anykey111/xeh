@@ -1726,6 +1726,7 @@ fn core_word_help(xs: &mut State) -> Xresult {
     let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?;
     if let Ok(s) = help.to_xstr() {
         xs.print(&s)?;
+        xs.print("\n")?;
     }
     OK
 }
@@ -2657,7 +2658,7 @@ mod tests {
         xs.intercept_stdout(true);
         xs.eval(": ff ;  \"test-help\" \"ff\" doc! ").unwrap();
         xs.eval("\"ff\" help").unwrap();
-        assert_eq!(xs.read_stdout(), Some("test-help".to_string()));
+        assert_eq!(xs.read_stdout(), Some("test-help\n".to_string()));
     }
 
     #[test]
