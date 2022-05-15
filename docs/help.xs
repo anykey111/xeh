@@ -4,6 +4,7 @@
 : doc-for-cond  "Conditional Execution" "section" with-tag ;
 : doc-for-tags "Tags" "section" with-tag ;
 : doc-for-bitstr "Binary Parsing" with-tag ;
+: doc-for-fmt "Formatting" with-tag ;
 : stack-comment "stack-effect" with-tag ;
 : doc-example "example" with-tag ;
 
@@ -96,11 +97,16 @@ num-rows 0 do
         \"col=\" print I println
     loop
 loop" doc-example
-] dup "do" doc!
-dup "loop" doc!
-dup "I" doc!
-dup "J" doc!
- "K" doc!
+] dup "do" doc! dup "loop" doc!
+
+"Innermost loop index"
+@[ doc-for-loop "-- int" stack-comment ] "I" doc!
+
+"Outer loop index"
+@[ doc-for-loop "-- int" stack-comment ] "J" doc!
+
+"Outermost loop index"
+@[ doc-for-loop "-- int" stack-comment ] "K" doc!
 
 "Binary data under inspection."
 @[ doc-for-bitstr 
@@ -123,9 +129,7 @@ dup "J" doc!
 ] "open-input" doc!
 
 "Drop current binary, restore the previous one from oh-hold."
-@[ doc-for-bitstr 
-    "--" stack-comment
-] "close-input" doc!
+@[ doc-for-bitstr ] "close-input" doc!
 
 "Reposition offset."
 @[ doc-for-bitstr
@@ -138,14 +142,10 @@ dup "J" doc!
 ] "big?" doc!
 
 "Set big endian as default."
-@[ doc-for-bitstr
-    "--" stack-comment
-] "big" doc!
+@[ doc-for-bitstr ] "big" doc!
 
 "Set little endian as default."
-@[ doc-for-bitstr
-    "--" stack-comment
-] "little" doc!
+@[ doc-for-bitstr ] "little" doc!
  
 "Find the first occurence or nil starting from the current offset."
 @[ doc-for-bitstr
@@ -166,3 +166,12 @@ dup "J" doc!
 @[ doc-for-bitstr
     "int -- bitstr" stack-comment
 ] "bitstr" doc!
+
+"Set default formatting base to 16."
+@[ doc-for-fmt ] "HEX" doc!
+
+"Set default formatting base to 2."
+@[ doc-for-fmt ] "BIN" doc!
+
+"Set default formatting base to 10."
+@[ doc-for-fmt ] "DEC" doc!
