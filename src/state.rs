@@ -1917,7 +1917,7 @@ fn core_word_insert_tagged(xs: &mut State) -> Xresult {
 fn core_word_get_tagged(xs: &mut State) -> Xresult {
     let key = xs.pop_data()?;
     let vec = xs.pop_data()?;
-    let item = vec.get_tagged(&key).cloned();
+    let item = vec.vec()?.iter().find(|x| x.tag() == Some(&key)).cloned();
     xs.push_data(item.unwrap_or_else(|| NIL))
 }
 
