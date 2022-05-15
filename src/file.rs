@@ -2,7 +2,6 @@
 use mapr::Mmap;
 
 use crate::prelude::*;
-use std::fs::File;
 use std::{fs::OpenOptions, io::BufWriter, io::Write};
 
 pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
@@ -25,11 +24,11 @@ pub fn write_to_stdout(buf: &[u8]) -> Xresult {
         filename: xstr_literal!("stdout"),
         reason: e.to_string().into(),
     })
-}
+} 
 
 #[cfg(feature = "mmap")]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
-    let file = File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+    let file = std::fs::File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
     let (mm, slice) = unsafe {
         let mm = Mmap::map(&file).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
         let ptr = mm.as_ptr();
@@ -40,10 +39,10 @@ pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     xs.set_binary_input(Xbitstr::from(slice))
 }
 
-#[cfg(not(feature = "mmap"))]
+#[cfg(all(not(feature = "mmap"),not(target_arch = "wasm32")))]
 pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
     use std::io::Read;
-    let mut file = File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+    let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)
         .map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
