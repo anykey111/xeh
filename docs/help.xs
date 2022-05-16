@@ -5,11 +5,26 @@
 : doc-for-tags "Tags" "section" with-tag ;
 : doc-for-bitstr "Binary Parsing" with-tag ;
 : doc-for-fmt "Formatting" with-tag ;
+: doc-for-doc "Documentation" with-tag ;
 : stack-comment "stack-comment" with-tag ;
 : doc-example "example" with-tag ;
 
-"( val tag -- val )
-Stick tag to the val. If value already has a tag drop the old one."
+"Add help string for word."
+@[ doc-for-doc "str str --" stack-comment
+    "\"Help string for \"fun1\" \"fun1\" doc!" doc-example
+] "doc!" doc!
+
+"Print help string for word."
+@[ doc-for-doc "str --" stack-comment
+    "\"fun1\" help" doc-example
+] "help" doc!
+
+"Get string for word."
+@[ doc-for-doc "str -- str" stack-comment
+"\"fun1\" help-str println" doc-example
+] "help-str" doc!
+
+"Stick tag to the val. If value already has a tag drop the old one."
 @[ doc-for-tags
     "val tag -- val" stack-comment 
 ] "with-tag" doc!
@@ -168,12 +183,18 @@ loop" doc-example
 ] "bitstr" doc!
 
 "Set default formatting base to 16."
-@[ doc-for-fmt ] "HEX" doc!
+@[ doc-for-fmt
+"13 HEX println" doc-example
+] "HEX" doc!
 
 "Set default formatting base to 2."
-@[ doc-for-fmt ] "BIN" doc!
+@[ doc-for-fmt
+"5 BIN println" doc-example
+] "BIN" doc!
 
 "Set default formatting base to 10."
-@[ doc-for-fmt ] "DEC" doc!
+@[ doc-for-fmt
+"13 HEX print 13 DEC println" doc-example
+] "DEC" doc!
 
 depth 0 = assert
