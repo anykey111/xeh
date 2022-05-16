@@ -182,19 +182,38 @@ loop" doc-example
     "int -- bitstr" stack-comment
 ] "bitstr" doc!
 
-"Set default formatting base to 16."
+"Formatting option, set the number base to 16."
 @[ doc-for-fmt
 "13 HEX println" doc-example
 ] "HEX" doc!
 
-"Set default formatting base to 2."
+"Formatting option, set the number base to 2."
 @[ doc-for-fmt
 "5 BIN println" doc-example
 ] "BIN" doc!
 
-"Set default formatting base to 10."
+"Formatting option, set the number base to 10."
 @[ doc-for-fmt
 "13 HEX print 13 DEC println" doc-example
 ] "DEC" doc!
+
+"Formatting option, set the number base to 8."
+@[ doc-for-fmt
+"13 OCT println" doc-example
+] "OCT" doc!
+
+"Formatting option, display the number prefix."
+@[ doc-for-fmt
+] "PREFIX" doc!
+
+"Formatting option, omit the number prefix."
+@[ doc-for-fmt
+] "NO-PREFIX" doc!
+
+"Formatting option, display the tag sticked to the value."
+@[ doc-for-fmt ] "TAGS" doc!
+
+"Formatting option, omit the tag sticked to the value."
+@[ doc-for-fmt ] "NO-TAGS" doc!
 
 depth 0 = assert
