@@ -1,4 +1,5 @@
 
+: doc-for-core "Core" with-tag ;
 : doc-for-loop "Conditional Loops" "section" with-tag ;
 : doc-for-stack "Stack Manipulation" "section" with-tag ;
 : doc-for-cond  "Conditional Execution" "section" with-tag ;
@@ -215,5 +216,8 @@ loop" doc-example
 
 "Formatting option, omit the tag sticked to the value."
 @[ doc-for-fmt ] "NO-TAGS" doc!
+
+"Include source file."
+@[ doc-for-core "str --" stack-comment ] "include" doc!
 
 depth 0 = assert

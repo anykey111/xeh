@@ -295,10 +295,10 @@ impl State {
         self.context_close()
     }
 
-    pub fn eval_from_file(&mut self, path: &str) -> Xresult {
-        let s = crate::file::read_source_file(path)?;
+    fn eval_from_file(&mut self, path: Xstr, mode: ContextMode) -> Xresult {
+        let s = crate::file::read_source_file(&path)?;
         self.intern_source(s.into(), Some(path))?;
-        self.context_open(ContextMode::Eval)?;
+        self.context_open(mode)?;
         self.build0()?;
         self.context_close()
     }
@@ -314,11 +314,11 @@ impl State {
         self.context_close()
     }
 
-    fn intern_source(&mut self, buf: Xstr, path: Option<&str>) -> Xresult {
+    fn intern_source(&mut self, buf: Xstr, path: Option<Xstr>) -> Xresult {
         let id = self.sources.len();
         let lex = Lex::new(buf.clone());
         let name = if let Some(name) = path {
-            name.into()
+            name
         } else {
             format!("<buffer#{}>", id).into()
         };
@@ -650,7 +650,7 @@ impl State {
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
         self.defword("file-write", crate::file::core_word_file_write)?;
-        self.defword("load", core_word_load)?;
+        self.defword("include", core_word_include)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
         self.defword("insert-tagged", core_word_insert_tagged)?;
@@ -1885,9 +1885,9 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
     OK
 }
 
-fn core_word_load(xs: &mut State) -> Xresult {
+fn core_word_include(xs: &mut State) -> Xresult {
     let path = xs.pop_data()?.to_xstr()?;
-    xs.eval_from_file(&path)
+    xs.eval_from_file(path, xs.ctx.mode.clone())
 }
 
 fn core_word_tag_of(xs: &mut State) -> Xresult {
@@ -2009,7 +2009,7 @@ mod tests {
     #[test]
     fn test_if_flow() {
         let mut xs = State::boot().unwrap();
-        xs.compile("1 if 222 endif").unwrap();
+        xs.eval("true if 222 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(
@@ -2017,7 +2017,7 @@ mod tests {
             it.next().unwrap()
         );
         let mut xs = State::boot().unwrap();
-        xs.compile("1 if 222 else 333 endif").unwrap();
+        xs.eval("true if 222 else 333 endif").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(
@@ -2030,15 +2030,15 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(
             Err(Xerr::unbalanced_endif()),
-            xs.compile("1 if 222 else 333")
+            xs.eval("true if 222 else 333")
         );
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222 else"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval("true if 222 else"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.compile("1 if 222"));
+        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval("true if 222"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_else()), xs.compile("1 else 222 endif"));
-        assert_eq!(Err(Xerr::unbalanced_else()), xs.compile("else 222 if"));
+        assert_eq!(Err(Xerr::unbalanced_else()), xs.eval("true else 222 endif"));
+        assert_eq!(Err(Xerr::unbalanced_else()), xs.eval("else 222 if"));
     }
 
     #[test]
@@ -2070,7 +2070,7 @@ mod tests {
         xs.eval("0 begin dup 5 < while 1 + repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        xs.compile("begin leave again").unwrap();
+        xs.eval("begin leave again").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         assert_eq!(
@@ -2083,21 +2083,21 @@ mod tests {
         xs.eval("1 var x begin x 0 <> while 0 ! x repeat").unwrap();
         assert_eq!(
             Err(Xerr::unbalanced_endif()),
-            xs.compile("if begin endif repeat")
+            xs.eval("if begin endif repeat")
         );
-        assert_eq!(Err(Xerr::unbalanced_again()), xs.compile("again begin"));
+        assert_eq!(Err(Xerr::unbalanced_again()), xs.eval("again begin"));
         assert_eq!(
             Err(Xerr::unbalanced_endif()),
-            xs.compile("begin endif while")
+            xs.eval("begin endif while")
         );
-        assert_eq!(Err(Xerr::unbalanced_until()), xs.compile("until begin"));
+        assert_eq!(Err(Xerr::unbalanced_until()), xs.eval("until begin"));
         assert_eq!(
             Err(Xerr::unbalanced_until()),
-            xs.compile("begin again until")
+            xs.eval("begin again until")
         );
         assert_eq!(
             Err(Xerr::unbalanced_again()),
-            xs.compile("begin until again")
+            xs.eval("begin until again")
         );
     }
 
@@ -2123,10 +2123,10 @@ mod tests {
         assert_eq!(x.to_xint(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.compile("begin 1 again leave");
+        let res = xs.eval("begin 1 again leave");
         assert_eq!(Err(Xerr::unbalanced_leave()), res);
         let mut xs = State::boot().unwrap();
-        xs.compile("begin 1 if leave else leave endif again")
+        xs.eval("begin true if leave else leave endif again")
             .unwrap();
     }
 
@@ -2604,7 +2604,7 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.compile("( [\n( loop )\n] )");
+        let res = xs.eval("( [\n( loop )\n] )");
         assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
@@ -2612,7 +2612,7 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("\"src/test-location1.xs\" load");
+        let res = xs.eval("\"src/test-location1.xs\" include");
         assert_eq!(Err(Xerr::unbalanced_again()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
@@ -2632,7 +2632,7 @@ mod tests {
     #[test]
     fn test_fmt_opcode() {
         let mut xs = State::boot().unwrap();
-        xs.compile(": myword  1 ;").unwrap();
+        eval_ok!(xs, ": myword  1 ;");
         let a = match xs.dict_entry("myword").unwrap() {
             Entry::Function {
                 xf: Xfn::Interp(a), ..
@@ -2677,9 +2677,7 @@ mod tests {
     #[test]
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval_from_file("docs/help.xs");
-        assert_eq!(None, xs.last_err_location());
-        assert_eq!(OK, res);
+        eval_ok!(xs, "\"docs/help.xs\" include");
     }
 
     #[test]
@@ -2687,7 +2685,6 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::Exit(-1)), xs.eval("-1 exit drop"));
         let mut xs = State::boot().unwrap();
-        xs.compile("0 exit +").unwrap();
-        assert_eq!(Err(Xerr::Exit(0)), xs.run());
+        assert_eq!(Err(Xerr::Exit(0)), xs.eval(" ( 0 exit + ) "));
     }
 }

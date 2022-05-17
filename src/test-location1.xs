@@ -1,3 +1,3 @@
 (
-"src/test-location2.xs" load 
+"src/test-location2.xs" include 
 )
