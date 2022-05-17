@@ -617,7 +617,7 @@ impl State {
         self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
-        self.def_immediate("->", core_word_setvar)?;
+        self.def_immediate("!", core_word_setvar)?;
         self.def_immediate("nil", core_word_nil)?;
         self.def_immediate("(", core_word_nested_begin)?;
         self.def_immediate(")", core_word_nested_end)?;
@@ -2060,7 +2060,7 @@ mod tests {
     #[test]
     fn test_if_var() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("nil if 100 var X endif 10 -> X");
+        let res = xs.eval("nil if 100 var X endif 10 ! X");
         assert_eq!(Err(Xerr::conditional_var_definition()), res);
     }
 
@@ -2080,7 +2080,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval("begin 1 true until").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 var x begin x 0 <> while 0 -> x repeat").unwrap();
+        xs.eval("1 var x begin x 0 <> while 0 ! x repeat").unwrap();
         assert_eq!(
             Err(Xerr::unbalanced_endif()),
             xs.compile("if begin endif repeat")
@@ -2288,9 +2288,9 @@ mod tests {
     fn test_readonly_word() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "( 1 const x ) : y x ; 2 var g : f g ; ");
-        assert!(xs.eval("0 -> x").is_err());
-        assert!(xs.eval("0 -> y").is_err());
-        eval_ok!(xs, "0 -> g  f 0 assert-eq");
+        assert!(xs.eval("0 ! x").is_err());
+        assert!(xs.eval("0 ! y").is_err());
+        eval_ok!(xs, "0 ! g  f 0 assert-eq");
     }
 
     #[test]
@@ -2318,7 +2318,7 @@ mod tests {
         xs.defvar("Y", Cell::Nil).unwrap();
         xs.eval("4 var Z").unwrap();
         let z = xs.defvar("Z", Cell::Nil).unwrap();
-        xs.eval("10 -> Z").unwrap();
+        xs.eval("10 ! Z").unwrap();
         assert_eq!(Ok(&Cell::Int(10)), xs.get_var(z));
     }
 
@@ -2470,7 +2470,7 @@ mod tests {
         assert_eq!(Ok(&NIL), xs.get_var_value("GG"));
         xs.next().unwrap();
         assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
-        eval_ok!(xs, "5 -> GG");
+        eval_ok!(xs, "5 ! GG");
         assert_eq!(Ok(&Cell::Int(5)), xs.get_var_value("GG"));
         xs.rnext().unwrap();
         assert_eq!(Ok(&Cell::Int(3)), xs.get_var_value("GG"));
