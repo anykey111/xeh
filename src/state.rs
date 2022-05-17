@@ -649,7 +649,6 @@ impl State {
         self.defword("println", core_word_println)?;
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
-        self.defword("write-all", crate::file::core_word_file_write)?;
         self.defword("include", core_word_include)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;

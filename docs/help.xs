@@ -220,4 +220,10 @@ loop" doc-example
 "Include source file."
 @[ doc-for-core "str --" stack-comment ] "include" doc!
 
+"Create a new file or truncate existing, then write bitstr with padding."
+@[ doc-for-bitstr "str bitstr --"
+    "\"test.bin\" big 777 u32! write" doc-example
+] "write" doc!
+
+
 depth 0 = assert

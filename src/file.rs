@@ -1,8 +1,9 @@
 #[cfg(feature = "mmap")]
 use mapr::Mmap;
 
-use crate::prelude::*;
-use std::{fs::OpenOptions, io::BufWriter, io::Write};
+use crate::{prelude::*, bitstr::Bitstr};
+use std::fs::OpenOptions;
+use std::io::*;
 
 pub fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
     Xerr::IOError {
@@ -53,10 +54,7 @@ pub fn read_source_file(path: &str) -> Xresult1<String> {
     std::fs::read_to_string(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))
 }
 
-pub fn core_word_file_write(xs: &mut Xstate) -> Xresult {
-    let path = xs.pop_data()?.to_xstr()?;
-    let data = xs.pop_data()?;
-    let s = crate::bitstr_ext::bitstring_from(data)?;
+pub fn write_all(path: &Xstr, s: &Bitstr) -> Xresult {
     let open = || {
         OpenOptions::new()
             .create(true)
