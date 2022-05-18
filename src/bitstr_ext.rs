@@ -63,7 +63,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("magic", word_magic)?;
     xs.defword("emit", word_emit)?;
-    xs.defword("write", word_write);
+    xs.defword("write", word_write)?;
 
 
     def_data_word!(xs, 8);
