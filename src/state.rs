@@ -468,27 +468,32 @@ impl State {
             .nested
             .pop()
             .ok_or_else(|| Xerr::unbalanced_context())?;
-        if self.ctx.mode != ContextMode::Compile {
+        if self.ctx.mode == ContextMode::Eval {
             self.run()?;
-            if prev.mode == self.ctx.mode {
-                if prev.mode == ContextMode::Eval {
-                    // preserve current ip value
-                    prev.ip = self.ctx.ip;
+            if prev.mode == ContextMode::Eval {
+                // preserve current ip value
+                prev.ip = self.ctx.ip;
+            }
+        } else if self.ctx.mode == ContextMode::MetaEval {
+            self.run()?;
+            // purge meta context code after evaluation
+            self.code.truncate(self.ctx.cs_len);
+            self.debug_map.truncate(self.ctx.cs_len);
+            // remove non-constant words
+            let mut i = self.ctx.di_len;
+            while i < self.dict.len() {
+                if let Entry::Constant(_) = &self.dict[i].entry {
+                    i += 1;
+                } else {
+                    self.dict.swap_remove(i);
                 }
-            } else if self.ctx.mode == ContextMode::MetaEval {
-                // purge meta context code after evaluation
-                self.code.truncate(self.ctx.cs_len);
-                self.debug_map.truncate(self.ctx.cs_len);
-                // remove non-constant words
-                let mut i = self.ctx.di_len;
-                while i < self.dict.len() {
-                    if let Entry::Constant(_) = &self.dict[i].entry {
-                        i += 1;
-                    } else {
-                        self.dict.swap_remove(i);
-                    }
-                }
-                prev.di_len = i;
+            }
+            prev.di_len = i;
+            let is_building_fun = match self.flow_stack[prev.fs_len..].last() {
+                Some(Flow::Fun { .. }) => true,
+                _ => false,
+            };
+            if prev.mode != ContextMode::MetaEval || is_building_fun {
                 // emit meta-evaluation result
                 while self.data_stack.len() > self.ctx.ds_len {
                     let val = self.pop_data()?;
@@ -2276,6 +2281,14 @@ mod tests {
         assert_eq!(Err(Xerr::const_context()), res);
     }
 
+    #[test]
+    fn test_meta_meta() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " [ ( 1 ( 2 ( 3 ) ) ) ] ");
+        assert_eq!(xs.pop_data().unwrap().to_vec(),
+         Ok(rpds::vector![Cell::Int(3),Cell::Int(2),Cell::Int(1)]));
+    }
+    
     #[test]
     fn test_recursive_def() {
         let mut xs = State::boot().unwrap();
