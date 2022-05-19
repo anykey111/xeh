@@ -7,6 +7,7 @@
 : doc-for-bitstr "Binary Parsing" with-tag ;
 : doc-for-fmt "Formatting" with-tag ;
 : doc-for-doc "Documentation" with-tag ;
+: doc-for-bitwise "Bitwise Arithmetic" with-tag ;
 : stack-comment "stack-comment" with-tag ;
 : doc-example "example" with-tag ;
 
@@ -152,6 +153,19 @@ loop" doc-example
     "int --" stack-comment
 ] "seek" doc!
 
+"Parse base 16 string, ignore whitespaces."
+@[ doc-for-bitstr
+    "str -- bitstr" stack-comment
+    "\"ffff11\" hex>bitstr" doc-example
+    "\"ff FF 11\" hex>bitstr" doc-example
+] "hex>bitstr" doc!
+
+"Parse base 2 string, ignore whitespaces."
+@[ doc-for-bitstr
+    "str -- bitstr" stack-comment
+    "\"1001 0001\" bin>bitstr" doc-example
+] "bin>bitstr" doc!
+
 "True if default endianess is set to big."
 @[ doc-for-bitstr
     "flag --" stack-comment
@@ -225,5 +239,48 @@ loop" doc-example
     "\"test.bin\" big 777 u32! write" doc-example
 ] "write" doc!
 
+"Define global variable with initial value."
+@[ doc-for-core 
+    "1 var ONE" doc-example
+] "var" doc!
+
+"Define local variable with initial value."
+@[ doc-for-core
+": f
+    local a # take value from top of the stack 
+    1 local b # assign the new value
+    a b + ; 
+3 f println" doc-example
+] "local" doc!
+
+"Bit-shift left."
+@[ doc-for-bitwise
+    "int nbits -- int" stack-comment
+] "bit-shl" doc!
+
+"Bit-shift right."
+@[ doc-for-bitwise
+    "int nbits -- int" stack-comment
+] "bit-shr" doc!
+
+"Bitwise AND."
+@[ doc-for-bitwise
+    "int int -- int" stack-comment
+] "bit-and" doc!
+
+"Bitwise OR."
+@[ doc-for-bitwise
+    "int int -- int" stack-comment
+] "bit-or" doc!
+
+"Bitwise XOR."
+@[ doc-for-bitwise
+    "int int -- int" stack-comment
+] "bit-xor" doc!
+
+"Bitwise NOT, invert bits."
+@[ doc-for-bitwise
+    "int -- int" stack-comment
+] "bit-not" doc!
 
 depth 0 = assert
