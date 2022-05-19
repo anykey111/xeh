@@ -98,10 +98,19 @@ fn data_get(xs: &mut Xstate) -> Xresult {
     }
 }
 
+fn clear_all(xs: &mut Xstate) -> Xresult {
+    let any = xs.get_var(xs.d2)?.to_any()?;
+    let mut p = any.try_borrow_mut().map_err(|_| Xerr::TypeError)?;
+    let d2 = p.downcast_mut::<D2Context>().ok_or(Xerr::TypeError)?;
+    d2.data.fill(0);
+    OK
+}
+
 pub fn load(xs: &mut Xstate) -> Xresult {
     let d2 = Xcell::from_any(D2Context::default());
     let a = xs.defvar("d2-context", d2)?;
     xs.d2 = a;
+    xs.defword("d2-clear", clear_all)?;
     xs.defword("d2-resize", resize)?;
     xs.defword("d2-width", width_get)?;
     xs.defword("d2-height", height_get)?;
