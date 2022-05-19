@@ -207,7 +207,7 @@ fn core_word_into_int(xs: &mut State) -> Xresult {
 }
 
 fn core_word_is_zero(xs: &mut State) -> Xresult {
-    match xs.top_data()?.value() {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => {
             let flag = Cell::from(*a == 0);
             xs.push_data(flag)
@@ -224,7 +224,7 @@ fn core_word_is_zero(xs: &mut State) -> Xresult {
 }
 
 fn core_word_is_positive(xs: &mut State) -> Xresult {
-    match xs.top_data()?.value() {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => {
             let flag = Cell::from(*a > 0);
             xs.push_data(flag)
@@ -241,7 +241,7 @@ fn core_word_is_positive(xs: &mut State) -> Xresult {
 }
 
 fn core_word_is_negative(xs: &mut State) -> Xresult {
-    match xs.top_data()?.value() {
+    match xs.pop_data()?.value() {
         Cell::Int(a) => {
             let flag = Cell::from(*a < 0);
             xs.push_data(flag)
@@ -473,6 +473,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(OK, xs.eval("0 zero?"));
         assert_eq!(Ok(TRUE), xs.pop_data());
+        assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         assert_eq!(OK, xs.eval("0.0 zero?"));
         assert_eq!(Ok(TRUE), xs.pop_data());
         assert_eq!(OK, xs.eval("-0.0 zero?"));
