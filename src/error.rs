@@ -44,7 +44,7 @@ pub enum Xerr {
     InternalError,
     // bitstring errors
     ReadError {
-        src: Xbitstr,
+        remain: usize,
         len: usize,
     },
     SeekError {
@@ -100,12 +100,12 @@ impl fmt::Display for Xerr {
             Xerr::ToBytestrError { .. } => f.write_str("bytestr need to be divisible by 8"),
             Xerr::BitstrSliceError { .. } => f.write_str("bitstr not aligned to byte boundary"),
             Xerr::Exit { .. } => f.write_str("Exit"),
-            Xerr::ReadError { src, len } => {
+            Xerr::ReadError { remain, len } => {
                 write!(
                     f,
                     "trying to read {} bits while only {} remain",
                     len,
-                    src.len()
+                    remain
                 )
             }
             Xerr::SeekError { src, offset } => {

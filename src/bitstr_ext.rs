@@ -479,8 +479,9 @@ fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
     if let Some(ss) = s.substr(start, end) {
         Ok(ss)
     } else {
+        let remain = s.end().max(start) - start; 
         Err(Xerr::ReadError {
-            src: s.clone(),
+            remain,
             len: n,
         })
     }
@@ -607,7 +608,10 @@ mod tests {
         };
         xs.eval("\"123\" magic").unwrap();
         match xs.eval("[ 0 ] magic") {
-            Err(Xerr::ReadError { len, .. }) => assert_eq!(8, len),
+            Err(Xerr::ReadError { len, remain }) => {
+                assert_eq!(8, len);
+                assert_eq!(0, remain);
+            },
             other => panic!("{:?}", other),
         }
         let res = xs.eval(" \"111111\" bin>bitstr open-input \"11101\" bin>bitstr magic");
