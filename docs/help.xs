@@ -8,6 +8,7 @@
 : doc-for-fmt "Formatting" with-tag ;
 : doc-for-doc "Documentation" with-tag ;
 : doc-for-bitwise "Bitwise Arithmetic" with-tag ;
+: doc-for-d2 "2D Canvas" with-tag ;
 : stack-comment "stack-comment" with-tag ;
 : doc-example "example" with-tag ;
 
@@ -282,5 +283,26 @@ loop" doc-example
 @[ doc-for-bitwise
     "int -- int" stack-comment
 ] "bit-not" doc!
+
+"Resize canvas."
+@[ doc-for-d2
+    "width height --" stack-comment
+] "d2-resize" doc!
+
+"Set RGBA color lookup table."
+@[ doc-for-d2
+    "vec --" stack-comment
+    "[ 0x112233ff 0x445566ff ] d2-palette!" doc-example
+] "d2-palette!" doc!
+
+"Set default RGBA color or lookup index when d2-palette! is set."
+@[ doc-for-d2
+    "rgba --" stack-comment
+] "d2-color!" doc!
+
+"Draw pixel at position with default color."
+@[ doc-for-d2
+    "x y --" stack-comment
+] "d2-data!" doc!
 
 depth 0 = assert
