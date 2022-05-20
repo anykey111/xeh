@@ -138,10 +138,10 @@ pub fn copy_rgba_data(xs: &mut Xstate, buf: &mut Vec<u8>) -> Xresult1<(usize, us
     buf.reserve(d2.data.len() * 4);
     for c in d2.data.iter() {
         let c = *c;
-        buf.push((c >> 24) as u8);
         buf.push((c >> 16) as u8);
         buf.push((c >> 8) as u8);
         buf.push(c as u8);
+        buf.push(0xff);
     }
     Ok((d2.width, d2.height))
 }
@@ -174,7 +174,7 @@ mod tests {
         for y in 0..2 {
             for x in 0..3 {
                 let c = bs.read(32).unwrap().to_bytes_with_padding();
-                assert_eq!(c[3], y * 3 + x);
+                assert_eq!(c[2], y * 3 + x);
             }
         }
         xs.eval("d2-width").unwrap();
