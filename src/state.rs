@@ -2554,7 +2554,7 @@ mod tests {
     #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, include_str!("test-tag.xs"));
+        eval_ok!(xs, include_str!("test-tag.xeh"));
     }
 
     #[test]
@@ -2624,11 +2624,11 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("\"src/test-location1.xs\" include");
+        let res = xs.eval("\"src/test-location1.xeh\" include");
         assert_eq!(Err(Xerr::unbalanced_again()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!("src/test-location2.xs:2:3\n", "[ again ]\n", "--^")
+            concat!("src/test-location2.xeh:2:3\n", "[ again ]\n", "--^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -2690,7 +2690,7 @@ mod tests {
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
         crate::d2_plugin::load(&mut xs).unwrap();
-        eval_ok!(xs, "\"docs/help.xs\" include");
+        eval_ok!(xs, "\"docs/help.xeh\" include");
     }
 
     #[test]
