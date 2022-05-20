@@ -2689,6 +2689,7 @@ mod tests {
     #[test]
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
+        crate::d2_plugin::load(&mut xs).unwrap();
         eval_ok!(xs, "\"docs/help.xs\" include");
     }
 
