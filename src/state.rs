@@ -629,8 +629,8 @@ impl State {
         self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
-        self.def_immediate("@", core_word_with_literal_tag)?;
-        self.def_immediate("@[", core_word_tag_vec)?;
+        self.def_immediate(".", core_word_with_literal_tag)?;
+        self.def_immediate(".[", core_word_tag_vec)?;
         self.defword("doc!", core_word_doc)?;
         self.defword("help", core_word_help)?;
         self.defword("help-str", core_word_help_str)?;
@@ -2531,22 +2531,22 @@ mod tests {
 
     #[test]
     fn test_named_tag() {
-        assert_eq!(eval_boot!("10 @"), Err(Xerr::ExpectingLiteral));
-        assert_eq!(eval_boot!("10 @ x "), Err(Xerr::ExpectingLiteral));
-        assert_eq!(eval_boot!("10 @ \"a\" "), OK);
-        assert_eq!(eval_boot!(" @ 1 "), Err(Xerr::StackUnderflow));
+        assert_eq!(eval_boot!("10 ."), Err(Xerr::ExpectingLiteral));
+        assert_eq!(eval_boot!("10 . x "), Err(Xerr::ExpectingLiteral));
+        assert_eq!(eval_boot!("10 . \"a\" "), OK);
+        assert_eq!(eval_boot!(" . 1 "), Err(Xerr::StackUnderflow));
         assert_eq!(
-            eval_boot!("10 @ \"x\" dup 10 assert-eq tag-of \"x\" assert-eq"),
+            eval_boot!("10 . \"x\" dup 10 assert-eq tag-of \"x\" assert-eq"),
             OK
         );
     }
 
     #[test]
     fn test_tag_vec() {
-        assert_eq!(eval_boot!("@[ 1 ]"), Err(Xerr::StackUnderflow));
-        assert_eq!(eval_boot!("@[ 1 "), Err(Xerr::unbalanced_tag_vec_builder()));
+        assert_eq!(eval_boot!(".[ 1 ]"), Err(Xerr::StackUnderflow));
+        assert_eq!(eval_boot!(".[ 1 "), Err(Xerr::unbalanced_tag_vec_builder()));
         assert_eq!(
-            eval_boot!("10 @[ 1 ] dup 10 assert-eq tag-of [ 1 ] assert-eq "),
+            eval_boot!("10 .[ 1 ] dup 10 assert-eq tag-of [ 1 ] assert-eq "),
             OK
         );
     }
