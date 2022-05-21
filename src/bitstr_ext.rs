@@ -560,7 +560,7 @@ fn word_write(xs: &mut Xstate) -> Xresult {
     let data = xs.pop_data()?;
     let path = xs.pop_data()?.to_xstr()?;
     let s = crate::bitstr_ext::bitstring_from(data)?;
-    crate::file::write_all(&path, &s)
+    crate::file::fs_overlay::write_all(&path, &s)
 }
 
 #[cfg(test)]

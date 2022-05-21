@@ -296,7 +296,7 @@ impl State {
     }
 
     fn eval_from_file(&mut self, path: Xstr, mode: ContextMode) -> Xresult {
-        let s = crate::file::read_source_file(&path)?;
+        let s = crate::file::fs_overlay::read_source_file(&path)?;
         self.intern_source(s.into(), Some(path))?;
         self.context_open(mode)?;
         self.build0()?;
