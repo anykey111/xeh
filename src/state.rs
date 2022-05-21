@@ -1931,6 +1931,16 @@ fn core_word_with_literal_tag(xs: &mut State) -> Xresult {
             xs.code_emit_value(val)?;
             xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_with_tag)))
         }
+        Tok::Word(name) => {
+            match xs.dict_entry(name.as_str()) {
+                Some(Entry::Constant(val)) => {
+                    let val = val.clone();
+                    xs.code_emit_value(val)?;
+                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_with_tag)))
+                }
+                _ => Err(Xerr::ExpectingLiteral),
+            }
+        }
         _ => Err(Xerr::ExpectingLiteral),
     }
 }
@@ -2530,7 +2540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_named_tag() {
+    fn test_lit_tag() {
         assert_eq!(eval_boot!("10 ."), Err(Xerr::ExpectingLiteral));
         assert_eq!(eval_boot!("10 . x "), Err(Xerr::ExpectingLiteral));
         assert_eq!(eval_boot!("10 . \"a\" "), OK);
@@ -2538,6 +2548,22 @@ mod tests {
         assert_eq!(
             eval_boot!("10 . \"x\" dup 10 assert-eq tag-of \"x\" assert-eq"),
             OK
+        );
+    }
+
+    #[test]
+    fn test_lit_tag_const() {
+        assert_eq!(
+            eval_boot!("( \"X\" const X ) 10 . X tag-of \"X\" assert-eq"),
+            OK
+        );
+        assert_eq!(
+            eval_boot!(" \"X\" X 10 . X tag-of \"X\" assert-eq"),
+            Err(Xerr::ExpectingLiteral)
+        );
+        assert_eq!(
+            eval_boot!(": X immediate \"X\" X 10 . X tag-of \"X\" assert-eq"),
+            Err(Xerr::ExpectingLiteral)
         );
     }
 
