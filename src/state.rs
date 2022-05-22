@@ -613,7 +613,6 @@ impl State {
         self.def_immediate("until", core_word_until)?;
         self.def_immediate("leave", core_word_leave)?;
         self.def_immediate("repeat", core_word_repeat)?;
-        self.def_immediate("again", core_word_again)?;
         self.def_immediate("[", core_word_vec_begin)?;
         self.def_immediate("]", core_word_vec_end)?;
         self.def_immediate(":", core_word_def_begin)?;
@@ -1438,22 +1437,6 @@ fn core_word_while(xs: &mut State) -> Xresult {
     xs.push_flow(cond)
 }
 
-fn core_word_again(xs: &mut State) -> Xresult {
-    loop {
-        match xs.pop_flow() {
-            Some(Flow::Leave(org)) => {
-                let offs = jump_offset(org, xs.code_origin() + 1);
-                xs.backpatch_jump(org, offs)?;
-            }
-            Some(Flow::Begin(begin_org)) => {
-                let offs = jump_offset(xs.code_origin(), begin_org);
-                break xs.code_emit(Opcode::Jump(offs));
-            }
-            _ => break Err(Xerr::unbalanced_again()),
-        }
-    }
-}
-
 fn core_word_repeat(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow() {
@@ -1461,7 +1444,6 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
-            // todo: forbig begin ... repeat endless loop ?
             Some(Flow::Begin(begin_org)) => {
                 let offs = jump_offset(xs.code_origin(), begin_org);
                 break xs.code_emit(Opcode::Jump(offs));
@@ -2079,12 +2061,12 @@ mod tests {
     }
 
     #[test]
-    fn test_begin_again() {
+    fn test_begin_loop() {
         let mut xs = State::boot().unwrap();
         xs.eval("0 begin dup 5 < while 1 + repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        xs.eval("begin leave again").unwrap();
+        xs.eval("begin leave repeat").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         assert_eq!(
@@ -2099,7 +2081,7 @@ mod tests {
             Err(Xerr::unbalanced_endif()),
             xs.eval("if begin endif repeat")
         );
-        assert_eq!(Err(Xerr::unbalanced_again()), xs.eval("again begin"));
+        assert_eq!(Err(Xerr::unbalanced_repeat()), xs.eval("repeat begin"));
         assert_eq!(
             Err(Xerr::unbalanced_endif()),
             xs.eval("begin endif while")
@@ -2107,11 +2089,11 @@ mod tests {
         assert_eq!(Err(Xerr::unbalanced_until()), xs.eval("until begin"));
         assert_eq!(
             Err(Xerr::unbalanced_until()),
-            xs.eval("begin again until")
+            xs.eval("begin while until")
         );
         assert_eq!(
-            Err(Xerr::unbalanced_again()),
-            xs.eval("begin until again")
+            Err(Xerr::unbalanced_repeat()),
+            xs.eval("begin until repeat")
         );
         assert_eq!(
             xs.eval(": stop? leave ; begin stop? repeat"),
@@ -2136,15 +2118,15 @@ mod tests {
     #[test]
     fn test_loop_break() {
         let mut xs = State::boot().unwrap();
-        xs.eval("begin 1 leave again").unwrap();
+        xs.eval("begin 1 leave repeat").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.to_xint(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("begin 1 again leave");
+        let res = xs.eval("begin 1 repeat leave");
         assert_eq!(Err(Xerr::unbalanced_leave()), res);
         let mut xs = State::boot().unwrap();
-        xs.eval("begin true if leave else leave endif again")
+        xs.eval("begin true if leave else leave endif repeat")
             .unwrap();
     }
 
@@ -2655,10 +2637,10 @@ mod tests {
 
         let mut xs = State::boot().unwrap();
         let res = xs.eval("\"src/test-location1.xeh\" include");
-        assert_eq!(Err(Xerr::unbalanced_again()), res);
+        assert_eq!(Err(Xerr::unbalanced_repeat()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!("src/test-location2.xeh:2:3\n", "[ again ]\n", "--^")
+            concat!("src/test-location2.xeh:2:3\n", "[ repeat ]\n", "--^")
         );
 
         let mut xs = State::boot().unwrap();

@@ -216,11 +216,6 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
-    pub(crate) fn unbalanced_again() -> Xerr {
-        let msg = xstr_literal!("balance again with preceding begin");
-        Xerr::ControlFlowError { msg }
-    }
-
     pub(crate) fn unbalanced_repeat() -> Xerr {
         let msg = xstr_literal!("balance repeat with preceding begin/while");
         Xerr::ControlFlowError { msg }

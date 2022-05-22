@@ -81,15 +81,12 @@ Otherwise DEFAULT is executed."
     begin FLAG while CODE repeat
 If FLAG is true CODE is executed and loop is restarted from \"begin\".
 IF FLAG is false execution continue after the \"repeat\".
-The FLAG is tested on every loop iteration."
+The FLAG is tested on every loop iteration.
+Endless loop
+    begin CODE repeat
+"
 .[ doc-for-loop 
 ] dup "begin" doc! dup "while" doc! "repeat" doc!
-
-"Endless loop.
-    begin CODE again
-Repat CODE forever, unless \"exit\" or \"leave\" is called."
-.[ doc-for-loop
-] "again" doc!
 
 "Loop with post-condition.
     begin CODE FLAG until
