@@ -2113,6 +2113,10 @@ mod tests {
             Err(Xerr::unbalanced_again()),
             xs.eval("begin until again")
         );
+        assert_eq!(
+            xs.eval(": stop? leave ; begin stop? repeat"),
+            Err(Xerr::unbalanced_fn_builder())
+        );
     }
 
     #[test]
