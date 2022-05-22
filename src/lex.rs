@@ -38,6 +38,7 @@ pub struct Lex {
 
 const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
 const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
+const PARSE_BITSTR_ERRMSG: Xstr = xstr_literal!("parse bitstr error");
 const EOF_ERRMSG: Xstr = xstr_literal!("unexpected end of file");
 const ESCAPE_SEQ_ERRMSG: Xstr = xstr_literal!("unknown string escape sequence");
 const EXPECT_WS_ERRMSG: Xstr = xstr_literal!("expect whitespace word separator");
@@ -132,6 +133,35 @@ impl Lex {
                         }
                     } else {
                         self.tmp.push(c);
+                    }
+                }
+            }
+            Some('|') => {
+                let mut builder = crate::bitstr::BitvecBuilder::default();
+                loop {
+                    let c_pos = self.pos;
+                    let c = self.take_char().ok_or_else(|| Xerr::ParseError {
+                        msg: EOF_ERRMSG,
+                        substr: self.buf.substr(c_pos..),
+                    })?;
+                    if let Some(x) = c.to_digit(16) {
+                        for i in (0..4).rev() {
+                            builder.append_bit(((x >> i) as u8) & 1);
+                        }
+                    } else if c.is_ascii_whitespace() {
+                        continue;
+                    } else if c == '-' {
+                        builder.append_bit(0);
+                    } else if c == 'x' {
+                        builder.append_bit(1);
+                    } else if c == '|' {
+                        let bs = builder.finish();
+                        return Ok(Tok::Literal(Cell::from(bs)));
+                    } else {
+                        return Err(Xerr::ParseError {
+                            msg: PARSE_BITSTR_ERRMSG,
+                            substr: self.buf.substr(c_pos..),
+                        });
                     }
                 }
             }
@@ -431,6 +461,34 @@ mod tests {
                 assert_eq!(msg, EXPECT_WS_ERRMSG);
             }
             e => panic!("{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_bitstr_literal() {
+        let res = tokenize_input("|FF|  |x--x| | 77 -- f |").unwrap();
+        let mut it = res.iter();
+
+        let s1 = Xbitstr::from_bin_str("1111 1111").unwrap();
+        assert_eq!(&Tok::Literal(Cell::from(s1)), it.next().unwrap());
+        
+        let s2 = Xbitstr::from_bin_str("1001").unwrap();
+        assert_eq!(&Tok::Literal(Cell::from(s2)), it.next().unwrap());
+
+        let s3 = Xbitstr::from_bin_str("0111 0111 00 1111").unwrap();
+        assert_eq!(&Tok::Literal(Cell::from(s3)), it.next().unwrap());
+        
+        match Lex::new(Xstr::from(" | f")).next() {
+            Err(Xerr::ParseError { msg,..}) => assert_eq!(msg, EOF_ERRMSG),
+            other => panic!("{:?}", other),
+        }
+
+        match Lex::new(Xstr::from(" | ff g| ")).next() {
+            Err(Xerr::ParseError { msg, substr}) => {
+                assert_eq!(msg, PARSE_BITSTR_ERRMSG);
+                assert_eq!(substr.range().start, 6);
+            },
+            other => panic!("{:?}", other),
         }
     }
 
