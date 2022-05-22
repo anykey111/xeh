@@ -39,7 +39,8 @@ pub struct Lex {
 const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
 const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
 const PARSE_BITSTR_ERRMSG: Xstr = xstr_literal!("parse bitstr error");
-const EOF_ERRMSG: Xstr = xstr_literal!("unexpected end of file");
+const UNTERMINATED_STR_ERRMSG: Xstr = xstr_literal!("unterminated string");
+const UNTERMINATED_BITSTR_ERRMSG: Xstr = xstr_literal!("unterminated bit-string");
 const ESCAPE_SEQ_ERRMSG: Xstr = xstr_literal!("unknown string escape sequence");
 const EXPECT_WS_ERRMSG: Xstr = xstr_literal!("expect whitespace word separator");
 
@@ -96,12 +97,12 @@ impl Lex {
                 loop {
                     let c_pos = self.pos;
                     let c = self.take_char().ok_or_else(|| Xerr::ParseError {
-                        msg: EOF_ERRMSG,
+                        msg: UNTERMINATED_STR_ERRMSG,
                         substr: self.buf.substr(c_pos..),
                     })?;
                     if c == '\\' {
                         let c2 = self.take_char().ok_or_else(|| Xerr::ParseError {
-                            msg: EOF_ERRMSG,
+                            msg: UNTERMINATED_STR_ERRMSG,
                             substr: self.buf.substr(c_pos..),
                         })?;
                         match c2 {
@@ -141,7 +142,7 @@ impl Lex {
                 loop {
                     let c_pos = self.pos;
                     let c = self.take_char().ok_or_else(|| Xerr::ParseError {
-                        msg: EOF_ERRMSG,
+                        msg: UNTERMINATED_BITSTR_ERRMSG,
                         substr: self.buf.substr(c_pos..),
                     })?;
                     if let Some(x) = c.to_digit(16) {
@@ -432,14 +433,14 @@ mod tests {
             Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr, "\\");
                 assert_eq!(substr.range(), 4..5);
-                assert_eq!(msg, EOF_ERRMSG);
+                assert_eq!(msg, UNTERMINATED_STR_ERRMSG);
             }
             e => panic!("{:?}", e),
         }
         match tokenize_input(r#""aaa\""#) {
             Err(Xerr::ParseError { msg, substr }) => {
                 assert_eq!(substr.range(), 6..6);
-                assert_eq!(msg, EOF_ERRMSG);
+                assert_eq!(msg, UNTERMINATED_STR_ERRMSG);
             }
             e => panic!("{:?}", e),
         }
@@ -479,7 +480,7 @@ mod tests {
         assert_eq!(&Tok::Literal(Cell::from(s3)), it.next().unwrap());
         
         match Lex::new(Xstr::from(" | f")).next() {
-            Err(Xerr::ParseError { msg,..}) => assert_eq!(msg, EOF_ERRMSG),
+            Err(Xerr::ParseError { msg,..}) => assert_eq!(msg, UNTERMINATED_BITSTR_ERRMSG),
             other => panic!("{:?}", other),
         }
 
