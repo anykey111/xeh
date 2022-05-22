@@ -108,6 +108,7 @@ impl Lex {
                             '\"' => self.tmp.push(c2),
                             'n' => self.tmp.push('\n'),
                             'r' => self.tmp.push('\r'),
+                            't' => self.tmp.push('\t'),
                             _ => {
                                 break Err(Xerr::ParseError {
                                     msg: ESCAPE_SEQ_ERRMSG,
@@ -387,8 +388,8 @@ mod tests {
 
     #[test]
     fn test_lex_escape() {
-        let res = tokenize_input(r#""\\ \" \r \n""#).unwrap();
-        assert_eq!(res, vec![str("\\ \" \r \n")]);
+        let res = tokenize_input(r#""\\ \" \r \t \n""#).unwrap();
+        assert_eq!(res, vec![str("\\ \" \r \t \n")]);
 
         match tokenize_input(r#" " \x " "#) {
             Err(Xerr::ParseError { msg, substr }) => {
