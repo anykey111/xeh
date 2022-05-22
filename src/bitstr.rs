@@ -85,8 +85,10 @@ impl Bitstr {
     pub fn from_bin_str(s: &str) -> Result<Bitstr, usize> {
         let mut tmp = BitvecBuilder::default();
         for (pos, c) in s.chars().enumerate() {
+            if c.is_ascii_whitespace() {
+                continue;
+            }
             match c {
-                '_' | ' ' => continue,
                 '0' => tmp.append_bit(0),
                 '1' => tmp.append_bit(1),
                 _ => return Err(pos),
@@ -105,7 +107,7 @@ impl Bitstr {
         let mut n = 0;
         let mut buf = Vec::new();
         for (pos, c) in s.chars().enumerate() {
-            if c == '_' || c == ' ' {
+            if c.is_ascii_whitespace() {
                 continue;
             }
             let val = c.to_digit(16).ok_or_else(|| pos)? as u8;
@@ -617,7 +619,7 @@ mod tests {
         let b = s.read(4).unwrap();
         assert_eq!(b.append(&a).to_bytes().unwrap(), vec![0x31]);
 
-        let mut s = Bitstr::from_bin_str("0_1000000_0_0111011_0_1111000").unwrap();
+        let mut s = Bitstr::from_bin_str("0 1000000 0 0111011 0 1111000").unwrap();
         s.read(1).unwrap();
         let a = s.read(7).unwrap();
         let a_bits: Vec<_> = a.bits().collect();
@@ -694,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_invert() {
-        let mut a = Bitstr::from_bin_str("01111111_01111111").unwrap();
+        let mut a = Bitstr::from_bin_str("01111111 01111111").unwrap();
         let b = a.clone().invert();
         assert_eq!("1000000010000000", b.to_bin_string().as_str());
         assert_eq!("0111111101111111", b.invert().to_bin_string().as_str());
@@ -817,7 +819,7 @@ mod tests {
         let bs = Bitstr::from_bin_str(s).unwrap();
         assert_eq!(bs.len(), s.len());
         assert_eq!(s, bs.to_bin_string().as_str());
-        assert_eq!(Err(7), Bitstr::from_bin_str("11_11_02"));
+        assert_eq!(Err(7), Bitstr::from_bin_str("11 11 02"));
         let bs = Bitstr::from_bin_str("1 1 1 1 1 1 1").unwrap();
         assert_eq!(*bs.data, vec![0xfe]);
     }
@@ -829,7 +831,7 @@ mod tests {
         assert_eq!(bs.len(), 12);
         assert_eq!(bs.to_bytes_with_padding(), vec![0xfe, 0x1]);
         assert_eq!(bs.to_hex_string(), s);
-        let bs = Bitstr::from_hex_str("f f 00 E _ E 11").unwrap();
+        let bs = Bitstr::from_hex_str("f f 00 E  E 11").unwrap();
         assert_eq!(bs.len(), 32);
         assert_eq!(bs.to_bytes_with_padding(), vec![0xff, 0x00, 0xee, 0x11]);
         assert_eq!(Err(1), Bitstr::from_hex_str("FX"));
