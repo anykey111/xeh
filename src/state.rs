@@ -2225,11 +2225,22 @@ mod tests {
         assert_eq!(Some("ff".to_string()), xs.read_stdout());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
-        xs.eval(" [ 0xff 0xee ] >bitstr NO-PREFIX BIN print")
-            .unwrap();
-        assert_eq!(Some("[ 11111111 11101110 ]".to_string()), xs.read_stdout());
-        xs.eval(" [ ] >bitstr HEX NO-PREFIX print").unwrap();
-        assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
+    }
+
+    #[test]
+    fn test_fmt_bitstr() {
+        let mut xs = State::boot().unwrap();
+        xs.intercept_stdout(true);
+        xs.eval(" [ 0xff 0xee ] >bitstr print").unwrap();
+        assert_eq!(Some("|FF EE|".to_string()), xs.read_stdout());
+        xs.eval(" [ ] >bitstr print").unwrap();
+        assert_eq!(Some("||".to_string()), xs.read_stdout());
+        xs.eval(" 0b111101 6 uint! print").unwrap();
+        assert_eq!(Some("|F-x|".to_string()), xs.read_stdout());
+        xs.eval(" |88x| print").unwrap();
+        assert_eq!(Some("|88 x|".to_string()), xs.read_stdout());
+        xs.eval(" | x - | print").unwrap();
+        assert_eq!(Some("|x-|".to_string()), xs.read_stdout());
     }
 
     #[test]

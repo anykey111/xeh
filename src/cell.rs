@@ -102,16 +102,29 @@ impl fmt::Debug for Cell {
             }
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => {
-                if s.is_bytestr() {
-                    f.write_str("[ ")?;
-                    for x in s.iter8().map(|x| Cell::Int(x.0 as Xint)) {
-                        x.fmt(f)?;
+                f.write_str("|")?;
+                for (pos, (x, mut n)) in s.iter8().enumerate() {
+                    println!(" {:?}", (x, n));
+                    if pos != 0 {
                         f.write_str(" ")?;
                     }
-                    f.write_str("]")
-                } else {
-                    write!(f, "0s{}", s.to_bin_string())
+                    if n > 4 {
+                        n -= 4;
+                        write!(f, "{:X}", x >> n)?;
+                    }
+                    if n == 4 {
+                        n -= 4;
+                        write!(f, "{:X}", x & 0xf)?;
+                    }
+                    for i in (0..n).rev() {
+                        if (x & (1 << i)) > 0{
+                            f.write_char('x')?;
+                        } else {
+                            f.write_char('-')?;
+                        }
+                    }
                 }
+                f.write_str("|")
             }
             Cell::AnyRc(x) => match x.try_borrow() {
                 Ok(p) => write!(f, "any:{:?}", p.type_id()),
@@ -119,7 +132,7 @@ impl fmt::Debug for Cell {
             },
             Cell::WithTag(rc) if flags.show_tags() => {
                 rc.value.fmt(f)?;
-                f.write_str(" @")?;
+                f.write_str(" .")?;
                 if !rc.tag.vec().is_ok() {
                     f.write_char(' ')?;
                 }
