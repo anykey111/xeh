@@ -5,11 +5,12 @@ authors = ["rivo <db05@bk.ru>"]
 edition = "2018"
 
 [features]
-default = ["mmap", "stdio"]
+default = ["mmap", "stdio", "calc_limit"]
 # memory-mapped files
 mmap = ["mapr"]
 # print to console
 stdio = ["rustyline", "rustyline-derive"]
+calc_limit = []
 
 [dependencies]
 rpds = "^0.11"

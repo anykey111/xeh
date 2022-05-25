@@ -145,6 +145,8 @@ pub struct State {
     special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
+    counter: usize,
+    counter_limit: usize,
     // expose for rrlog debug
     pub reverse_log: Option<Vec<ReverseStep>>,
     stdout: Option<String>,
@@ -807,8 +809,35 @@ impl State {
         }
     }
 
+    pub fn set_calc_limit(&mut self, insn_limit: usize) -> Xresult {
+        self.counter = 0;
+        self.counter_limit = insn_limit;
+        #[cfg(not(feature = "calc_limit"))]
+        {
+            let msg =  xstr_literal!("calc_limit feature disabled");
+            Err(Xerr::ErrorMsg(msg))
+        }
+        #[cfg(feature = "calc_limit")]
+        {
+            OK
+        }
+    }
+
+    fn increase_counter(&mut self) -> Xresult {
+        #[cfg(feature = "calc_limit")]
+        {
+            self.counter += 1;
+            if self.counter == self.counter_limit {
+                let msg =  xstr_literal!("Calculation limit reached");
+                return Err(Xerr::ErrorMsg(msg));
+            }
+        }
+        OK
+    }
+
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
+        self.increase_counter()?;
         match &self.code[ip] {
             Opcode::Jump(rel) => {
                 let new_ip = rel.calculate(ip);
@@ -2707,6 +2736,13 @@ mod tests {
         assert_eq!(Some(&Cell::Int(3)), help.tag());
         assert_eq!(&Cell::from("123"), help.value());
         assert_eq!(Ok(Cell::from("123")), xs.pop_data());
+    }
+
+    #[test]
+    fn test_calc_limit() {
+        let mut xs = State::boot().unwrap();
+        xs.set_calc_limit(4).unwrap();
+        assert_ne!(OK, xs.eval("1 2 3 4"));
     }
 
     #[test]
