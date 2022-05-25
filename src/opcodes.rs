@@ -12,7 +12,11 @@ impl RelativeJump {
         } else {
             (dest - origin) as isize
         };
-        Self(i as i32)
+        if i == 0 {
+            Self(1)
+        } else {
+            Self(i as i32)
+        }
     }
 
     pub fn uninit() -> Self {
