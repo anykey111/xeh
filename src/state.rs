@@ -632,6 +632,7 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.def_immediate(".", core_word_with_literal_tag)?;
         self.def_immediate(".[", core_word_tag_vec)?;
+        self.defword("nil?", core_word_is_nil)?;
         self.defword("doc!", core_word_doc)?;
         self.defword("help", core_word_help)?;
         self.defword("help-str", core_word_help_str)?;
@@ -1660,6 +1661,11 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
 
 fn core_word_nil(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::LoadNil)
+}
+
+fn core_word_is_nil(xs: &mut State) -> Xresult {
+    let f = xs.pop_data()?.value() == &NIL;
+    xs.push_data(Cell::from(f))
 }
 
 fn core_word_nested_begin(xs: &mut State) -> Xresult {
@@ -2736,6 +2742,13 @@ mod tests {
         assert_eq!(Some(&Cell::Int(3)), help.tag());
         assert_eq!(&Cell::from("123"), help.value());
         assert_eq!(Ok(Cell::from("123")), xs.pop_data());
+    }
+
+    #[test]
+    fn test_nil() {
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("1 nil? assert"));
+        assert_eq!(OK, xs.eval("nil nil? assert"));
     }
 
     #[test]
