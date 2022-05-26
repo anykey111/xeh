@@ -33,7 +33,6 @@ pub mod fs_overlay {
 
     #[cfg(not(feature = "mmap"))]
     pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
-        use std::io::Read;
         let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)
