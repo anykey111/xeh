@@ -511,13 +511,18 @@ impl State {
         (self.flow_stack.len() - self.ctx.fs_len) > 0
     }
 
-    pub fn boot() -> Xresult1<State> {
+    pub fn core() -> Xresult1<State> {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
         xs.intercept_stdout(true);
         xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::arith::load(&mut xs)?;
+        Ok(xs)
+    }
+
+    pub fn boot() -> Xresult1<State> {
+        let mut xs = Self::core()?;
         crate::bitstr_ext::load(&mut xs)?;
         Ok(xs)
     }
