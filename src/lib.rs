@@ -11,7 +11,7 @@ pub mod bitstr_ext;
 pub mod cell;
 pub mod d2_plugin;
 pub mod error;
-mod file;
+pub mod file;
 mod fmt_flags;
 pub mod lex;
 mod opcodes;
