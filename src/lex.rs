@@ -108,7 +108,7 @@ impl Lex {
                         match c2 {
                             '\\' => self.tmp.push(c2),
                             '"' => self.tmp.push(c2),
-                            '”' => self.tmp.push('"'),
+                            '”' => self.tmp.push('”'),
                             'n' => self.tmp.push('\n'),
                             'r' => self.tmp.push('\r'),
                             't' => self.tmp.push('\t'),
