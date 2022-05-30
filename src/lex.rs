@@ -92,7 +92,7 @@ impl Lex {
         let start = self.pos;
         match self.take_char() {
             None => Ok(Tok::EndOfInput),
-            Some('"') | Some('”') => {
+            Some('"') | Some('“') => {
                 self.tmp.clear();
                 loop {
                     let c_pos = self.pos;
@@ -108,7 +108,6 @@ impl Lex {
                         match c2 {
                             '\\' => self.tmp.push(c2),
                             '"' => self.tmp.push(c2),
-                            '”' => self.tmp.push('”'),
                             'n' => self.tmp.push('\n'),
                             'r' => self.tmp.push('\r'),
                             't' => self.tmp.push('\t'),
