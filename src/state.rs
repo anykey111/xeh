@@ -224,6 +224,20 @@ impl State {
         Vec::from_iter(self.dict.iter().map(|e| e.name.clone()))
     }
 
+    pub fn var_list(&self) -> Vec<(&Xstr, &Cell)> {
+        Vec::from_iter(self.dict.iter().filter_map(|e| {
+            match e {
+                DictEntry { name, entry: Entry::Constant(val), .. } =>
+                    Some((name, val)),
+                DictEntry { name, entry: Entry::Variable(cref), .. } => {
+                    let val = self.get_var(*cref).ok()?;
+                    Some((name, val))
+                }
+                _ => None,
+            }
+        }))
+    }
+
     fn clear_last_error(&mut self) {
         self.last_error = None;
     }
@@ -544,7 +558,7 @@ impl State {
             Entry::Variable(a) => self.cell_ref(*a),
             Entry::Constant(a) => Ok(a),
             //Entry::Function{xf,..} => Ok(Cell::Fun(xf.clone())),
-            _ => Ok(&NIL),
+            _ => Err(Xerr::TypeError),
         }
     }
 
