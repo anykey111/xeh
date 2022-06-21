@@ -18,6 +18,7 @@ impl ReplState {
 
     fn update_xstate(&mut self) {
         let tmp = self.xs.clone();
+        self.trial = Some(String::new());
         self.snapshots.pop();
         self.snapshots.push(tmp);
     }
