@@ -262,13 +262,18 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     let mut opts = Options::new();
     opts.optopt("i", "", "input binary file ", "path");
     opts.optopt("e", "", "evaluate expression", "expression");
-    opts.optflag("r", "", "reverse debugging");
+    opts.optflag("r", "", "enable reverse debugging");
+    opts.optflag("h", "help", "print help");
     let it = std::env::args().skip(1);
     let matches = opts.parse(it).map_err(|e| {
         let errmsg = format!("getopts: {}", e);
         eprintln!("{}", errmsg);
         Xerr::ErrorMsg(errmsg.into())
     })?;
+    if matches.opt_present("h") {
+        println!("{}", opts.usage("xeh options [script]\nexample: xeh -i file.bin script.xeh"));
+        std::process::exit(0);
+    }
     Ok(XcmdArgs {
         reverse_debug: matches.opt_present("r"),
         binary_path: matches.opt_str("i"),
