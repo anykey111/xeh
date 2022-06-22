@@ -435,7 +435,7 @@ impl Bitstr {
     pub fn eq_with(&self, other: &Bitstr) -> bool {
         if self.len() != other.len() {
             false
-        } else if self.is_bytestr() && other.is_bytestr() {
+        } else if self.is_u8_slice() && other.is_u8_slice() {
             self.slice() == other.slice()
         } else {
             self.iter8().eq(other.iter8())
