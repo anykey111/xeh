@@ -100,7 +100,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         let n = xs.pop_data()?.to_usize()?;
         pack_int(xs, n)
     })?;
-    xs.defword("nulbytes", nulbytes_word)?;
+    xs.defword("nulbytestr", nulbytestr_word)?;
+    xs.defword("cstr", cstr_word)?;
     OK
 }
 
@@ -355,13 +356,9 @@ fn into_bitstr(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::Bitstr(s))
 }
 
-fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
-    let bs = xs.pop_data()?.to_bitstr()?;
-    let bytes = bs
-        .bytestr()
-        .ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
-    match String::from_utf8(bytes.into_owned()) {
-        Ok(s) => xs.push_data(Cell::from(s)),
+fn decode_utf8_str(bytes: Vec<u8>) -> Xresult1<String> {
+    match String::from_utf8(bytes) {
+        Ok(s) => Ok(s),
         Err(e) => {
             let pos = e.utf8_error().valid_up_to();
             let bytes = e.into_bytes();
@@ -372,6 +369,15 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
             })
         }
     }
+}
+
+fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
+    let bs = xs.pop_data()?.to_bitstr()?;
+    let bytes = bs
+        .bytestr()
+        .ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
+    let s = decode_utf8_str(bytes.into_owned())?;
+    xs.push_data(Cell::from(s))
 }
 
 pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
@@ -557,7 +563,7 @@ fn bitstr_real_tag(len: usize, bo: Byteorder) -> Cell {
     Cell::from(v)
 }
 
-fn nulbytes_word(xs: &mut Xstate) -> Xresult {
+fn nulbytestr_read(xs: &mut Xstate) -> Xresult1<Bitstr> {
     let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
     let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
     let ss = s.seek(start).ok_or_else(|| Xerr::OutOfBounds(start))?;
@@ -572,8 +578,25 @@ fn nulbytes_word(xs: &mut Xstate) -> Xresult {
         }
     }
     let end = start + len;
-    let bytes = s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds(end))?;
-    xs.push_data(Cell::from(bytes))
+    s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds(end))
+}
+
+fn nulbytestr_word(xs: &mut Xstate) -> Xresult {
+    let bs = nulbytestr_read(xs)?;
+    xs.push_data(Cell::from(bs))
+}
+
+fn cstr_word(xs: &mut Xstate) -> Xresult {
+    let bs = nulbytestr_read(xs)?;
+    let mut s = String::with_capacity(bs.len() / 8 + 1);
+    for (x, _) in bs.iter8() {
+        if x == 0 {
+            break;
+        }
+        let c = char::from_u32(x as u32).unwrap();
+        s.push(c)
+    }
+    xs.push_data(Cell::from(s))
 }
 
 fn word_write(xs: &mut Xstate) -> Xresult {
@@ -806,14 +829,26 @@ mod tests {
     }
 
     #[test]
-    fn test_nulbytes() {
+    fn test_nulbytestr() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Bitstr::from(vec![0x33,0x34,0])).unwrap();
-        xs.eval(" nulbytes |33 34 00| assert-eq").unwrap();
+        xs.eval(" nulbytestr |33 34 00| assert-eq").unwrap();
         xs.set_binary_input(Bitstr::from_hex_str("03500").unwrap()).unwrap();
-        xs.eval(" 4 uint drop nulbytes |35 00| assert-eq").unwrap();
+        xs.eval(" 4 uint drop nulbytestr |35 00| assert-eq").unwrap();
         xs.set_binary_input(Bitstr::from_hex_str("360").unwrap()).unwrap();
-        assert_ne!(OK, xs.eval("nulbytes"));
+        assert_ne!(OK, xs.eval("nulbytestr"));
+    }
+
+    #[test]
+    fn test_cstr() {
+        let mut xs = Xstate::boot().unwrap();
+        let testvec: Vec<u8> = (1..=255).collect();
+        xs.set_binary_input(Bitstr::from(testvec.clone())).unwrap();
+        assert_eq!(OK, xs.eval("cstr"));
+        let s = xs.pop_data().unwrap().to_xstr().unwrap();
+        for (a,b) in s.chars().zip(testvec.iter()) {
+            assert_eq!(a as u32, *b as u32);
+        }
     }
 
     #[test]

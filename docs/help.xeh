@@ -195,10 +195,15 @@ loop" doc-example
     "int -- bitstr" stack-comment
 ] "bitstr" doc!
 
-"Read null-terminated byte string."
+"Read null-terminated bytestr, including 0x00 byte."
 .[ doc-for-bitstr
     "-- bitstr" stack-comment
-] "nulbytes" doc!
+] "nulbytestr" doc!
+
+"Read null-terminated ascii string, also known as C string."
+.[ doc-for-bitstr
+    "-- str" stack-comment
+] "cstr" doc!
 
 "Formatting option, set the number base to 16."
 .[ doc-for-fmt
