@@ -195,6 +195,11 @@ loop" doc-example
     "int -- bitstr" stack-comment
 ] "bitstr" doc!
 
+"Read null-terminated byte string."
+.[ doc-for-bitstr
+    "-- bitstr" stack-comment
+] "nulbytes" doc!
+
 "Formatting option, set the number base to 16."
 .[ doc-for-fmt
 "13 HEX println" doc-example

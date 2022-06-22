@@ -100,6 +100,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         let n = xs.pop_data()?.to_usize()?;
         pack_int(xs, n)
     })?;
+    xs.defword("nulbytes", nulbytes_word)?;
     OK
 }
 
@@ -556,6 +557,25 @@ fn bitstr_real_tag(len: usize, bo: Byteorder) -> Cell {
     Cell::from(v)
 }
 
+fn nulbytes_word(xs: &mut Xstate) -> Xresult {
+    let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
+    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
+    let ss = s.seek(start).ok_or_else(|| Xerr::OutOfBounds(start))?;
+    if !ss.is_bytestr() {
+        return Err(Xerr::ToBytestrError(ss));
+    }
+    let mut len = 0;
+    for (x, n) in ss.iter8() {
+        len += n as usize;
+        if x == 0 {
+            break;
+        }
+    }
+    let end = start + len;
+    let bytes = s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds(end))?;
+    xs.push_data(Cell::from(bytes))
+}
+
 fn word_write(xs: &mut Xstate) -> Xresult {
     let data = xs.pop_data()?;
     let path = xs.pop_data()?.to_xstr()?;
@@ -783,6 +803,17 @@ mod tests {
         );
         let res = xs.eval(" [ \"just  text\" 0xff 0xff 0xff ] >bitstr bitstr>utf8");
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_nulbytes() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.set_binary_input(Bitstr::from(vec![0x33,0x34,0])).unwrap();
+        xs.eval(" nulbytes |33 34 00| assert-eq").unwrap();
+        xs.set_binary_input(Bitstr::from_hex_str("03500").unwrap()).unwrap();
+        xs.eval(" 4 uint drop nulbytes |35 00| assert-eq").unwrap();
+        xs.set_binary_input(Bitstr::from_hex_str("360").unwrap()).unwrap();
+        assert_ne!(OK, xs.eval("nulbytes"));
     }
 
     #[test]
