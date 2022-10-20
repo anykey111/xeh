@@ -151,6 +151,8 @@ impl Lex {
                         }
                     } else if c.is_ascii_whitespace() {
                         continue;
+                    } else if c == '#' {
+                        self.skip_line();
                     } else if c == '-' {
                         builder.append_bit(0);
                     } else if c == 'x' {
