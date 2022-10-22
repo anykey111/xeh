@@ -17,8 +17,8 @@ Features:
 
 ```
     # single line comment
-    # must be separated with whitespace
-    #this-is-not-a-comment
+    # whitespace or end of line should follow after sharp char
+    #this is not a comment
 ```
 
 ## Literals
@@ -78,8 +78,7 @@ By the analogy to the mainstream programming languages, "word" is just a functio
     "abc
 ```
 
-New word definition starts with ":" then word name and body follow,
-definition ends with ";" .
+New word definition starts with ":" then word name and body follow, definition ends with ";".
 
 ```
     # define a new word
@@ -89,8 +88,7 @@ definition ends with ";" .
 ```
 
 Variable is just a word that return a single value from the memory cell.
-Variable definition starts with "var" word then name follow,
-initial value is taken from the stack.
+Variable definition starts with "var" word then name follow, initial value is taken from the stack.
 
 ```
     # define a new global variable 
@@ -104,8 +102,7 @@ initial value is taken from the stack.
     ;
 ```
 
-Local variable is a variable that available only inside the word definition,
-initial variable is taken from the stack.
+Local variable is a variable that available only inside the word definition, initial variable is taken from the stack.
 
 ```
     # locals
@@ -121,10 +118,7 @@ initial variable is taken from the stack.
 
 ## Meta evaluation
 
-Code inside the round brackets evaluated at the build time,
-values left on the stack are passed to the parent context,
-everything else is wiped (expect constants).
-
+Code inside the round brackets evaluated at the build time, values left on the stack are passed to the parent context, everything else is wiped (expect constants).
 
 ```
     # calculate fib during build time
