@@ -118,7 +118,9 @@ impl rl::hint::Hinter for XsHelper {
             if st.xs.data_depth() > 0 {
                 for i in 0..st.xs.data_depth() {
                     let c = st.xs.get_data(i).unwrap_or(&NIL);
-                    text.push_str(&format!("\n{:?}", c));
+                    let valstr = st.xs.format_cell(c).unwrap_or_default();
+                    text.push_str("\n");
+                    text.push_str(&valstr);
                 }
             }
         }
