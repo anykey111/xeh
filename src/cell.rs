@@ -104,7 +104,6 @@ impl fmt::Debug for Cell {
             Cell::Bitstr(s) => {
                 f.write_str("|")?;
                 for (pos, (x, mut n)) in s.iter8().enumerate() {
-                    println!(" {:?}", (x, n));
                     if pos != 0 {
                         f.write_str(" ")?;
                     }
