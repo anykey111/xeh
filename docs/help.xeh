@@ -164,6 +164,25 @@ loop" doc-example
     "\"1001 0001\" bin>bitstr" doc-example
 ] "bin>bitstr" doc!
 
+"Decode UTF-8 string from bitstr."
+.[ doc-for-bitstr
+    "bitstr -- str" stack-comment
+    "|C3 9F| bitstr>utf8" doc-example
+] "bitstr>utf8" doc!
+
+"Pack string or vector into bitstr.
+Vector can contains integers in range of 0 to 255 representing
+single byte, another vector, string or bitstr."
+.[ doc-for-bitstr
+    "any -- bitstr" stack-comment
+    "# pack string
+    \"Hello\" >bitstr
+    # pack string terminating with zero
+    [ \"Hello\" 0 ] >bitstr
+    # pack multiple values
+    [ -1 i32! |FF CC| [ \"abc\" 0 ] ] >bitstr" doc-example
+] ">bitstr" doc!
+
 "True if default endianess is set to big."
 .[ doc-for-bitstr
     "flag --" stack-comment
@@ -205,6 +224,54 @@ loop" doc-example
     "-- str" stack-comment
 ] "cstr" doc!
 
+"Read variable length signed integer."
+.[ doc-for-bitstr 
+    "int -- int" stack-comment
+] "int" doc!
+
+"Read variable length unsigned integer."
+.[ doc-for-bitstr 
+    "int -- int" stack-comment
+] "uint" doc!
+
+"Pack variable length signed integer."
+.[ doc-for-bitstr 
+    "int int -- bitstr" stack-comment
+    "0xff 8 int! println" doc-example
+] "int!" doc!
+
+"Pack variable length unsigned integer."
+.[ doc-for-bitstr 
+    "int int -- bitstr" stack-comment
+    "0xff 8 uint! println" doc-example
+] "uint!" doc!
+
+"Read variable length float."
+.[ doc-for-bitstr 
+    "int -- float" stack-comment
+] "float" doc!
+
+"Pack variable length float."
+.[ doc-for-bitstr
+    "int float -- bitstr" stack-comment
+    "0.111 32 float! println" doc-example
+] "float!" doc!
+
+"Read bitstr of exact prefix or raise error."
+.[ doc-for-bitstr
+    "bitstr -- bitstr" stack-comment
+    "# test PNG file header
+    |89 50 4e 47 0d 0a 1a 0a| magic
+    # test NES ROM image header
+    [ \"NES\" 0x1a ] magic" doc-example
+] "magic" doc!
+
+"Write bitstr to stdout."
+.[ doc-for-bitstr
+    "bitstr --" stack-comment
+    "|31323500| emit" doc-example
+ ] "emit" doc!
+
 "Formatting option, set the number base to 16."
 .[ doc-for-fmt
 "13 HEX println" doc-example
@@ -243,7 +310,8 @@ loop" doc-example
 .[ doc-for-core "str --" stack-comment ] "include" doc!
 
 "Create a new file or truncate existing, then write bitstr with padding."
-.[ doc-for-bitstr "str bitstr --"
+.[ doc-for-bitstr 
+    "str bitstr --" stack-comment
     "\"test.bin\" big 777 u32! write" doc-example
 ] "write" doc!
 
