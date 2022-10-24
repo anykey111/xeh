@@ -174,7 +174,7 @@ loop" doc-example
 Vector can contains integers in range of 0 to 255 representing
 single byte, another vector, string or bitstr."
 .[ doc-for-bitstr
-    "any -- bitstr" stack-comment
+    "val -- bitstr" stack-comment
     "# pack string
     \"Hello\" >bitstr
     # pack string terminating with zero
@@ -328,6 +328,17 @@ single byte, another vector, string or bitstr."
     a b + ; 
 3 f println" doc-example
 ] "local" doc!
+
+"Duplicate top of the stack."
+.[ doc-for-core
+    "val -- val val" stack-comment
+    "1 dup" doc-example
+] "dup" doc!
+
+"Drop top of the stack."
+.[ doc-for-core
+    "val --" stack-comment
+] "drop" doc!
 
 "Bit-shift left."
 .[ doc-for-bitwise
