@@ -660,6 +660,7 @@ impl State {
         self.defword("K", core_word_counter_k)?;
         self.defword("length", core_word_length)?;
         self.defword("get", core_word_get)?;
+        self.defword("concat", core_word_concat)?;
         self.defword("sort", core_word_sort)?;
         self.defword("reverse", core_word_reverse)?;
         self.defword("dup", |xs| xs.dup_data())?;
@@ -1836,6 +1837,32 @@ fn core_word_get(xs: &mut State) -> Xresult {
     xs.push_data(vector_get(&v, index)?.clone())
 }
 
+fn concat_str_vec(xs: &mut State, v: &Xvec) -> Xresult1<String> {
+    let mut s= String::new();
+    for x in v.iter() {
+        match x.value() {
+            Cell::Vector(v2) => {
+                let tmp = concat_str_vec(xs, v2)?;
+                s.push_str(&tmp);
+            }
+            Cell::Str(xstr) => {
+                s.push_str(xstr);
+            }
+            val => {
+                let tmp = xs.format_cell(val)?;
+                s.push_str(&tmp);
+            }
+        }
+    }
+    Ok(s)
+}
+
+fn core_word_concat(xs: &mut State) -> Xresult {
+    let v = xs.pop_data()?.to_vec()?;
+    let s = concat_str_vec(xs, &v)?;
+    xs.push_data(Cell::from(s))
+}
+
 fn core_word_sort(xs: &mut State) -> Xresult {
     let v = xs.pop_data()?.to_vec()?;
     let mut tmp: Vec<Cell> = v.iter().cloned().collect();
@@ -2153,6 +2180,13 @@ mod tests {
             xs.eval(": stop? leave ; begin stop? repeat"),
             Err(Xerr::unbalanced_fn_builder())
         );
+    }
+
+    #[test]
+    fn test_concat() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "[ 1 \"ss\" [ 15 ] ] concat");
+        assert_eq!("1ss15".to_string(), xs.pop_data().unwrap().str().unwrap());
     }
 
     #[test]
