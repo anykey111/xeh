@@ -331,14 +331,30 @@ single byte, another vector, string or bitstr."
 
 "Duplicate top of the stack."
 .[ doc-for-core
-    "val -- val val" stack-comment
+    "x -- x x" stack-comment
     "1 dup" doc-example
 ] "dup" doc!
 
 "Drop top of the stack."
 .[ doc-for-core
-    "val --" stack-comment
+    "x --" stack-comment
 ] "drop" doc!
+
+"Exchange top stack item with the second one."
+.[ doc-for-core
+    "x1 x2 -- x2 x1" stack-comment
+    "1 5 swap" doc-example
+] "swap" doc!
+
+"Exchange top stack item with the third one."
+.[ doc-for-core
+    "x1 x2 x3 -- x3 x2 x1" stack-comment
+] "rot" doc!
+
+"Duplicate second top item."
+.[ doc-for-core
+    "x1 x2 -- x1 x2 x1" stack-comment
+] "over" doc!
 
 "Bit-shift left."
 .[ doc-for-bitwise
