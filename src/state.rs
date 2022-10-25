@@ -1809,6 +1809,7 @@ fn core_word_length(xs: &mut State) -> Xresult {
     match xs.pop_data()? {
         Cell::Vector(x) => xs.push_data(Cell::from(x.len())),
         Cell::Str(x) => xs.push_data(Cell::from(x.len())),
+        Cell::Bitstr(bs) => xs.push_data(Cell::from(bs.len())),
         _ => Err(Xerr::TypeError),
     }
 }
@@ -2196,6 +2197,8 @@ mod tests {
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         xs.eval("\"12345\" length").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
+        xs.eval("|fff| length").unwrap();
+        assert_eq!(Ok(Cell::Int(12)), xs.pop_data());
         let mut xs = State::boot().unwrap();
         let res = xs.eval("length");
         assert_eq!(Err(Xerr::StackUnderflow), res);
