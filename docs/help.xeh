@@ -272,6 +272,39 @@ single byte, another vector, string or bitstr."
     "|31323500| emit" doc-example
  ] "emit" doc!
 
+: generate-int-docs
+    local n
+    [ "Read " n " bits signed integer" ] concat
+    .[ doc-for-bitstr "-- bitstr" stack-comment ] [ "i" n ] concat doc!
+    [ "Pack " n " bits signed integer" ] concat
+    .[ doc-for-bitstr "int -- bitstr" stack-comment ] [ "i" n "!" ] concat doc!
+    [ "Read " n " bits unsigned integer" ] concat
+    .[ doc-for-bitstr "-- bitstr" stack-comment ] [ "u" n ] concat doc!
+    [ "Pack " n " bits unsigned integer" ] concat
+    .[ doc-for-bitstr "int -- bitstr" stack-comment ] [ "u" n "!" ] concat doc!
+;
+
+: generate-uint-list
+    [ 8 16 32 64 ] local nbits
+    nbits length 0 do
+        nbits I get generate-int-docs
+    loop
+;
+
+generate-uint-list
+
+"Read 32 bits float"
+.[ doc-for-bitstr "-- real" stack-comment ] "f32" doc!
+
+"Read 64 bits float"
+.[ doc-for-bitstr "-- real" stack-comment ] "f64" doc!
+
+"Pack 32 bit float"
+.[ doc-for-bitstr "real -- bitstr" stack-comment ] "f32!" doc!
+
+"Pack 64 bit float"
+.[ doc-for-bitstr "real -- bitstr" stack-comment ] "f64!" doc!
+
 "Formatting option, set the number base to 16."
 .[ doc-for-fmt
 "13 HEX println" doc-example
