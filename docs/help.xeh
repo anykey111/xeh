@@ -339,6 +339,27 @@ generate-uint-list
 "Formatting option, omit the tag sticked to the value."
 .[ doc-for-fmt ] "NO-TAGS" doc!
 
+"Length of the vector,string or bitstr."
+.[ doc-for-core "vec -- int" stack-comment
+    "[ 1 2 3 ] length
+    \"hello\" length
+    # please, note, bitstr length is always in number of bits
+    |fff| length" doc-example
+] "length" doc!
+
+"Get vector item at index.
+Negative index access items from the tail of the vector."
+.[ doc-for-core "vec int -- val" stack-comment
+    "[ 5 7 ] 0 get
+    # get last item of the vec
+    [ 5 7 ] -1 get" doc-example
+] "get" doc!
+
+"Concatenate vector of values into a string."
+.[ doc-for-core "vec -- str" stack-comment
+    "[ \"a\" 2 2 + \"b\" ] concat" doc-example
+] "concat" doc!
+
 "Include source file."
 .[ doc-for-core "str --" stack-comment ] "include" doc!
 
