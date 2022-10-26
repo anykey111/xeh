@@ -12,6 +12,10 @@ Features:
     - Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
     - Data tagging, stick attribute to any value, even integer maybe tagged.
 
+# Building
+
+    cargo build --release
+
 # Quick reference
 
 ## Comments
