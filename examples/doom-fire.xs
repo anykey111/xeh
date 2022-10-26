@@ -88,7 +88,6 @@ FIRE_WIDTH for 36 loop
         loop
     loop
 ;
-
   
 : draw_fire
     update_fire
