@@ -5,6 +5,7 @@ XEH is a dynamic, concatenative scripting language designed for the interactive 
 Its look like FORTH, but its not. XEH doesn't allow direct memory access, uses immutable data structures and reference-counted garbage collector.
 
 Features:
+
     - Builtin debugger with reverse debugging option.
     - Whole program state snapshot and rollback.
     - Immutable REPL, evaluate result without commiting changes to the program state until you like it.
