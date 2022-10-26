@@ -12,6 +12,8 @@ Features:
     - Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
     - Data tagging, stick attribute to any value, even integer maybe tagged.
 
+Try online: [XEH Playground](https://anykey111.github.io/)
+
 # Building
 
     cargo build --release
