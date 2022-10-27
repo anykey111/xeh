@@ -137,7 +137,7 @@ fn pack_float(xs: &mut Xstate, n: usize) -> Xresult {
 }
 
 fn word_find(xs: &mut Xstate) -> Xresult {
-    let pat = bitstring_from(xs.pop_data()?)?;
+    let pat = xs.pop_data()?.to_bitstr()?;
     let rest = rest_bits(xs)?;
     let pat_bytes = pat
         .bytestr()
@@ -266,7 +266,7 @@ pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstr) -> Xresult {
 }
 
 fn word_open_input(xs: &mut Xstate) -> Xresult {
-    let s = bitstring_from(xs.pop_data()?)?;
+    let s = xs.pop_data()?.to_bitstr()?;
     open_bitstr(xs, s)
 }
 
@@ -284,8 +284,7 @@ fn word_close_input(xs: &mut Xstate) -> Xresult {
 
 fn bitstring_append(xs: &mut Xstate) -> Xresult {
     let head = xs.pop_data()?.to_bitstr()?;
-    let tail = xs.pop_data()?;
-    let tail = bitstring_from(tail)?;
+    let tail = xs.pop_data()?.to_bitstr()?;
     let result = head.append(&tail);
     xs.push_data(Cell::Bitstr(result))
 }
@@ -346,13 +345,13 @@ fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstr_to_bin(xs: &mut Xstate) -> Xresult {
-    let bs = xs.pop_data()?.to_bitstr()?;
-    xs.push_data(Cell::from(bs.to_bin_string()))
+    let s = xs.pop_data()?.bitstr()?.to_bin_string();
+    xs.push_data(Cell::from(s))
 }
 
 fn into_bitstr(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
-    let s = bitstring_from(val)?;
+    let s = bitstr_concat(val)?;
     xs.push_data(Cell::Bitstr(s))
 }
 
@@ -372,7 +371,8 @@ fn decode_utf8_str(bytes: Vec<u8>) -> Xresult1<String> {
 }
 
 fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
-    let bs = xs.pop_data()?.to_bitstr()?;
+    let val = xs.pop_data()?;
+    let bs = val.bitstr()?;
     let bytes = bs
         .bytestr()
         .ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
@@ -380,7 +380,7 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(s))
 }
 
-pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
+fn bitstr_concat(val: Cell) -> Xresult1<Bitstr> {
     match val {
         Cell::Str(s) => Ok(Bitstr::from(s.to_string().into_bytes())),
         Cell::Vector(v) => {
@@ -401,7 +401,7 @@ pub fn bitstring_from(val: Cell) -> Xresult1<Bitstr> {
                         tmp = tmp.append(&s);
                     }
                     Cell::Vector(v) => {
-                        let tmp2 = bitstring_from(Cell::Vector(v.clone()))?;
+                        let tmp2 = bitstr_concat(Cell::Vector(v.clone()))?;
                         tmp = tmp.append(&tmp2);
                     }
                     _ => return Err(Xerr::TypeError),
@@ -431,7 +431,7 @@ fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
 }
 
 fn word_emit(xs: &mut Xstate) -> Xresult {
-    let bs = bitstring_from(xs.pop_data()?)?;
+    let bs = xs.pop_data()?.to_bitstr()?;
     let buf = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     let cref = xs.bitstr_mod.output;
     if cref.is_initialized() {
@@ -442,8 +442,7 @@ fn word_emit(xs: &mut Xstate) -> Xresult {
 }
 
 fn word_magic(xs: &mut Xstate) -> Xresult {
-    let val = xs.pop_data()?;
-    let pat = bitstring_from(val)?;
+    let pat = xs.pop_data()?.to_bitstr()?;
     let s = peek_bits(xs, pat.len())?;
     if !s.eq_with(&pat) {
         let pos = s
@@ -600,10 +599,9 @@ fn cstr_word(xs: &mut Xstate) -> Xresult {
 }
 
 fn word_write(xs: &mut Xstate) -> Xresult {
-    let data = xs.pop_data()?;
+    let data = xs.pop_data()?.to_bitstr()?;
     let path = xs.pop_data()?.to_xstr()?;
-    let s = crate::bitstr_ext::bitstring_from(data)?;
-    crate::file::fs_overlay::write_all(&path, &s)
+    crate::file::fs_overlay::write_all(&path, &data)
 }
 
 #[cfg(test)]
@@ -636,7 +634,7 @@ mod tests {
     #[test]
     fn test_int_uint() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 0xff 0xff ] open-input 8 uint 8 int").unwrap();
+        xs.eval("|ff ff| open-input 8 uint 8 int").unwrap();
         assert_eq!(Cell::Int(-1), xs.pop_data().unwrap());
         assert_eq!(Cell::Int(255), xs.pop_data().unwrap());
     }
@@ -645,12 +643,12 @@ mod tests {
     fn test_exact_match() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("123")).unwrap();
-        match xs.eval("\"124\" magic") {
+        match xs.eval("\"124\" >bitstr magic") {
             Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(21, fail_pos),
             other => panic!("{:?}", other),
         };
-        xs.eval("\"123\" magic").unwrap();
-        match xs.eval("[ 0 ] magic") {
+        xs.eval("\"123\" >bitstr magic").unwrap();
+        match xs.eval("|00| magic") {
             Err(Xerr::ReadError { len, remain }) => {
                 assert_eq!(8, len);
                 assert_eq!(0, remain);
@@ -666,7 +664,7 @@ mod tests {
         "source bits are differ from pattern at offset 3\n [ 0x03 ] source at 3\n [ 0x01 ] pattern at 3");
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Xbitstr::from("abc")).unwrap();    
-        xs.eval(" \"abc\" magic [ \"abc\" ] >bitstr assert-eq").unwrap();
+        xs.eval(" \"abc\" >bitstr magic \"abc\" >bitstr assert-eq").unwrap();
     }
 
     #[test]
@@ -802,18 +800,14 @@ mod tests {
     #[test]
     fn test_bitstr_find() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("[ 33 55 77 ] open-input [ 77 ] find").unwrap();
+        xs.eval("|33 55 77| open-input |77| find").unwrap();
         assert_eq!(Ok(Cell::Int(16)), xs.pop_data());
-        xs.eval("[ 55 77 ] find").unwrap();
+        xs.eval("|55 77| find").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.eval("[ ] find").unwrap();
+        xs.eval("|| find").unwrap();
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
-        xs.eval("[ 56 ] find").unwrap();
+        xs.eval("|56| find").unwrap();
         assert_eq!(Ok(Cell::Nil), xs.pop_data());
-        assert_ne!(OK, xs.eval("5 seek [ 56 ] find"));
-        xs.eval("[ 0x31 0x32 0x33 ] open-input \"23\" find")
-            .unwrap();
-        assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
     }
 
     #[test]
