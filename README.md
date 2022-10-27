@@ -1,24 +1,43 @@
 
-# The HEX Scripting Language
+# The HEX Programming Language
 
-XEH is a dynamic, concatenative scripting language designed for the interactive coding. Main language domain is binary data parsing.
+XEH is a dynamic, concatenative programming language designed for the interactive coding. Main language domain is binary data parsing.
 Its look like FORTH, but its not. XEH doesn't allow direct memory access, uses immutable data structures and reference-counted garbage collector.
 
 Features:
 
-    - Builtin debugger with reverse debugging option.
-    - Whole program state snapshot and rollback.
-    - Immutable REPL, evaluate result without commiting changes to the program state until you like it.
-    - Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
-    - Data tagging, stick attribute to any value, even integer maybe tagged.
+* Builtin debugger with reverse debugging option.
+* Whole program state snapshot and rollback.
+* Immutable REPL, evaluate result without commiting changes to the program state until you like it.
+* Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
+* Data tagging, stick attribute to any value, even integer maybe tagged.
 
 Try online: [XEH Playground](https://anykey111.github.io/)
 
-# Building
+# Building and Running
 
+```
+    # build core library and command line tools
     cargo build --release
 
-# Quick reference
+    # command line options
+    xeh [options] [sources]
+    Options:
+        -i path             input binary file
+        -e expression       evaluate expression
+        -r                  enable reverse debugging
+        -h, --help          print help
+
+    # repl commands
+    /trial          switch to live coding mode
+    /repl           switch to REPL mode
+    /snapshot       snapshot program state
+    /rollback       rollback to the latest snapshot
+    /next           debugger - step forward
+    /rnext          debugger - step backward
+```
+
+# Quick Language Reference
 
 ## Comments
 
@@ -188,7 +207,7 @@ from the meta context, because variables yet not evaluated.
     repeat
 ```
     
-## Counter loops
+## Counted loops
 
 ```
     # count from 0 to 10, current loop index is accessed with "I"
@@ -225,4 +244,3 @@ Tag is a special data sticked to the value but not directly accessed.
     "text" .[ 14 . "size" "red" . "color" ]
     "text" [ 14 "size" with-tag "red" "color" with-tag ] with-tag
 ```
-
