@@ -31,7 +31,7 @@ pub mod fs_overlay {
         }
     }
 
-    pub fn read_all(path: &str) -> Xresult1<Vec<u8>>{
+    pub fn read_all(path: &str) -> Xresult1<Vec<u8>> {
         let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)
@@ -41,7 +41,7 @@ pub mod fs_overlay {
 
     #[cfg(not(feature = "mmap"))]
     pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
-        let buf = read_all(path);
+        let buf = read_all(path)?;
         xs.set_binary_input(Xbitstr::from(buf))
     }
 
@@ -90,22 +90,24 @@ pub mod fs_overlay {
 pub mod fs_overlay {
     use super::*;
 
-    fn no_filesystem_error() -> Xresult {
-        Err(Xerr::IOError {
-            filename: path.into(),
-            reason: "Target arch has no filesystem".into(),
-        })
+    macro_rules! no_filesystem_error {
+        ($path:ident) => {
+            Err(Xerr::IOError {
+                filename: $path.into(),
+                reason: "Target arch has no filesystem".into(),
+            })
+        };
     }
 
-    pub fn read_all(path: &Xstr, _s: &Xbitstr) -> Xresult {
-        no_filesystem_error()
+    pub fn read_all(path: &Xstr) -> Xresult1<Vec<u8>> {
+        no_filesystem_error!(path)
     }
 
     pub fn write_all(path: &Xstr, _s: &Xbitstr) -> Xresult {
-        no_filesystem_error()
+        no_filesystem_error!(path)
     }
 
     pub fn read_source_file(path: &str) -> Xresult1<String> {
-        no_filesystem_error()
+        no_filesystem_error!(path)
     }
 }
