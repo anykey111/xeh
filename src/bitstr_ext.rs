@@ -63,8 +63,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
     xs.defword("magic", word_magic)?;
     xs.defword("emit", word_emit)?;
-    xs.defword("write", word_write)?;
-
+    xs.defword("write-all", word_write)?;
+    xs.defword("read-all", word_read_all)?;
 
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -604,6 +604,13 @@ fn word_write(xs: &mut Xstate) -> Xresult {
     crate::file::fs_overlay::write_all(&path, &data)
 }
 
+fn word_read_all(xs: &mut Xstate) -> Xresult {
+    let path = xs.pop_data()?.to_xstr()?;
+    let buf = crate::file::fs_overlay::read_all(&path)?;
+    let bs = Xbitstr::from(buf);
+    xs.push_data(Cell::from(bs))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -741,6 +748,12 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(include_str!("test-binary-input.xeh")).unwrap();
         assert_eq!(Err(Xerr::OutOfBounds(0)), xs.eval("close-input"));
+    }
+    
+    #[test]
+    fn test_read_all() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval("\"src/test-file.txt\" read-all \"1234\" >bitstr assert-eq").unwrap();
     }
 
     #[test]

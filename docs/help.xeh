@@ -366,8 +366,14 @@ Negative index access items from the tail of the vector."
 "Create a new file or truncate existing, then write bitstr with padding."
 .[ doc-for-bitstr 
     "str bitstr --" stack-comment
-    "\"test.bin\" big 777 u32! write" doc-example
-] "write" doc!
+    "\"test.bin\" big 777 u32! write-all" doc-example
+] "write-all" doc!
+
+"Read all bytes from file."
+.[ doc-for-bitstr
+    "str -- bitstr" stack-comment
+    "\"test-file.txt\" read-all" doc-example
+] "read-all" doc!
 
 "Define global variable with initial value."
 .[ doc-for-core 

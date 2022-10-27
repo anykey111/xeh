@@ -31,12 +31,17 @@ pub mod fs_overlay {
         }
     }
 
-    #[cfg(not(feature = "mmap"))]
-    pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
+    pub fn read_all(path: &str) -> Xresult1<Vec<u8>>{
         let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)
             .map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+        Ok(buf)
+    }
+
+    #[cfg(not(feature = "mmap"))]
+    pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
+        let buf = read_all(path);
         xs.set_binary_input(Xbitstr::from(buf))
     }
 
@@ -85,17 +90,22 @@ pub mod fs_overlay {
 pub mod fs_overlay {
     use super::*;
 
-    pub fn write_all(path: &Xstr, _s: &Xbitstr) -> Xresult {
+    fn no_filesystem_error() -> Xresult {
         Err(Xerr::IOError {
             filename: path.into(),
             reason: "Target arch has no filesystem".into(),
         })
     }
 
+    pub fn read_all(path: &Xstr, _s: &Xbitstr) -> Xresult {
+        no_filesystem_error()
+    }
+
+    pub fn write_all(path: &Xstr, _s: &Xbitstr) -> Xresult {
+        no_filesystem_error()
+    }
+
     pub fn read_source_file(path: &str) -> Xresult1<String> {
-        Err(Xerr::IOError {
-            filename: path.into(),
-            reason: "Target arch has no filesystem".into(),
-        })
+        no_filesystem_error()
     }
 }
