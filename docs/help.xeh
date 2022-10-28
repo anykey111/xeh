@@ -212,7 +212,12 @@ single byte, another vector, string or bitstr."
 "Read number of bits as bitstr."
 .[ doc-for-bitstr
     "int -- bitstr" stack-comment
-] "bitstr" doc!
+] "bits" doc!
+
+"Read given number of bytes."
+.[ doc-for-bitstr
+    "int -- bitstr" stack-comment
+] "bytes" doc!
 
 "Read null-terminated bytestr, including 0x00 byte."
 .[ doc-for-bitstr
