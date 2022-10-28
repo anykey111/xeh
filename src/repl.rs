@@ -312,10 +312,12 @@ pub fn run_with_args() -> Xresult {
         xs.eval(&format!("include \"{}\"", path))?;
     }
     if let Some(s) = args.eval {
-        xs.eval(&s)
+        if let Err(e) = xs.eval(&s) {
+            print_pretty_error(&xs, &e);
+            return Err(e);
+        }
     } else if args.sources.is_empty() {
-        run_tty_repl(xs, args)
-    } else {
-        OK
+        run_tty_repl(xs, args)?;
     }
+    OK
 }
