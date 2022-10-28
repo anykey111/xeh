@@ -679,6 +679,7 @@ impl State {
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
         self.def_immediate("include", core_word_include)?;
+        self.def_immediate("require", core_word_require)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
         self.defword("insert-tagged", core_word_insert_tagged)?;
@@ -1955,12 +1956,10 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
     OK
 }
 
-fn core_word_include(xs: &mut State) -> Xresult {
-    let tok = xs.next_token()?;
-    if let Tok::Literal(val) = tok {
+fn filename_literal(xs: &mut State) -> Xresult1<Xstr> {
+    if let Tok::Literal(val) = xs.next_token()? {
         if let Cell::Str(path) = val {
-            let s = crate::file::fs_overlay::read_source_file(&path)?;
-            xs.intern_source(s.into(), Some(path))
+            Ok(path)
         } else {
             Err(Xerr::TypeErrorMsg {
                 val,
@@ -1970,6 +1969,29 @@ fn core_word_include(xs: &mut State) -> Xresult {
     } else {
         Err(Xerr::ExpectingLiteral)
     }
+}
+
+fn is_filename_included(xs: &State, filename: &Xstr) -> bool {
+    xs.sources.iter().any(|x| &x.0 == filename)
+}
+
+fn include_source(xs: &mut State, filename: Xstr) -> Xresult {
+    let src = crate::file::fs_overlay::read_source_file(&filename)?;
+    xs.intern_source(src.into(), Some(filename))
+}
+
+fn core_word_require(xs: &mut State) -> Xresult {
+    let filename = filename_literal(xs)?;
+    if is_filename_included(xs, &filename) {
+        OK
+    } else {
+        include_source(xs, filename)
+    }
+}
+
+fn core_word_include(xs: &mut State) -> Xresult {
+    let filename = filename_literal(xs)?;
+    include_source(xs, filename)
 }
 
 fn core_word_tag_of(xs: &mut State) -> Xresult {
@@ -2842,6 +2864,18 @@ mod tests {
         eval_ok!(xs, "include \"src/test-hello.xeh\" hello");
         let s = xs.pop_data().unwrap().to_xstr().unwrap();
         assert_eq!(s, "Hello");
+    }
+
+    #[test]
+    fn test_require() {
+        let mut xs = State::boot().unwrap();
+        crate::d2_plugin::load(&mut xs).unwrap();
+        eval_ok!(xs, "
+            require \"src/test-require.xeh\"
+            require \"src/test-require.xeh\"
+            ");
+        assert_eq!(xs.pop_data(), Ok(Cell::from(33)));
+        assert!(xs.pop_data().is_err());
     }
 
     #[test]
