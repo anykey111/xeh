@@ -451,8 +451,10 @@ impl State {
             self.last_token = Some(lex.last_substr());
             if let Ok(Tok::EndOfInput) = &res {
                 self.input.pop();
-            }
+                self.next_token()
+            } else {
             res
+            }
         } else {
             Ok(Tok::EndOfInput)
         }
@@ -676,7 +678,7 @@ impl State {
         self.defword("println", core_word_println)?;
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
-        self.defword("include", core_word_include)?;
+        self.def_immediate("include", core_word_include)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
         self.defword("insert-tagged", core_word_insert_tagged)?;
@@ -1839,7 +1841,7 @@ fn core_word_get(xs: &mut State) -> Xresult {
 }
 
 fn concat_str_vec(xs: &mut State, v: &Xvec) -> Xresult1<String> {
-    let mut s= String::new();
+    let mut s = String::new();
     for x in v.iter() {
         match x.value() {
             Cell::Vector(v2) => {
@@ -1954,8 +1956,20 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
 }
 
 fn core_word_include(xs: &mut State) -> Xresult {
-    let path = xs.pop_data()?.to_xstr()?;
-    xs.eval_from_file(path, xs.ctx.mode.clone())
+    let tok = xs.next_token()?;
+    if let Tok::Literal(val) = tok {
+        if let Cell::Str(path) = val {
+            let s = crate::file::fs_overlay::read_source_file(&path)?;
+            xs.intern_source(s.into(), Some(path))
+        } else {
+            Err(Xerr::TypeErrorMsg {
+                val,
+                msg: xstr_literal!("string"),
+            })
+        }
+    } else {
+        Err(Xerr::ExpectingLiteral)
+    }
 }
 
 fn core_word_tag_of(xs: &mut State) -> Xresult {
@@ -2738,7 +2752,7 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("\"src/test-location1.xeh\" include");
+        let res = xs.eval("include \"src/test-location1.xeh\"");
         assert_eq!(Err(Xerr::unbalanced_repeat()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
@@ -2818,7 +2832,16 @@ mod tests {
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
         crate::d2_plugin::load(&mut xs).unwrap();
-        eval_ok!(xs, "\"docs/help.xeh\" include");
+        eval_ok!(xs, "include \"docs/help.xeh\"");
+    }
+
+    #[test]
+    fn test_include_build() {
+        let mut xs = State::boot().unwrap();
+        crate::d2_plugin::load(&mut xs).unwrap();
+        eval_ok!(xs, "include \"src/test-hello.xeh\" hello");
+        let s = xs.pop_data().unwrap().to_xstr().unwrap();
+        assert_eq!(s, "Hello");
     }
 
     #[test]

@@ -365,8 +365,10 @@ Negative index access items from the tail of the vector."
     "[ \"a\" 2 2 + \"b\" ] concat" doc-example
 ] "concat" doc!
 
-"Include source file."
-.[ doc-for-core "str --" stack-comment ] "include" doc!
+"Include source file at build time."
+.[ doc-for-core
+    "include \"src/test-hello.xeh\"" doc-example
+] "include" doc!
 
 "Create a new file or truncate existing, then write bitstr with padding."
 .[ doc-for-bitstr 

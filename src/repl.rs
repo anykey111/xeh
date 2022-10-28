@@ -309,7 +309,7 @@ pub fn run_with_args() -> Xresult {
         xs.set_recording_enabled(true);
     }
     for path in args.sources.iter() {
-        xs.eval(&format!("\"{}\" include", path))?;
+        xs.eval(&format!("include \"{}\"", path))?;
     }
     if let Some(s) = args.eval {
         xs.eval(&s)
