@@ -92,7 +92,7 @@ impl fmt::Display for Xerr {
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
             Xerr::AssertFailed => f.write_str("assertion failed"),
             Xerr::AssertEqFailed { a, b } => {
-                f.write_str("assertion failed, a <> b:")?;
+                writeln!(f, "assertion failed, a <> b")?;
                 writeln!(f, "b: {:?}", b)?;
                 write!(f, "a: {:?}", a)
             }
