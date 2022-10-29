@@ -30,6 +30,7 @@ pub enum Xerr {
         val: Cell,
         msg: Xstr,
     },
+    TypeNotSupported { val: Cell },
     InvalidAddress,
     IOError {
         filename: Xstr,
@@ -78,6 +79,11 @@ impl fmt::Display for Xerr {
             Xerr::ReturnStackUnderflow => f.write_str("return stack underflow"),
             Xerr::LoopStackUnderflow => f.write_str("unbalanced loop"),
             Xerr::TypeError => f.write_str("unexpected type"),
+            Xerr::TypeNotSupported { val } => write!(
+                f, "value type of {} is not supported:\n{:?}",
+                val.type_name(),
+                val
+            ),
             Xerr::TypeErrorMsg { val, msg } => write!(
                 f,
                 "expected {}, found {}\n# {:?}",
@@ -259,6 +265,10 @@ impl Xerr {
         Xerr::ErrorMsg(xstr_literal!(
             "the meta-eval context can operate only with const variables"
         ))
+    }
+
+    pub (crate) fn type_not_supported(val: Cell) -> Xerr {
+        Xerr::TypeNotSupported { val }
     }
 }
 pub type Xresult = Xresult1<()>;

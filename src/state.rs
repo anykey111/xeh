@@ -564,7 +564,7 @@ impl State {
             Entry::Variable(a) => self.cell_ref(*a),
             Entry::Constant(a) => Ok(a),
             //Entry::Function{xf,..} => Ok(Cell::Fun(xf.clone())),
-            _ => Err(Xerr::TypeError),
+            _ => Err(Xerr::InternalError),
         }
     }
 
@@ -1814,11 +1814,12 @@ fn core_word_counter_k(xs: &mut State) -> Xresult {
 }
 
 fn core_word_length(xs: &mut State) -> Xresult {
-    match xs.pop_data()? {
+    let val = xs.pop_data()?;
+    match val.value() {
         Cell::Vector(x) => xs.push_data(Cell::from(x.len())),
         Cell::Str(x) => xs.push_data(Cell::from(x.len())),
         Cell::Bitstr(bs) => xs.push_data(Cell::from(bs.len())),
-        _ => Err(Xerr::TypeError),
+        val => Err(Xerr::type_not_supported(val.clone())),
     }
 }
 
@@ -2250,7 +2251,7 @@ mod tests {
         let res = xs.eval("length");
         assert_eq!(Err(Xerr::StackUnderflow), res);
         let res = xs.eval("1 length");
-        assert_eq!(Err(Xerr::TypeError), res);
+        assert_eq!(Err(Xerr::type_not_supported(Cell::from(1i32))), res);
     }
 
     #[test]

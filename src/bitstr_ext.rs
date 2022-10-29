@@ -382,7 +382,7 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
 }
 
 fn bitstr_concat(val: Cell) -> Xresult1<Bitstr> {
-    match val {
+    match val.value() {
         Cell::Str(s) => Ok(Bitstr::from(s.to_string().into_bytes())),
         Cell::Vector(v) => {
             let mut tmp = Xbitstr::new();
@@ -405,13 +405,13 @@ fn bitstr_concat(val: Cell) -> Xresult1<Bitstr> {
                         let tmp2 = bitstr_concat(Cell::Vector(v.clone()))?;
                         tmp = tmp.append(&tmp2);
                     }
-                    _ => return Err(Xerr::TypeError),
+                    val => return Err(Xerr::type_not_supported(val.clone())),
                 }
             }
             Ok(Bitstr::from(tmp))
         }
-        Cell::Bitstr(s) => Ok(s),
-        _ => Err(Xerr::TypeError),
+        Cell::Bitstr(s) => Ok(s.clone()),
+        val => Err(Xerr::type_not_supported(val.clone())),
     }
 }
 
