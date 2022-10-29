@@ -274,6 +274,18 @@ impl State {
         }
     }
 
+    pub fn intercept_output(&mut self, yes: bool) -> Xresult {
+        if yes {
+            let val = self.get_var(self.bitstr_mod.output)?;
+            if val == &NIL {
+                self.set_var(self.bitstr_mod.output, Cell::from(Xbitstr::new()))?;
+            }
+        } else {
+            self.set_var(self.bitstr_mod.output, NIL)?;
+        }
+        OK
+    }
+
     pub fn intercept_stdout(&mut self, yes: bool) {
         if yes {
             if self.stdout.is_none() {
@@ -2716,7 +2728,7 @@ mod tests {
     #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, include_str!("test-tag.xeh"));
+        eval_ok!(xs, "include \"src/test-tag.xeh\"");
     }
 
     #[test]

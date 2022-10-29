@@ -11,7 +11,7 @@ pub struct BitstrState {
     offset: CellRef,
     input: CellRef,
     stash: CellRef,
-    output: CellRef,
+    pub (crate) output: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -37,8 +37,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     m.input = xs.defvar("input", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
-    //todo: intercept output 
-    //m.output = xs.defvar("output", NIL)?;
+    m.output = xs.defvar("output", NIL)?;
     xs.bitstr_mod = m;
     xs.defword("open-input", word_open_input)?;
     xs.defword("close-input", word_close_input)?;
@@ -433,11 +432,16 @@ fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
 
 fn word_emit(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?.to_bitstr()?;
-    let buf = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     let cref = xs.bitstr_mod.output;
     if cref.is_initialized() {
-        panic!("todo");
+        let val = xs.get_var(cref)?;
+        if val != &NIL {
+            let tmp = val.to_bitstr()?.append(&bs); 
+            xs.set_var(cref, Cell::from(tmp))?;
+        }
+        OK
     } else {
+        let buf = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
         crate::file::write_to_stdout(&buf)
     }
 }
@@ -931,5 +935,14 @@ mod tests {
         xs.eval("big 123 32 int!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
+    }
+
+    #[test]
+    fn test_bitstr_output() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.intercept_output(true).unwrap();
+        xs.eval("0x33 u8! emit output |33| assert-eq
+        0x55 u8! emit output |3355| assert-eq
+        ").unwrap();
     }
 }
