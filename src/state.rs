@@ -653,6 +653,7 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.def_immediate(".", core_word_with_literal_tag)?;
         self.def_immediate(".[", core_word_tag_vec)?;
+        self.def_immediate("defined", core_word_defined)?;
         self.defword("nil?", core_word_is_nil)?;
         self.defword("doc!", core_word_doc)?;
         self.defword("help", core_word_help)?;
@@ -1994,6 +1995,12 @@ fn core_word_include(xs: &mut State) -> Xresult {
     include_source(xs, filename)
 }
 
+fn core_word_defined(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    let f = xs.dict_key(&name).is_some();
+    xs.code_emit_value(Cell::from(f))
+}
+
 fn core_word_tag_of(xs: &mut State) -> Xresult {
     let val = xs.top_data()?;
     let tag = val.tag().unwrap_or(&NIL).clone();
@@ -2860,7 +2867,6 @@ mod tests {
     #[test]
     fn test_include_build() {
         let mut xs = State::boot().unwrap();
-        crate::d2_plugin::load(&mut xs).unwrap();
         eval_ok!(xs, "include \"src/test-hello.xeh\" hello");
         let s = xs.pop_data().unwrap().to_xstr().unwrap();
         assert_eq!(s, "Hello");
@@ -2869,13 +2875,30 @@ mod tests {
     #[test]
     fn test_require() {
         let mut xs = State::boot().unwrap();
-        crate::d2_plugin::load(&mut xs).unwrap();
         eval_ok!(xs, "
             require \"src/test-require.xeh\"
             require \"src/test-require.xeh\"
             ");
         assert_eq!(xs.pop_data(), Ok(Cell::from(33)));
         assert!(xs.pop_data().is_err());
+    }
+
+    #[test]
+    fn test_defined() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "
+            defined AA not assert
+            1 var AA
+            defined AA assert
+
+            defined BB not assert
+            : BB ; 
+            defined BB assert
+
+            defined CC not assert
+            ( true const CC )
+            defined CC assert
+            ");
     }
 
     #[test]
