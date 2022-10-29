@@ -319,6 +319,10 @@ impl State {
         self.context_close()
     }
 
+    pub fn eval_file(&mut self, path: Xstr) -> Xresult {
+        self.eval_from_file(path, ContextMode::Eval)
+    }
+
     pub fn eval(&mut self, s: &str) -> Xresult {
         self.evalxstr(s.into())
     }

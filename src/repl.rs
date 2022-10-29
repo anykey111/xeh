@@ -257,14 +257,14 @@ pub struct XcmdArgs {
     pub reverse_debug: bool,
     pub binary_path: Option<String>,
     pub sources: Vec<String>,
-    pub eval: Option<String>,
+    pub eval: Vec<String>,
     pub history_file: Option<String>,
 }
 
 pub fn parse_args() -> Xresult1<XcmdArgs> {
     let mut opts = Options::new();
     opts.optopt("i", "", "input binary file ", "path");
-    opts.optopt("e", "", "evaluate expression", "expression");
+    opts.optmulti("e", "", "evaluate expression", "expression");
     opts.optflag("r", "", "enable reverse debugging");
     opts.optflag("h", "help", "print help");
     let it = std::env::args().skip(1);
@@ -280,7 +280,7 @@ pub fn parse_args() -> Xresult1<XcmdArgs> {
     Ok(XcmdArgs {
         reverse_debug: matches.opt_present("r"),
         binary_path: matches.opt_str("i"),
-        eval: matches.opt_str("e"),
+        eval: matches.opt_strs("e"),
         history_file: Some("xeh_history.txt".to_string()),
         sources: matches.free,
     })
@@ -309,12 +309,17 @@ pub fn run_with_args() -> Xresult {
         xs.set_recording_enabled(true);
     }
     for path in args.sources.iter() {
-        xs.eval(&format!("include \"{}\"", path))?;
-    }
-    if let Some(s) = args.eval {
-        if let Err(e) = xs.eval(&s) {
+        if let Err(e) = xs.eval_file(path.into()) {
             print_pretty_error(&xs, &e);
             return Err(e);
+        }
+    }
+    if !args.eval.is_empty() {
+        for s in args.eval.iter() {
+            if let Err(e) = xs.eval(&s) {
+                print_pretty_error(&xs, &e);
+                return Err(e);
+            }
         }
     } else if args.sources.is_empty() {
         run_tty_repl(xs, args)?;
