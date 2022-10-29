@@ -2007,7 +2007,7 @@ fn core_word_defined(xs: &mut State) -> Xresult {
 }
 
 fn core_word_tag_of(xs: &mut State) -> Xresult {
-    let val = xs.top_data()?;
+    let val = xs.pop_data()?;
     let tag = val.tag().unwrap_or(&NIL).clone();
     xs.push_data(tag)
 }
