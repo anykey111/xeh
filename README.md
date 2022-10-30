@@ -1,7 +1,6 @@
-
 # The HEX Programming Language
 
-XEH is a dynamic, concatenative programming language designed for the interactive coding. Main language domain is binary data parsing.
+XEH is a dynamic, stack-oriented programming language designed for the interactive coding. Main language domain is binary data parsing.
 Its look like FORTH, but its not. XEH doesn't provide low-level memory access, uses immutable data structures and reference-counted garbage collector.
 
 Features:
@@ -12,7 +11,10 @@ Features:
 * Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
 * Data tagging, stick attribute to any value, even integer maybe tagged.
 
-Try online: [XEH Playground](https://anykey111.github.io/)
+Try online:
+[XEH Playground](https://anykey111.github.io/)
+Chat: [Discord](https://discord.gg/8veCURFW)
+Video: [Youtube](https://www.youtube.com/channel/UCYTeJIi6aLE9rS7s_QOto3w)
 
 # Building and Running
 
