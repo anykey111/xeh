@@ -48,6 +48,12 @@ pub mod fs_overlay {
     #[cfg(feature = "mmap")]
     pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
         let file = std::fs::File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+        let meta = file.metadata().map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+        if meta.len() < (4 * 1024 * 1024) {
+            // load small files without mmap
+            let buf = read_all(path)?;
+            return xs.set_binary_input(Xbitstr::from(buf));
+        }
         let (mm, slice) = unsafe {
             let mm = Mmap::map(&file).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
             let ptr = mm.as_ptr();
