@@ -151,6 +151,11 @@ loop" doc-example
     "int --" stack-comment
 ] "seek" doc!
 
+"Convert size in bytes to the number of bits."
+.[ doc-for-bitstr
+    "int -- int" stack-comment
+] "in-bytes" doc!
+
 "Parse base 16 string, ignore whitespaces."
 .[ doc-for-bitstr
     "str -- bitstr" stack-comment

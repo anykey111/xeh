@@ -43,6 +43,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.bitstr_mod = m;
     xs.defword("open-input", word_open_input)?;
     xs.defword("close-input", word_close_input)?;
+    xs.defword("in-bytes", word_in_bytes)?;
     xs.defword("seek", word_seek)?;
     xs.defword("remain", word_remain)?;
     xs.defword("find", word_find)?;
@@ -174,6 +175,11 @@ fn move_offset_checked(xs: &mut Xstate, pos: usize) -> Xresult {
             offset: pos,
         })
     }
+}
+
+fn word_in_bytes(xs: &mut Xstate) -> Xresult {
+    let pos = xs.pop_data()?.to_usize()?;
+    xs.push_data(Cell::from(pos * 8))
 }
 
 fn word_seek(xs: &mut Xstate) -> Xresult {
@@ -810,6 +816,12 @@ mod tests {
         assert_eq!(Cell::Int(200), xs.pop_data().unwrap());
         xs.eval("0 seek u8").unwrap();
         assert_eq!(Cell::Int(100), xs.pop_data().unwrap());
+    }
+
+    #[test]
+    fn test_in_bytes() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval("10 in-bytes 80 assert-eq").unwrap();
     }
 
     #[test]
