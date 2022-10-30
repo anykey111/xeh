@@ -271,11 +271,20 @@ single byte, another vector, string or bitstr."
     [ \"NES\" 0x1a ] >bitstr magic" doc-example
 ] "magic" doc!
 
-"Write bitstr to stdout."
+"Write bitstr to output buffer."
 .[ doc-for-bitstr
     "bitstr --" stack-comment
     "|31323500| emit" doc-example
  ] "emit" doc!
+
+"Number of bits emited to output."
+.[ doc-for-bitstr
+    "-- int" stack-comment
+] "output-length" doc!
+
+"Bitstr output buffer. "
+.[ doc-for-bitstr
+] "output" doc!
 
 : generate-int-docs
     local n

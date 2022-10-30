@@ -12,6 +12,7 @@ pub struct BitstrState {
     input: CellRef,
     stash: CellRef,
     pub (crate) output: CellRef,
+    pub (crate) output_len: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -38,6 +39,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
     m.output = xs.defvar("output", NIL)?;
+    m.output_len = xs.defvar("output-length", ZERO)?;
     xs.bitstr_mod = m;
     xs.defword("open-input", word_open_input)?;
     xs.defword("close-input", word_close_input)?;
@@ -432,14 +434,16 @@ fn current_byteorder(xs: &mut Xstate) -> Xresult1<Byteorder> {
 
 fn word_emit(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?.to_bitstr()?;
-    let cref = xs.bitstr_mod.output;
-    if cref.is_initialized() {
-        let val = xs.get_var(cref)?;
-        if val != &NIL {
-            let tmp = val.to_bitstr()?.append(&bs); 
-            xs.set_var(cref, Cell::from(tmp))?;
-        }
-        OK
+    let out_ref = xs.bitstr_mod.output;
+    let len_ref = xs.bitstr_mod.output_len;
+    xs.update_var(len_ref, |old| {
+        let new_len = old.to_usize()? + bs.len();
+        Ok(Cell::from(new_len))
+    })?;
+    let out = xs.get_var(out_ref)?;
+    if out_ref.is_initialized() && out != &NIL {
+        let tmp = out.to_bitstr()?.append(&bs); 
+        xs.set_var(out_ref, Cell::from(tmp))
     } else {
         let buf = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
         crate::file::write_to_stdout(&buf)
@@ -942,7 +946,9 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.intercept_output(true).unwrap();
         xs.eval("0x33 u8! emit output |33| assert-eq
-        0x55 u8! emit output |3355| assert-eq
+        output-length 8 assert-eq
+        0xf 4 uint! emit output |33f| assert-eq
+        output-length 12 assert-eq
         ").unwrap();
     }
 }
