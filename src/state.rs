@@ -687,6 +687,7 @@ impl State {
         self.defword("length", core_word_length)?;
         self.defword("get", core_word_get)?;
         self.defword("concat", core_word_concat)?;
+        self.defword("join", core_word_join)?;
         self.defword("sort", core_word_sort)?;
         self.defword("reverse", core_word_reverse)?;
         self.defword("dup", |xs| xs.dup_data())?;
@@ -1866,12 +1867,13 @@ fn core_word_get(xs: &mut State) -> Xresult {
     xs.push_data(vector_get(&v, index)?.clone())
 }
 
-fn concat_str_vec(xs: &mut State, v: &Xvec) -> Xresult1<String> {
+fn join_str_vec(xs: &mut State, v: &Xvec, sep: &Option<Xstr>) -> Xresult1<String> {
     let mut s = String::new();
+    let mut n = 0;
     for x in v.iter() {
         match x.value() {
             Cell::Vector(v2) => {
-                let tmp = concat_str_vec(xs, v2)?;
+                let tmp = join_str_vec(xs, v2, sep)?;
                 s.push_str(&tmp);
             }
             Cell::Str(xstr) => {
@@ -1882,13 +1884,26 @@ fn concat_str_vec(xs: &mut State, v: &Xvec) -> Xresult1<String> {
                 s.push_str(&tmp);
             }
         }
+        if let Some(sep_str) = sep {
+            n += 1;
+            if n < v.len() {
+                s.push_str(sep_str);
+            }
+        }
     }
     Ok(s)
 }
 
 fn core_word_concat(xs: &mut State) -> Xresult {
     let v = xs.pop_data()?.to_vec()?;
-    let s = concat_str_vec(xs, &v)?;
+    let s = join_str_vec(xs, &v, &None)?;
+    xs.push_data(Cell::from(s))
+}
+
+fn core_word_join(xs: &mut State) -> Xresult {
+    let sep = xs.pop_data()?.to_xstr()?;
+    let v = xs.pop_data()?.to_vec()?;
+    let s = join_str_vec(xs, &v, &Some(sep))?;
     xs.push_data(Cell::from(s))
 }
 
@@ -2255,6 +2270,13 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "[ 1 \"ss\" [ 15 ] ] concat");
         assert_eq!("1ss15".to_string(), xs.pop_data().unwrap().str().unwrap());
+    }
+
+    #[test]
+    fn test_join() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "[ 3 \"ss\" [ 5 ] ] \"+\" join");
+        assert_eq!("3+ss+5".to_string(), xs.pop_data().unwrap().str().unwrap());
     }
 
     #[test]

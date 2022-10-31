@@ -379,6 +379,11 @@ Negative index access items from the tail of the vector."
     "[ \"a\" 2 2 + \"b\" ] concat" doc-example
 ] "concat" doc!
 
+"Join vector into string using separator."
+.[ doc-for-core "vec str - str" stack-comment
+    "[ 1 2 ] \"+\" join" doc-example
+] "join" doc!
+
 "Include source file at build time."
 .[ doc-for-core
     "include \"src/test-hello.xeh\"" doc-example
