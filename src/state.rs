@@ -671,6 +671,7 @@ impl State {
         self.def_immediate("nil", core_word_nil)?;
         self.def_immediate("(", core_word_nested_begin)?;
         self.def_immediate(")", core_word_nested_end)?;
+        self.def_immediate("~)", core_word_nested_inject)?;
         self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
@@ -1578,22 +1579,27 @@ fn vec_builder_begin(xs: &mut State) -> Xresult {
     xs.push_special(Special::VecStackStart(ptr))
 }
 
+fn vec_collect_till_ptr(xs: &mut State, stack_ptr: usize) -> Xresult1<Xvec> {
+    let top_ptr = xs.data_stack.len();
+    if top_ptr < stack_ptr {
+        Err(Xerr::vec_stack_underflow())
+    } else {
+        let mut v = Xvec::new();
+        for x in &xs.data_stack[stack_ptr..] {
+            v.push_back_mut(x.clone());
+        }
+        for _ in 0..top_ptr - stack_ptr {
+            xs.pop_data()?;
+        }
+        Ok(v)
+    }
+}
+
 fn vec_builder_end(xs: &mut State) -> Xresult {
     match xs.pop_special() {
         Some(Special::VecStackStart(stack_ptr)) => {
-            let top_ptr = xs.data_stack.len();
-            if top_ptr < stack_ptr {
-                Err(Xerr::vec_stack_underflow())
-            } else {
-                let mut v = Xvec::new();
-                for x in &xs.data_stack[stack_ptr..] {
-                    v.push_back_mut(x.clone());
-                }
-                for _ in 0..top_ptr - stack_ptr {
-                    xs.pop_data()?;
-                }
-                xs.push_data(Cell::from(v))
-            }
+            let v = vec_collect_till_ptr(xs, stack_ptr)?;
+            xs.push_data(Cell::from(v))
         }
         _ => Err(Xerr::unbalanced_vec_builder()),
     }
@@ -1728,6 +1734,20 @@ fn core_word_nested_end(xs: &mut State) -> Xresult {
     } else {
         debug_assert!(xs.loops.len() == xs.ctx.ls_len);
         xs.context_close()
+    }
+}
+
+fn core_word_nested_inject(xs: &mut State) -> Xresult {
+    if xs.ctx.mode != ContextMode::MetaEval {
+        Err(Xerr::unbalanced_context())
+    } else if xs.has_pending_flow() {
+        Xerr::control_flow_error(xs.flow_stack.last())
+    } else {
+        debug_assert!(xs.loops.len() == xs.ctx.ls_len);
+        let v = vec_collect_till_ptr(xs, xs.ctx.ds_len)?;
+        let s = join_str_vec(xs, &v, &Some(xstr_literal!(" ")))?;
+        xs.context_close()?;
+        xs.intern_source(Xstr::from(s), None)
     }
 }
 
@@ -2945,6 +2965,12 @@ mod tests {
             ( true const CC )
             defined CC assert
             ");
+    }
+
+    #[test]
+    fn test_inject() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "include \"src/test-inject.xeh\"");
     }
 
     #[test]

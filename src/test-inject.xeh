@@ -1,0 +1,25 @@
+(
+    1 const a
+    2 const b
+)
+
+( "[" "a" "b" "]" ~) [ 1 2 ] assert-eq
+( [ ": x" a ] concat "b" ";" ~) x1 2 assert-eq
+
+: my-enum
+    local name
+    local fields
+    [
+        "("
+            fields length 0 do
+                I "const" [ name "-" fields I get ] concat "\n"
+            loop
+        ")" 
+    ]
+;
+
+( [ "A" "B" "C" ] "Variant" my-enum  ~)
+
+Variant-A 0 assert-eq
+Variant-B 1 assert-eq
+Variant-C 2 assert-eq
