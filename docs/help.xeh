@@ -376,13 +376,33 @@ Negative index access items from the tail of the vector."
 
 "Concatenate vector of values into a string."
 .[ doc-for-core "vec -- str" stack-comment
-    "[ \"a\" 2 2 + \"b\" ] concat" doc-example
+    "[ \"a\" 2 2 + \"b\" ] concat
+    # result \"a3b\"" doc-example
 ] "concat" doc!
 
 "Join vector into string using separator."
 .[ doc-for-core "vec str - str" stack-comment
-    "[ 1 2 ] \"+\" join" doc-example
+    "[ 1 2 ] \"+\" join
+    # result \"1+2\" " doc-example
 ] "join" doc!
+
+"Collect top N stack items into the vector."
+.[ doc-for-core "int -- vec" stack-comment
+    "\"a\" \"b\" 2 collect
+    # result [ \"a\" \"b\" ]" doc-example
+] "collect" doc!
+
+"Unbox vector items into the stack."
+.[ doc-for-core "vec -- val ..." stack-comment
+    "[ 1 2 3 ] unbox
+    # result 3 2 1" doc-example
+] "unbox" doc!
+
+"Append item to the back of a vector."
+.[ doc-for-core "val vec -- vec" stack-comment
+    "1 [ 3 ] push
+    # result [ 3 1 ]" doc-example
+] "push" doc!
 
 "Include source file at build time."
 .[ doc-for-core

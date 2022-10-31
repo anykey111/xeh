@@ -691,6 +691,9 @@ impl State {
         self.defword("join", core_word_join)?;
         self.defword("sort", core_word_sort)?;
         self.defword("reverse", core_word_reverse)?;
+        self.defword("push", core_word_push)?;
+        self.defword("collect", core_word_collect)?;
+        self.defword("unbox", core_word_unbox)?;
         self.defword("dup", |xs| xs.dup_data())?;
         self.defword("drop", |xs| xs.drop_data())?;
         self.defword("swap", |xs| xs.swap_data())?;
@@ -1941,6 +1944,32 @@ fn core_word_reverse(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(rv))
 }
 
+fn core_word_push(xs: &mut State) -> Xresult {
+    let vec = xs.pop_data()?.to_vec()?;
+    let val = xs.pop_data()?;
+    let new_vec = vec.push_back(val);
+    xs.push_data(Cell::from(new_vec))
+}
+
+fn core_word_collect(xs: &mut State) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    if n > xs.data_depth() {
+        return Err(Xerr::StackUnderflow);
+    }
+    let ptr = xs.data_stack.len() - n;
+    let v = vec_collect_till_ptr(xs, ptr)?;
+    xs.push_data(Cell::from(v))
+}
+
+fn core_word_unbox(xs: &mut State) -> Xresult {
+    let v = xs.pop_data()?.to_vec()?;
+    for x in &v {
+        xs.push_data(x.clone())?;
+    }
+    OK
+}
+
+
 fn core_word_depth(xs: &mut State) -> Xresult {
     let n = xs.data_depth();
     xs.push_data(Cell::from(n))
@@ -2592,6 +2621,21 @@ mod tests {
         v.push_back_mut(Cell::Int(2));
         v.push_back_mut(Cell::Int(3));
         assert_eq!(Ok(&v), xs.pop_data().unwrap().vec());
+    }
+
+    #[test]
+    fn test_push() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 [ ] push [ 1 ] assert-eq
+            [ 2 ] [ 3 ] push [ 3 [ 2 ] ] assert-eq
+        ");
+    }
+
+    #[test]
+    fn test_collect_unbox() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " 5 6 7 3 collect [ 5 6 7 ] assert-eq
+        7 8 2 collect unbox 2 collect [ 7 8 ] assert-eq");
     }
 
     fn collect_ints(xs: &State) -> Vec<isize> {
