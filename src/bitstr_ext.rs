@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(include_str!("test-binary-input.xeh")).unwrap();
+        xs.eval(include_str!("test-data/test-binary-input.xeh")).unwrap();
         assert_eq!(Err(Xerr::OutOfBounds(0)), xs.eval("close-input"));
     }
     

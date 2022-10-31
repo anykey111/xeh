@@ -2777,13 +2777,13 @@ mod tests {
     #[test]
     fn test_tag() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "include \"src/test-tag.xeh\"");
+        eval_ok!(xs, "include \"src/test-data/test-tag.xeh\"");
     }
 
     #[test]
     fn test_tagged() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, include_str!("test-tagged.xeh"));
+        eval_ok!(xs, include_str!("test-data/test-tagged.xeh"));
     }
 
     #[test]
@@ -2847,11 +2847,11 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("include \"src/test-location1.xeh\"");
+        let res = xs.eval("include \"src/test-data/test-location1.xeh\"");
         assert_eq!(Err(Xerr::unbalanced_repeat()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!("src/test-location2.xeh:2:3\n", "[ repeat ]\n", "--^")
+            concat!("src/test-data/test-location2.xeh:2:3\n", "[ repeat ]\n", "--^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -2933,7 +2933,7 @@ mod tests {
     #[test]
     fn test_include_build() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "include \"src/test-hello.xeh\" hello");
+        eval_ok!(xs, "include \"src/test-data/test-hello.xeh\" hello");
         let s = xs.pop_data().unwrap().to_xstr().unwrap();
         assert_eq!(s, "Hello");
     }
@@ -2942,8 +2942,8 @@ mod tests {
     fn test_require() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "
-            require \"src/test-require.xeh\"
-            require \"src/test-require.xeh\"
+            require \"src/test-data/test-require.xeh\"
+            require \"src/test-data/test-require.xeh\"
             ");
         assert_eq!(xs.pop_data(), Ok(Cell::from(33)));
         assert!(xs.pop_data().is_err());
@@ -2970,7 +2970,7 @@ mod tests {
     #[test]
     fn test_inject() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "include \"src/test-inject.xeh\"");
+        eval_ok!(xs, "include \"src/test-data/test-inject.xeh\"");
     }
 
     #[test]
