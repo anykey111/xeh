@@ -2971,7 +2971,7 @@ mod tests {
     fn test_builtin_help() {
         let mut xs = State::boot().unwrap();
         crate::d2_plugin::load(&mut xs).unwrap();
-        eval_ok!(xs, "include \"docs/help.xeh\"");
+        eval_ok!(xs, "include \"src/help.xeh\"");
     }
 
     #[test]
