@@ -92,17 +92,9 @@ struct Context {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Frame {
+    fn_addr: usize,
     return_to: usize,
     locals: Vec<Cell>,
-}
-
-impl Frame {
-    fn from_addr(return_to: usize) -> Self {
-        Self {
-            return_to,
-            locals: Default::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -833,8 +825,12 @@ impl State {
         match x {
             Xfn::Native(x) => x.0(self),
             Xfn::Interp(x) => {
-                let old_ip = self.ip();
-                self.push_return(old_ip)?;
+                let return_to = self.ip();
+                self.push_return(Frame {
+                    fn_addr: x,
+                    return_to,
+                    locals: Default::default(),
+                })?;
                 self.set_ip(x);
                 self.run()
             }
@@ -925,7 +921,11 @@ impl State {
             }
             Opcode::Call(a) => {
                 let fn_addr = *a;
-                self.push_return(ip + 1)?;
+                self.push_return(Frame {
+                    fn_addr,
+                    return_to: ip + 1,
+                    locals: Default::default(),
+                })?;
                 self.set_ip(fn_addr);
             }
             Opcode::NativeCall(x) => {
@@ -1328,11 +1328,11 @@ impl State {
         }
     }
 
-    fn push_return(&mut self, return_to: usize) -> Xresult {
+    fn push_return(&mut self, frame: Frame) -> Xresult {
         if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopReturn);
         }
-        self.return_stack.push(Frame::from_addr(return_to));
+        self.return_stack.push(frame);
         OK
     }
 
