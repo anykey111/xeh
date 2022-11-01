@@ -773,7 +773,7 @@ mod tests {
     #[test]
     fn test_read_all() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("\"src/test-file.txt\" read-all \"1234\" >bitstr assert-eq").unwrap();
+        xs.eval("\"src/test-data/test-file.txt\" read-all \"1234\" >bitstr assert-eq").unwrap();
     }
 
     #[test]
