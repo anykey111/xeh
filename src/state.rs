@@ -309,22 +309,30 @@ impl State {
     }
 
     pub fn compile_xstr(&mut self, s: Xstr) -> Xresult {
-        self.context_open(ContextMode::Compile)?;
-        self.intern_source(s.into(), None)?;
+        self.build_from_source(s, ContextMode::Compile)
+    }
+
+    pub fn compile_file(&mut self, path: Xstr) -> Xresult {
+        self.build_from_file(path, ContextMode::Compile)
+    }
+
+    fn build_from_file(&mut self, path: Xstr, mode: ContextMode) -> Xresult {
+        let s = crate::file::fs_overlay::read_source_file(&path)?;
+        self.context_open(mode)?;
+        self.intern_source(s.into(), Some(path))?;
         self.build0()?;
         self.context_close()
     }
 
-    fn eval_from_file(&mut self, path: Xstr, mode: ContextMode) -> Xresult {
-        let s = crate::file::fs_overlay::read_source_file(&path)?;
-        self.intern_source(s.into(), Some(path))?;
+    fn build_from_source(&mut self, s: Xstr, mode: ContextMode) -> Xresult {
         self.context_open(mode)?;
+        self.intern_source(s, None)?;
         self.build0()?;
         self.context_close()
     }
 
     pub fn eval_file(&mut self, path: Xstr) -> Xresult {
-        self.eval_from_file(path, ContextMode::Eval)
+        self.build_from_file(path, ContextMode::Eval)
     }
 
     pub fn eval(&mut self, s: &str) -> Xresult {
@@ -332,10 +340,7 @@ impl State {
     }
 
     pub fn evalxstr(&mut self, s: Xstr) -> Xresult {
-        self.intern_source(s, None)?;
-        self.context_open(ContextMode::Eval)?;
-        self.build0()?;
-        self.context_close()
+        self.build_from_source(s, ContextMode::Eval)
     }
 
     fn intern_source(&mut self, buf: Xstr, path: Option<Xstr>) -> Xresult {
