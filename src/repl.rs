@@ -159,6 +159,22 @@ const REPL_CMD_HINTS: &[Xstr] = &[
     CMD_ROLLBACK,
 ];
 
+fn switch_to_trial(st: &mut ReplState) {
+    if st.trial.is_none() {
+        println!("Trial and error mode!");
+        println!("* everyting evaluating on-fly");
+        println!("* hit Enter to freeze changes");
+        st.trial = Some(Default::default());
+        st.snapshot();
+    }
+}
+
+fn switch_to_repl(st: &mut ReplState) {
+    if st.trial.take().is_some() {
+        println!("Back to REPL!");
+    }
+}
+
 fn run_line(st: &mut ReplState, line: &str) {
     let cmd = line.trim();
     let res = if cmd == CMD_NEXT {
@@ -166,18 +182,10 @@ fn run_line(st: &mut ReplState, line: &str) {
     } else if cmd == CMD_RNEXT {
         st.xs.rnext()
     } else if cmd == CMD_TRIAL {
-        if st.trial.is_none() {
-            st.trial = Some(Default::default());
-            println!("Trial and error mode!");
-            println!("* everyting evaluating on-fly");
-            println!("* hit Enter to freeze changes");
-            st.snapshot();
-        }
+        switch_to_trial(st);
         OK
     } else if cmd == CMD_REPL {
-        if st.trial.take().is_some() {
-            println!("Back to REPL!");
-        }
+        switch_to_repl(st);
         OK
     } else if cmd == CMD_SNAPSHOT {
         println!("Taking snapshot...");
@@ -200,11 +208,12 @@ fn run_line(st: &mut ReplState, line: &str) {
 }
 
 fn run_tty_repl(xs: Xstate, args: XcmdArgs) -> Xresult {
-    let st_tmp = ReplState {
+    let mut st_tmp = ReplState {
         xs,
         trial: None,
         snapshots: Vec::new(),
     };
+    switch_to_trial(&mut st_tmp);
     let st_rc = ReplStateRc::new(ReplStateRef::new(st_tmp));
     let mut rl_state =
         rl::Editor::<XsHelper>::with_config(rl::Config::builder().auto_add_history(true).build());
