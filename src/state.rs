@@ -267,15 +267,7 @@ impl State {
     }
 
     pub fn intercept_output(&mut self, yes: bool) -> Xresult {
-        if yes {
-            let val = self.get_var(self.bitstr_mod.output)?;
-            if val == &NIL {
-                self.set_var(self.bitstr_mod.output, Cell::from(Xbitstr::new()))?;
-            }
-        } else {
-            self.set_var(self.bitstr_mod.output, NIL)?;
-        }
-        OK
+        bitstr_ext::intercept_output(self, yes)
     }
 
     pub fn intercept_stdout(&mut self, yes: bool) {

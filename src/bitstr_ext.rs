@@ -11,8 +11,8 @@ pub struct BitstrState {
     offset: CellRef,
     input: CellRef,
     stash: CellRef,
-    pub (crate) output: CellRef,
-    pub (crate) output_len: CellRef,
+    output: CellRef,
+    output_len: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -105,6 +105,18 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     })?;
     xs.defword("nulbytestr", nulbytestr_word)?;
     xs.defword("cstr", cstr_word)?;
+    OK
+}
+
+pub fn intercept_output(xs: &mut Xstate, yes: bool) -> Xresult {
+    if yes {
+        let val = xs.get_var(xs.bitstr_mod.output)?;
+        if val == &NIL {
+            xs.set_var(xs.bitstr_mod.output, Cell::from(Xbitstr::new()))?;
+        }
+    } else {
+        xs.set_var(xs.bitstr_mod.output, NIL)?;
+    }
     OK
 }
 
