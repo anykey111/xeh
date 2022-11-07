@@ -202,17 +202,20 @@ Local variable is a variable that available only inside the word definition, ini
 
 ## Tags
 
-Tag is a special data sticked to the value but not directly accessed.
+Tag is a special hidden property sticked to the value but not directly accessed.
+Tags have no impact on using value and dissapear after value modification.
 
 ```
     # stick "abc" string to the integer 10
     10 "abc" with-tag
     var X
-    # tag have no impact on using value
-    X 5 + println 
     # get tag of X
     X tag-of println
     
+    # addition produce new value without any tags
+    # in that case tag-of return nil
+    2 . "number" 2 + tag-of println
+
     # shorthand syntax for literal tags
     10 . "ten"
     10 "ten" with-tag

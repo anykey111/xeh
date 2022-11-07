@@ -86,9 +86,9 @@ impl fmt::Display for Xerr {
             ),
             Xerr::TypeErrorMsg { val, msg } => write!(
                 f,
-                "expected {}, found {}\n# {:?}",
-                msg,
+                "found {}, expected {}\n{:?}",
                 val.type_name(),
+                msg,
                 val
             ),
             Xerr::ExpectingName => f.write_str("expecting a word name"),

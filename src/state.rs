@@ -700,7 +700,7 @@ impl State {
         self.def_immediate("require", core_word_require)?;
         self.defword("tag-of", core_word_tag_of)?;
         self.defword("with-tag", core_word_with_tag)?;
-        self.defword("insert-tagged", core_word_insert_tagged)?;
+        self.defword("set-tagged", core_word_set_tagged)?;
         self.defword("get-tagged", core_word_get_tagged)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
         self.defword("DEC", |xs| set_fmt_base(xs, 10))?;
@@ -2098,22 +2098,21 @@ fn core_word_with_tag(xs: &mut State) -> Xresult {
     xs.push_data(val)
 }
 
-fn core_word_insert_tagged(xs: &mut State) -> Xresult {
-    let val = xs.pop_data()?;
-    let mut vec = xs.pop_data()?.to_vec()?;
-    let pos = vec.iter().position(|x| x.tag() == val.tag());
-    if let Some(index) = pos {
-        vec.set_mut(index, val);
-    } else {
-        vec.push_back_mut(val);
-    };
-    xs.push_data(Cell::from(vec))
+fn core_word_set_tagged(xs: &mut State) -> Xresult {
+    let tag_key = xs.pop_data()?;
+    let tag_val = xs.pop_data()?;
+    let val = xs.pop_data()?.set_tagged(tag_key, tag_val)?;
+    xs.push_data(Cell::from(val))
 }
 
 fn core_word_get_tagged(xs: &mut State) -> Xresult {
     let key = xs.pop_data()?;
-    let vec = xs.pop_data()?;
-    let item = vec.vec()?.iter().find(|x| x.tag() == Some(&key)).cloned();
+    let val = xs.pop_data()?;
+    let item = if let Some(tv) = val.tag() {
+        tv.vec()?.iter().find(|x| x.tag() == Some(&key)).cloned()
+    } else {
+        None
+    };
     xs.push_data(item.unwrap_or_else(|| NIL))
 }
 

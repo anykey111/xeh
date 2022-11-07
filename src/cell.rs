@@ -242,9 +242,33 @@ impl Cell {
     pub fn with_tag(self, tag: Cell) -> Cell {
         Cell::WithTag(std::rc::Rc::new(WithTag { tag, value: self }))
     }
-
+    
     pub fn get_tagged(&self, key: &Cell) -> Option<&Cell> {
         self.tag()?.vec().ok()?.iter().find(|x| x.tag() == Some(&key))
+    }
+
+    pub fn set_tagged(self, key: Cell, val: Cell) -> Xresult1<Cell> {
+        match self.tag() {
+            Some(Cell::Vector(v )) => {
+                let tv = if let Some(i) = v.iter().position(|x| x.tag() == Some(&key)) {
+                    v.set(i, val.with_tag(key)).unwrap()
+                } else {
+                    v.push_back(val.with_tag(key))
+                };
+                Ok(self.with_tag(Cell::from(tv)))
+            }
+            Some(val) => {
+                Err(Xerr::TypeErrorMsg {
+                    val: val.clone(),
+                    msg: xstr_literal!("tagged vec")
+                })
+            }
+            None => {
+                let mut tv = Xvec::new();
+                tv.push_back_mut(val.with_tag(key));
+                Ok(self.with_tag(Cell::from(tv)))
+            }
+        }
     }
 
     pub fn value(&self) -> &Cell {
@@ -484,4 +508,26 @@ mod tests {
         assert_eq!(Some(&a), b.get_tagged(&Cell::from("a")));
         assert_eq!(None, b.get_tagged(&Cell::from("c")));
     }
+
+    #[test]
+    fn test_insert_tagged() {
+        let x = Cell::from("x");
+        let k1 = Cell::from("k1");
+        let v1 = Cell::from("v1");
+        let k2 = Cell::from("k2");
+        let v2 = Cell::from("v2");
+        let x = x.set_tagged(k1.clone(), v1.clone()).unwrap();
+        let tv = x.tag().unwrap().to_vec().unwrap();
+        assert_eq!(tv[0].tag(), Some(&k1));
+        assert_eq!(tv[0].value(), &v1);
+        let x = x.set_tagged(k2.clone(), v2.clone()).unwrap();
+        let tv = x.tag().unwrap().to_vec().unwrap();
+        assert_eq!(tv[1].tag(), Some(&k2));
+        assert_eq!(tv[1].value(), &v2);
+        let x = x.set_tagged(k1.clone(), v2.clone()).unwrap();
+        let tv = x.tag().unwrap().to_vec().unwrap();
+        assert_eq!(tv[0].tag(), Some(&k1));
+        assert_eq!(tv[0].value(), &v2);
+    }
+
 }

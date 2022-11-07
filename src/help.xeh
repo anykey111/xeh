@@ -37,11 +37,23 @@
     "val -- tag" stack-comment
 ] "tag-of" doc!
 
-"Append new value to the vec or replace if
-val with the same tag already exists."
+"Insert tagged pair to the list of tags or replace if key already exists."
 .[ doc-for-tags
-    "vec val -- vec" stack-comment
-] "insert-tagged" doc!
+    "val tag-val tag-key -- val" stack-comment
+    "# add text color tag
+    \"sample text\"
+        0xffeedd \"color\" set-tagged
+        true \"bold\" set-tagged
+    # result \"sample text\" .[ 0xffeedd . \"color\" true . \"bold\" ]"
+    doc-example 
+] "set-tagged" doc!
+
+"Get tagged value from the list of tags."
+.[ doc-for-tags
+    "val tag-key -- tag-val" stack-comment
+    "100 .[ \"u8\" . \"type\" 8 . \"size\" ]
+    \"size\" get-tagged # result 8" doc-example
+] "get-tagged" doc!
 
 "Execute code if flag is true, otherwise jump to \"endif\".
     FLAG if CODE endif"
