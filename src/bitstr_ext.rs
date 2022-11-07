@@ -5,6 +5,10 @@ use crate::prelude::*;
 use memchr::memmem;
 use std::fmt::Write;
 
+const RAW_LIT: Cell = Cell::Str(xstr_literal!("raw"));
+const BIG_LIT: Cell = Cell::Str(xstr_literal!("big"));
+const LEN_LIT: Cell = Cell::Str(xstr_literal!("len"));
+
 #[derive(Default, Clone)]
 pub struct BitstrState {
     big_endian: CellRef,
@@ -532,7 +536,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     }
     let x = s.to_uint(bo) as Xint;
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo));
+    let val = Cell::from(x).with_tag(bitstr_int_tag(s, bo));
     xs.push_data(val)
 }
 
@@ -543,7 +547,7 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     }
     let x = s.to_int(bo);
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(n, bo));
+    let val = Cell::from(x).with_tag(bitstr_int_tag(s, bo));
     xs.push_data(val)
 }
 
@@ -570,27 +574,22 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
         n => return Err(float_len_err(n)),
     };
     move_offset_checked(xs, s.end())?;
-    xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(n, bo)))
+    xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(s, bo)))
 }
 
-fn bitstr_int_tag(len: usize, bo: Byteorder) -> Cell {
+fn bitstr_int_tag(bs: Bitstr, bo: Byteorder) -> Cell {
+    bitstr_real_tag(bs, bo)
+}
+
+fn bitstr_real_tag(bs: Bitstr, bo: Byteorder) -> Cell {
     let mut v = Xvec::new();
-    v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
+    v.push_back_mut(Cell::from(bs.len()).with_tag(LEN_LIT));
     if bo == BIG {
-        v.push_back_mut(Cell::from("big"));
+        v.push_back_mut(TRUE.with_tag(BIG_LIT));
     } else {
-        v.push_back_mut(Cell::from("little"));
+        v.push_back_mut(FALSE.with_tag(BIG_LIT));
     }
-    Cell::from(v)
-}
-
-fn bitstr_real_tag(len: usize, bo: Byteorder) -> Cell {
-    let mut v = Xvec::new();
-    v.push_back_mut(Cell::from(len).with_tag(Cell::from("len")));
-    if bo == Byteorder::Big {
-        let s = Xstr::from("be");
-        v.push_back_mut(Cell::Str(s));
-    }
+    v.push_back_mut(Cell::from(bs).with_tag(RAW_LIT));
     Cell::from(v)
 }
 
@@ -715,7 +714,8 @@ mod tests {
             xs.eval("u8").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::Int(1), val.value());
-            assert_eq!(&bitstr_int_tag(8, NATIVE), val.tag().unwrap());
+            let bs = Bitstr::from_hex_str("01").unwrap();
+            assert_eq!(&bitstr_int_tag(bs, NATIVE), val.tag().unwrap());
         }
         {
             xs.eval("16 bits").unwrap();
@@ -735,23 +735,25 @@ mod tests {
         {
             xs.eval("big 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_int_tag(2, BIG), val.tag().unwrap());
+            let bs = Bitstr::from_bin_str("00").unwrap();
+            assert_eq!(&bitstr_int_tag(bs, BIG), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
             xs.eval("little 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(&bitstr_int_tag(2, LITTLE), val.tag().unwrap());
+            let bs = Bitstr::from_bin_str("00").unwrap();
+            assert_eq!(&bitstr_int_tag(bs, LITTLE), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
             let f: f64 = 1.0;
-            xs.set_binary_input(Xbitstr::from(f.to_be_bytes().to_vec()))
-                .unwrap();
+            let bs = Xbitstr::from(f.to_be_bytes().to_vec());
+            xs.set_binary_input(bs.clone()).unwrap();
             xs.eval("64 big float").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::from(f), val.value());
-            assert_eq!(&bitstr_real_tag(64, BIG), val.tag().unwrap());
+            assert_eq!(&bitstr_real_tag(bs, BIG), val.tag().unwrap());
         }
     }
 
