@@ -238,12 +238,13 @@ pub fn byte_to_dump_char(x: u8) -> char {
     }
 }
 
-fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
+pub(crate) fn fmt_bitstr_dump(s: &Bitstr, ncols: usize) -> String {
     let mut buf = String::new();
     let mut pos = s.start();
     let mut hex = String::new();
     let mut ascii = String::new();
     let mut it = s.iter8();
+    let mut result = String::new();
     while pos < s.end() {
         write_dump_position(&mut buf, pos);
         buf.push(':');
@@ -261,12 +262,17 @@ fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
         buf.push_str("  ");
         buf.push_str(&ascii);
         buf.push_str("\n");
-        xs.print(&buf)?;
+        result.push_str(&buf);
         buf.clear();
         hex.clear();
         ascii.clear();
     }
-    OK
+    result
+}
+
+fn dump_bitstr(xs: &mut Xstate, s: &Bitstr, ncols: usize) -> Xresult {
+    let s = fmt_bitstr_dump(s, ncols);
+    xs.print(&s)
 }
 
 fn write_dump_position(buf: &mut String, start: usize) {
