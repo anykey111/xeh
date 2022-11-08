@@ -78,6 +78,9 @@ impl fmt::Debug for XfnPtr {
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let flags = f.width().map(|n| FmtFlags::from_raw(n)).unwrap_or_default();
+        const BITSTR_ELIDE_LEN:usize = 30;
+        const STR_ELIDE_LEN:usize = 75;
+        const VEC_ELIDE_LEN:usize = 10;
         match self {
             Cell::Nil => write!(f, "nil"),
             Cell::Flag(x) => write!(f, "{}", if *x { "true" } else { "false" }),
@@ -91,12 +94,18 @@ impl fmt::Debug for Cell {
                 _ => write!(f, "{}", n),
             },
             Cell::Real(r) => write!(f, "{:0.1}", r),
+            Cell::Str(s) if flags.fitscreen() && s.len() > STR_ELIDE_LEN =>
+                write!(f, "\"{} ...", s.split_at(STR_ELIDE_LEN).0),
             Cell::Str(s) => write!(f, "{:?}", s.as_str()),
             Cell::Vector(v) => {
                 f.write_str("[ ")?;
-                for x in v {
+                for (i, x) in v.iter().enumerate() {
                     x.fmt(f)?;
                     f.write_str(" ")?;
+                    if flags.fitscreen() && i > VEC_ELIDE_LEN {
+                        f.write_str("... ")?;
+                        break;
+                    }
                 }
                 f.write_str("]")
             }
@@ -106,6 +115,10 @@ impl fmt::Debug for Cell {
                 for (pos, (x, mut n)) in s.iter8().enumerate() {
                     if pos != 0 {
                         f.write_str(" ")?;
+                    }
+                    if flags.fitscreen() && pos > BITSTR_ELIDE_LEN {
+                        f.write_str("...")?;
+                        break;
                     }
                     if n > 4 {
                         n -= 4;

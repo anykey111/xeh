@@ -160,6 +160,13 @@ impl State {
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
+    pub fn fmt_cell_safe(&self, val: &Cell) -> Xresult1<String> {
+        let flags = self
+            .get_var(self.fmt_flags)
+            .map(|val| FmtFlags::from(val).set_fitscreen(true))?;
+        Ok(format!("{:1$?}", val, flags.into_raw()))
+    }
+
     pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
         match op {
             Opcode::Call(x) => {
