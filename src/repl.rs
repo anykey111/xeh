@@ -116,10 +116,16 @@ impl rl::hint::Hinter for XsHelper {
         } else {
             text.push_str("\nOK");
             if st.xs.data_depth() > 0 {
+                const DEPTH_LIMIT: usize = 15;
                 for i in 0..st.xs.data_depth() {
+                    if i > DEPTH_LIMIT {
+                        let n = st.xs.data_depth() - DEPTH_LIMIT;
+                        text.push_str(&format!("\n... {} more items on the stack", n));
+                        break;
+                    }
                     let c = st.xs.get_data(i).unwrap_or(&NIL);
                     let valstr = st.xs.fmt_cell_safe(c).unwrap_or_default();
-                    text.push_str("\n");
+                    text.push('\n');
                     text.push_str(&valstr);
                 }
             }
