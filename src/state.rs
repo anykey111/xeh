@@ -1006,8 +1006,11 @@ impl State {
                 let idx = *i;
                 let val = self.pop_data()?;
                 let frame = self.top_frame()?;
-                debug_assert_eq!(idx, frame.locals.len());
+                if idx < frame.locals.len() {
+                    frame.locals[idx] = val;
+                } else {
                 frame.locals.push(val);
+                }
                 if self.is_recording() {
                     self.add_reverse_step(ReverseStep::DropLocal(idx));
                 }
