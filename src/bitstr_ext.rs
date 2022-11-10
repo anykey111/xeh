@@ -8,6 +8,7 @@ use std::fmt::Write;
 const RAW_LIT: Cell = Cell::Str(xstr_literal!("raw"));
 const BIG_LIT: Cell = Cell::Str(xstr_literal!("big"));
 const LEN_LIT: Cell = Cell::Str(xstr_literal!("len"));
+const COMMENT_LIT: Cell = Cell::Str(xstr_literal!("comment"));
 
 #[derive(Default, Clone)]
 pub struct BitstrState {
@@ -17,6 +18,7 @@ pub struct BitstrState {
     stash: CellRef,
     output: CellRef,
     output_len: CellRef,
+    scratchpad: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -44,6 +46,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
     m.output = xs.defvar("output", NIL)?;
     m.output_len = xs.defvar("output-length", ZERO)?;
+    m.scratchpad = xs.defvar("scratchpad", NIL)?;
     xs.bitstr_mod = m;
     xs.defword("open-input", word_open_input)?;
     xs.defword("close-input", word_close_input)?;
@@ -72,7 +75,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("emit", word_emit)?;
     xs.defword("write-all", word_write)?;
     xs.defword("read-all", word_read_all)?;
-
+    xs.defword("scratch", word_scratch)?;
+    xs.defword(".comment", word_add_comment)?;
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
     def_data_word!(xs, 32);
@@ -648,6 +652,33 @@ fn word_read_all(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(bs))
 }
 
+fn word_scratch(xs: &mut Xstate) -> Xresult {
+    let val = xs.pop_data()?;
+    xs.update_var(xs.bitstr_mod.scratchpad, |old| {
+        match old {
+            Cell::Nil => {
+                let mut v = Xvec::new();
+                v.push_back_mut(val);
+                Ok(Cell::from(v))
+            }
+            Cell::Vector(v) => {
+                Ok(Cell::from(v.push_back(val)))
+            }
+            other => Err(Xerr::TypeErrorMsg {
+                val: other.clone(),
+                msg: xstr_literal!("scratchpad vec"),
+            })
+        }
+    })
+}
+
+fn word_add_comment(xs: &mut Xstate) -> Xresult {
+    let comment = xs.pop_data()?;
+    let val = xs.pop_data()?;
+    let tagged = val.set_tagged(COMMENT_LIT, comment)?;
+    xs.push_data(tagged)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -983,4 +1014,19 @@ mod tests {
         output-length 12 assert-eq
         ").unwrap();
     }
+
+    #[test]
+    fn test_scratchpad() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval("
+            1 scratch
+            2 \"text1\" .comment scratch
+            depth 0 assert-eq
+            scratchpad [ 1 2 ] assert-eq
+            scratchpad 1 get
+            dup tag-of [ \"text1\" . \"comment\" ] assert-eq
+            tag-of 0 get tag-of \"comment\" assert-eq
+        ").unwrap();
+    }
+
 }

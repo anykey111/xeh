@@ -584,8 +584,8 @@ impl State {
         self.swap_cell_ref(cref, val)
     }
 
-    pub fn update_var<F>(&mut self, cref: CellRef, mut f: F) -> Xresult 
-    where F: FnMut(&Cell) -> Xresult1<Cell> {
+    pub fn update_var<F>(&mut self, cref: CellRef, f: F) -> Xresult 
+    where F: FnOnce(&Cell) -> Xresult1<Cell> {
         let old = self.cell_ref(cref)?;
         let val = f(old)?;
         self.swap_cell_ref(cref, val)
