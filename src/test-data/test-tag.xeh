@@ -13,4 +13,7 @@ tag-of tag-of "c" assert-eq
 
 22 33 with-tag tag-of 33 assert-eq
 
+1 2 with-tag 3 with-tag
+tag-of 3 assert-eq
+
 depth zero? assert

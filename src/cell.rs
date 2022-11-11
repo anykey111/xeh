@@ -253,7 +253,11 @@ impl Cell {
     }
 
     pub fn with_tag(self, tag: Cell) -> Cell {
-        Cell::WithTag(std::rc::Rc::new(WithTag { tag, value: self }))
+        let tagged = match self {
+            Cell::WithTag(rc) => WithTag { tag, value: rc.value.clone() },
+            value => WithTag { tag, value },
+        };
+        Cell::WithTag(std::rc::Rc::new(tagged))
     }
     
     pub fn get_tagged(&self, key: &Cell) -> Option<&Cell> {
