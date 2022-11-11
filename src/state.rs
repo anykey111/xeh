@@ -34,6 +34,12 @@ pub(crate) struct FunctionFlow {
     locals: Vec<Xsubstr>,
 }
 
+#[derive(Clone, Debug, PartialEq, Default)]
+pub(crate) struct LetFlow {
+    else_start: Option<usize>,
+    asserts: Vec<usize>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Flow {
     If(usize),
@@ -48,6 +54,7 @@ pub(crate) enum Flow {
     TagVec,
     Fun(FunctionFlow),
     Do { for_org: usize, body_org: usize },
+    Let(LetFlow),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -675,6 +682,8 @@ impl State {
         self.def_immediate(".", core_word_with_literal_tag)?;
         self.def_immediate(".[", core_word_tag_vec)?;
         self.def_immediate("defined", core_word_defined)?;
+        self.def_immediate("let", core_word_let)?;
+        self.def_immediate("in", core_word_in)?;
         self.defword("equal?", core_word_equal)?;
         self.defword("nil?", core_word_is_nil)?;
         self.defword("doc!", core_word_doc)?;
@@ -1014,7 +1023,7 @@ impl State {
                 if idx < frame.locals.len() {
                     frame.locals[idx] = val;
                 } else {
-                frame.locals.push(val);
+                    frame.locals.push(val);
                 }
                 if self.is_recording() {
                     self.add_reverse_step(ReverseStep::DropLocal(idx));
@@ -1693,8 +1702,76 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_def_local(xs: &mut State) -> Xresult {
-    let name = xs.next_name()?;
+fn build_let_in(xs: &mut State, st: &mut LetFlow, has_name: bool) -> Xresult {
+    let is_local = xs.top_function_flow().is_some();
+    match xs.next_token()? {
+        Tok::Word(name) => {
+            if name == "in" {
+                if has_name {
+                    OK
+                } else {
+                    Err(Xerr::let_name_or_lit())
+                }
+            } else if name == "else" {
+                if st.else_start.is_some() {
+                    return Err(Xerr::unbalanced_let_in());
+                }
+                xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
+                st.else_start = Some(xs.code_origin());
+                OK
+            } else {
+                if is_local {
+                    build_local_variable(xs, name)?;
+                } else {
+                    build_global_variable(xs, name)?;
+                }
+                build_let_in(xs, st, true)
+            }
+        }
+        Tok::Literal(_) if has_name => {
+            Err(Xerr::ExpectingName)
+        }
+        Tok::Literal(val) => {
+            xs.code_emit_value(val)?;
+            st.asserts.push(xs.code_origin());
+            xs.code_emit(Opcode::Nop)?;
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))?;
+            build_let_in(xs, st, true)
+        }
+        Tok::EndOfInput => Err(Xerr::unbalanced_let_in()),
+    }
+}
+
+fn core_word_in(xs: &mut State) -> Xresult {
+    match xs.pop_flow() {
+        Some(Flow::Let(lf)) => {
+            if let Some(else_start) = lf.else_start {
+                let at = else_start - 1;
+                let dest = xs.code_origin();
+                xs.backpatch_jump(at, jump_offset(at, dest))?;
+            }
+            OK
+        }
+        _ => Err(Xerr::unbalanced_let_in()),
+    }
+}
+
+fn core_word_let(xs: &mut State) -> Xresult {
+    let mut st = LetFlow::default();
+    build_let_in(xs, &mut st, false)?;
+    if let Some(else_start) = st.else_start {
+        for i in st.asserts.iter() {
+            xs.backpatch(*i, Opcode::NativeCall(XfnPtr(core_word_equal)))?;
+            let jmp = Opcode::JumpIfNot(jump_offset(*i + 1, else_start));
+            xs.backpatch(*i + 1, jmp)?;
+        }
+        xs.push_flow(Flow::Let(st))
+    } else {
+        OK
+    }
+}
+
+fn build_local_variable(xs: &mut State, name: Xsubstr) -> Xresult {
     let ff = xs
         .top_function_flow()
         .ok_or_else(|| Xerr::expect_fn_context())?;
@@ -1703,14 +1780,24 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
     xs.code_emit(Opcode::InitLocal(idx))
 }
 
+fn core_word_def_local(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    build_local_variable(xs, name)
+}
+
+fn build_global_variable(xs: &mut State, name: Xsubstr) -> Xresult {
+    if xs.flow_stack.is_empty() {
+        let a = xs.alloc_cell(Cell::Nil)?;
+        xs.dict_insert(&name, Entry::Variable(a))?;
+        xs.code_emit(Opcode::Store(a))
+    } else {
+        Err(Xerr::conditional_var_definition())
+    }
+}
+
 fn core_word_variable(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
-    if !xs.flow_stack.is_empty() {
-        return Err(Xerr::conditional_var_definition());
-    }
-    let a = xs.alloc_cell(Cell::Nil)?;
-    xs.dict_insert(&name, Entry::Variable(a))?;
-    xs.code_emit(Opcode::Store(a))
+    build_global_variable(xs, name)
 }
 
 fn core_word_setvar(xs: &mut State) -> Xresult {
@@ -3005,6 +3092,25 @@ mod tests {
         eval_ok!(xs, "include \"src/test-data/test-hello.xeh\" hello");
         let s = xs.pop_data().unwrap().to_xstr().unwrap();
         assert_eq!(s, "Hello");
+    }
+
+    #[test]
+    fn test_let_in() {
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("3 let in"));
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 let a in a 1 assert-eq");
+        eval_ok!(xs, "a let 1 in");
+        assert_ne!(OK, xs.eval("a let 2 in"));
+    }
+
+    #[test]
+    fn test_let_else() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 let 2 else 3 in
+        depth 1 assert-eq
+        3 assert-eq");
+        assert_ne!(OK, xs.eval("a let 2 else"));
     }
 
     #[test]

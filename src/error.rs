@@ -174,6 +174,7 @@ impl Xerr {
             Flow::TagVec { .. } => Self::unbalanced_tag_vec_builder(),
             Flow::Fun { .. } => Self::unbalanced_fn_builder(),
             Flow::Do { .. } => Self::unbalanced_do(),
+            Flow::Let { ..} => Self::unbalanced_let_in(),
         }
     }
 
@@ -185,6 +186,14 @@ impl Xerr {
     pub(crate) fn expect_fn_context() -> Xerr {
         let msg = xstr_literal!("has no effect outside of the function control flow");
         Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_let_in() -> Xerr {
+        Xerr::ErrorMsg(xstr_literal!("balance `let` with closing `in`"))
+    }
+
+    pub(crate) fn let_name_or_lit() -> Xerr {
+        Xerr::ErrorMsg(xstr_literal!("expecting name or literal"))
     }
 
     pub(crate) fn unbalanced_fn_builder() -> Xerr {
