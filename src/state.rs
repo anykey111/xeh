@@ -674,6 +674,7 @@ impl State {
         self.def_immediate(".", core_word_with_literal_tag)?;
         self.def_immediate(".[", core_word_tag_vec)?;
         self.def_immediate("defined", core_word_defined)?;
+        self.defword("equal?", core_word_equal)?;
         self.defword("nil?", core_word_is_nil)?;
         self.defword("doc!", core_word_doc)?;
         self.defword("help", core_word_help)?;
@@ -1990,6 +1991,12 @@ fn core_word_assert(xs: &mut State) -> Xresult {
     }
 }
 
+fn core_word_equal(xs: &mut State) -> Xresult {
+    let a = xs.pop_data()?;
+    let b = xs.pop_data()?;
+    xs.push_data(Cell::from(a == b))
+}
+
 fn core_word_assert_eq(xs: &mut State) -> Xresult {
     let a = xs.pop_data()?;
     let b = xs.pop_data()?;
@@ -2277,6 +2284,14 @@ mod tests {
         let mut xs = State::boot().unwrap();
         let res = xs.eval("nil if 100 var X endif 10 ! X");
         assert_eq!(Err(Xerr::conditional_var_definition()), res);
+    }
+
+    #[test]
+    fn test_equal() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "[ 1 ] [ 1 ] equal? assert");
+        eval_ok!(xs, "[ 1 ] [ 1 2 ] equal? false assert-eq");
+        eval_ok!(xs, "1.0 1.0 equal? assert");
     }
 
     #[test]
