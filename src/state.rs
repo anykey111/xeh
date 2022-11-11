@@ -701,7 +701,7 @@ impl State {
         self.defword("push", core_word_push)?;
         self.defword("collect", core_word_collect)?;
         self.defword("unbox", core_word_unbox)?;
-        self.defword("dup", |xs| xs.dup_data())?;
+        self.defword("dup", core_word_dup)?;
         self.defword("drop", |xs| xs.drop_data())?;
         self.defword("swap", |xs| xs.swap_data())?;
         self.defword("rot", |xs| xs.rot_data())?;
@@ -1702,41 +1702,62 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     }
 }
 
-fn build_let_in(xs: &mut State, st: &mut LetFlow, has_name: bool) -> Xresult {
-    let is_local = xs.top_function_flow().is_some();
+enum LetItem {
+    None,
+    Name(Xsubstr),
+    Value(Cell),
+}
+
+fn build_let_item(xs: &mut State, st: &mut LetFlow, item: LetItem, dup: bool) -> Xresult {
+    match item {
+        LetItem::None => Err(Xerr::let_name_or_lit()),
+        LetItem::Name(name) => {
+            if dup {
+                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+            }
+            let is_local = xs.top_function_flow().is_some();
+            if is_local {
+                build_local_variable(xs, name)
+            } else {
+                build_global_variable(xs, name)
+            }
+        }
+        LetItem::Value(val) => {
+            if dup {
+                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+            }
+            xs.code_emit_value(val)?;
+            st.asserts.push(xs.code_origin());
+            xs.code_emit(Opcode::Nop)?;
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
+        }
+    }
+}
+
+fn build_let_in(xs: &mut State, st: &mut LetFlow, item: LetItem) -> Xresult {
     match xs.next_token()? {
         Tok::Word(name) => {
             if name == "in" {
-                if has_name {
-                    OK
-                } else {
-                    Err(Xerr::let_name_or_lit())
-                }
+                build_let_item(xs, st, item, false)
             } else if name == "else" {
+                build_let_item(xs, st, item, false)?;
                 if st.else_start.is_some() {
                     return Err(Xerr::unbalanced_let_in());
                 }
                 xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
                 st.else_start = Some(xs.code_origin());
                 OK
+            } else if name == "." {
+                build_let_item(xs, st, item, true)?;
+                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))?;
+                build_let_in(xs, st, LetItem::None)
             } else {
-                if is_local {
-                    build_local_variable(xs, name)?;
-                } else {
-                    build_global_variable(xs, name)?;
-                }
-                build_let_in(xs, st, true)
+                build_let_in(xs, st, LetItem::Name(name))
             }
         }
-        Tok::Literal(_) if has_name => {
-            Err(Xerr::ExpectingName)
-        }
         Tok::Literal(val) => {
-            xs.code_emit_value(val)?;
-            st.asserts.push(xs.code_origin());
-            xs.code_emit(Opcode::Nop)?;
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))?;
-            build_let_in(xs, st, true)
+            build_let_in(xs, st, LetItem::Value(val))
         }
         Tok::EndOfInput => Err(Xerr::unbalanced_let_in()),
     }
@@ -1758,7 +1779,7 @@ fn core_word_in(xs: &mut State) -> Xresult {
 
 fn core_word_let(xs: &mut State) -> Xresult {
     let mut st = LetFlow::default();
-    build_let_in(xs, &mut st, false)?;
+    build_let_in(xs, &mut st, LetItem::None)?;
     if let Some(else_start) = st.else_start {
         for i in st.asserts.iter() {
             xs.backpatch(*i, Opcode::NativeCall(XfnPtr(core_word_equal)))?;
@@ -2068,6 +2089,9 @@ fn core_word_unbox(xs: &mut State) -> Xresult {
     OK
 }
 
+fn core_word_dup(xs: &mut State) -> Xresult {
+    xs.dup_data()
+}
 
 fn core_word_depth(xs: &mut State) -> Xresult {
     let n = xs.data_depth();
@@ -3111,6 +3135,26 @@ mod tests {
         depth 1 assert-eq
         3 assert-eq");
         assert_ne!(OK, xs.eval("a let 2 else"));
+    }
+
+    #[test]
+    fn test_let_tag() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 \"b\" with-tag let a . b in 
+            a 1 assert-eq b \"b\" assert-eq");
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 \"b\" with-tag let 1 . b in");
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 \"b\" with-tag let 2 . b else 3 in
+        3 assert-eq");
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("5 with-tag 1 . in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("5 with-tag . in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("5 with-tag a . else 2 in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("5 with-tag a . . in"));
     }
 
     #[test]
