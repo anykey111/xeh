@@ -216,6 +216,7 @@ impl State {
             Opcode::Store(a) => format!("store      {}", a.index()),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
+            Opcode::Nop => format!("nop"),
         }
     }
 
@@ -893,6 +894,9 @@ impl State {
         let ip = self.ip();
         self.increase_counter()?;
         match &self.code[ip] {
+            Opcode::Nop => {
+                self.next_ip();
+            }
             Opcode::Jump(rel) => {
                 let new_ip = rel.calculate(ip);
                 self.set_ip(new_ip);

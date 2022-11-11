@@ -36,6 +36,7 @@ impl RelativeJump {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Opcode {
+    Nop,
     Call(usize),
     Resolve(Xstr),
     NativeCall(XfnPtr),
