@@ -370,6 +370,10 @@ generate-uint-list
 "Formatting option, omit the tag sticked to the value."
 .[ doc-for-fmt ] "NO-TAGS" doc!
 
+"Decompile the definition."
+.[  doc-for-core "<name> --" stack-comment`
+] "see" doc!
+
 "Length of the vector,string or bitstr."
 .[ doc-for-core "vec -- int" stack-comment
     "[ 1 2 3 ] length

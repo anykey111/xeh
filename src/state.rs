@@ -728,6 +728,7 @@ impl State {
         self.defword("NO-PREFIX", |xs| set_fmt_prefix(xs, false))?;
         self.defword("TAGS", |xs| set_fmt_tags(xs, true))?;
         self.defword("NO-TAGS", |xs| set_fmt_tags(xs, false))?;
+        self.def_immediate("see", core_word_see)?;
         OK
     }
 
@@ -1658,7 +1659,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
         })) => {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
-            let fun_len = xs.code_origin() - start;
+            let fun_len = xs.code_origin() - start - 1; // skip jump over instruction
             match xs
                 .dict
                 .get_mut(dict_idx)
@@ -2172,6 +2173,49 @@ fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
     let flags = FmtFlags::from(old_flags).set_show_tags(show).build();
     xs.set_var(xs.fmt_flags, flags)?;
     OK
+}
+
+fn core_word_see(xs: &mut State) -> Xresult {
+    use std::fmt::Write;
+    let name = xs.next_name()?;
+    let mut buf = String::new();
+    match xs.dict_entry(&name).ok_or_else(||Xerr::UnknownWord(Xstr::from(name.as_str())))? {
+        Entry::Function { immediate, xf: Xfn::Native(p), .. } => {
+            write!(buf, "word, bultin {:?}", p).unwrap();
+            if *immediate {
+                buf.push_str(", immediate\n");
+            } else {
+                buf.push_str("\n");
+            }
+        }
+        Entry::Function { immediate, xf: Xfn::Interp(p), len } => {
+            let n = len.ok_or_else(|| Xerr::ControlFlowError {
+                msg: xstr_literal!("word compilation yet not finished")
+            })?;
+            write!(buf, "{:05X}: # {} operations", p, n).unwrap();
+            if *immediate {
+                buf.push_str(", immediate\n");
+            } else {
+                buf.push_str("\n");
+            }
+            let end = p + n;
+            if end > xs.code.len() {
+                return Err(Xerr::OutOfBounds(end));
+            }
+            for i in *p..end {
+                writeln!(buf, "{:05X}: {}", i, &xs.fmt_opcode(i, &xs.code[i])).unwrap();
+            }
+       } 
+        Entry::Constant(_) => buf.push_str("constant\n"),
+        Entry::Variable(cref) => {
+            if cref.is_initialized() {
+                writeln!(buf, "variable, index {}\n", cref.index()).unwrap();
+            } else {
+                buf.push_str("variable, not initialized\n");
+            }
+        }
+    }
+    xs.print(&buf)
 }
 
 fn filename_literal(xs: &mut State) -> Xresult1<Xstr> {
