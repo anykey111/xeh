@@ -192,6 +192,10 @@ impl Xerr {
         Xerr::ErrorMsg(xstr_literal!("balance `let` with closing `in`"))
     }
 
+    pub(crate) fn unbalanced_let_binding() -> Xerr {
+        Xerr::ErrorMsg(xstr_literal!("unbalanced let binding"))
+    }
+
     pub(crate) fn let_name_or_lit() -> Xerr {
         Xerr::ErrorMsg(xstr_literal!("expecting name or literal"))
     }

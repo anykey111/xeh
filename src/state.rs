@@ -38,6 +38,7 @@ pub(crate) struct FunctionFlow {
 pub(crate) struct LetFlow {
     else_start: Option<usize>,
     asserts: Vec<usize>,
+    vec_pos: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,6 +204,15 @@ impl State {
                         _ => false,
                     })
                     .map(|e| e.name.as_str())
+                    .or_else(|| {
+                        if x == &XfnPtr(vec_builder_begin) {
+                            Some("[".into())
+                        } else if x == &XfnPtr(vec_builder_end) {
+                            Some("]".into())
+                        } else {
+                            None
+                        }
+                    })
                     .unwrap_or_default();
                 format!("nativecall {:#x} # {}", x.0 as usize, name)
             }
@@ -693,6 +703,7 @@ impl State {
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
         self.defword("length", core_word_length)?;
+        self.defword("vec-len", core_word_vec_len)?;
         self.defword("get", core_word_get)?;
         self.defword("concat", core_word_concat)?;
         self.defword("join", core_word_join)?;
@@ -1703,19 +1714,34 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum LetItem {
     None,
     Name(Xsubstr),
     Value(Cell),
+    Vec(usize),
+}
+
+fn build_let_assert(xs: &mut State, st: &mut LetFlow, val: Cell) -> Xresult {
+    xs.code_emit_value(val)?;
+    st.asserts.push(xs.code_origin());
+    xs.code_emit(Opcode::Nop)?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
 }
 
 fn build_let_item(xs: &mut State, st: &mut LetFlow, item: LetItem, dup: bool) -> Xresult {
+    if let Some(idx) = st.vec_pos.last_mut() {
+        xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+        xs.code_emit_value(Cell::from(*idx))?;
+        *idx += 1;
+        xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_get)))?;
+    }
+    if dup {
+        xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+    }
     match item {
         LetItem::None => Err(Xerr::let_name_or_lit()),
         LetItem::Name(name) => {
-            if dup {
-                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-            }
             let is_local = xs.top_function_flow().is_some();
             if is_local {
                 build_local_variable(xs, name)
@@ -1724,18 +1750,17 @@ fn build_let_item(xs: &mut State, st: &mut LetFlow, item: LetItem, dup: bool) ->
             }
         }
         LetItem::Value(val) => {
-            if dup {
-                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-            }
-            xs.code_emit_value(val)?;
-            st.asserts.push(xs.code_origin());
-            xs.code_emit(Opcode::Nop)?;
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
+            build_let_assert(xs, st, val)
+        }
+        LetItem::Vec(len) => {
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_len)))?;
+            build_let_assert(xs, st, Cell::from(len))
         }
     }
 }
 
 fn build_let_in(xs: &mut State, st: &mut LetFlow, item: LetItem) -> Xresult {
+    println!("{:?} {:?}", st, item);
     match xs.next_token()? {
         Tok::Word(name) => {
             if name == "in" {
@@ -1753,7 +1778,32 @@ fn build_let_in(xs: &mut State, st: &mut LetFlow, item: LetItem) -> Xresult {
                 xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
                 xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))?;
                 build_let_in(xs, st, LetItem::None)
+            } else if name == "[" {
+                if item != LetItem::None {
+                    if st.vec_pos.is_empty() {
+                        return Err(Xerr::unbalanced_let_binding());
+                    } else {
+                        build_let_item(xs, st, item, false)?;
+                    }
+                }
+                st.vec_pos.push(0);
+                build_let_in(xs, st, LetItem::None)
+            } else if name == "]" {
+                if item != LetItem::None {
+                    build_let_item(xs, st, item, false)?;
+                }
+                let len = st.vec_pos.pop().ok_or_else(|| Xerr::unbalanced_vec_builder())?;
+                build_let_in(xs, st, LetItem::Vec(len))
+            } else if item != LetItem::None && st.vec_pos.is_empty() {
+                Err(Xerr::unbalanced_let_binding())
             } else {
+                if item != LetItem::None {
+                    if st.vec_pos.is_empty() {
+                        return Err(Xerr::unbalanced_let_binding());
+                    } else {
+                        build_let_item(xs, st, item, false)?;
+                    }
+                }
                 build_let_in(xs, st, LetItem::Name(name))
             }
         }
@@ -1985,6 +2035,11 @@ fn core_word_length(xs: &mut State) -> Xresult {
         Cell::Bitstr(bs) => xs.push_data(Cell::from(bs.len())),
         val => Err(Xerr::type_not_supported(val.clone())),
     }
+}
+
+fn core_word_vec_len(xs: &mut State) -> Xresult {
+    let len = xs.pop_data()?.vec()?.len();
+    xs.push_data(Cell::from(len))
 }
 
 fn vector_relative_index(v: &Xvec, index: isize) -> Xresult1<usize> {
@@ -3169,7 +3224,11 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "1 let a in a 1 assert-eq");
         eval_ok!(xs, "a let 1 in");
+        let mut xs = State::boot().unwrap();
         assert_ne!(OK, xs.eval("a let 2 in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("1 let a b in"));
+        assert_ne!(OK, xs.eval("1 let 1 2 in"));
     }
 
     #[test]
@@ -3199,6 +3258,20 @@ mod tests {
         assert_ne!(OK, xs.eval("5 with-tag a . else 2 in"));
         let mut xs = State::boot().unwrap();
         assert_ne!(OK, xs.eval("5 with-tag a . . in"));
+    }
+
+    #[test]
+    fn test_let_vec() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " [ 10 20 ] let [ a b ] in
+            depth 0 assert-eq
+            a 10 assert-eq
+            b 20 assert-eq");
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " [ [ 10 ] [ 20 ] ] let [ [ a ] b ] in 
+                depth 0 assert-eq
+                a 10 assert-eq
+                b [ 20 ] assert-eq");
     }
 
     #[test]
