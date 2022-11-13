@@ -1723,6 +1723,26 @@ enum LetItem {
     Value(Cell),
 }
 
+
+fn let_save_depth(xs: &mut State) -> Xresult {
+    let p = xs.data_stack.len();
+    let ls = Special::VecStackStart(p);
+    xs.push_special(ls)
+}
+
+fn let_reset_depth(xs: &mut State) -> Xresult {
+    match xs.pop_special() {
+        Some(Special::VecStackStart(p)) => {
+            // clear all temporary values including user initial value
+            while xs.data_stack.len() >= p {
+                xs.pop_data()?;
+            }
+            OK
+        }
+        _ => Xerr::control_flow_error(None)
+    }
+}
+
 fn build_let_match(xs: &mut State, lf: &mut LetFlow, val: Cell) -> Xresult {
     xs.code_emit_value(val)?;
     lf.matches.push(xs.code_origin());
@@ -1770,7 +1790,7 @@ fn build_let_in_done(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>, ta
     if !lf.has_items {
         Err(Xerr::let_name_or_lit())
     } else {
-        OK
+        xs.code_emit(Opcode::NativeCall(XfnPtr(let_reset_depth)))
     }
 }
 
@@ -1788,7 +1808,8 @@ fn build_let_in(xs: &mut State, lf: &mut LetFlow) -> Xresult {
                 }
                 build_let_in_done(xs, lf, item.take(), tagged)?;
                 lf.else_start = Some(xs.code_origin() + 1);
-                break xs.code_emit(Opcode::Jump(RelativeJump::uninit()));
+                xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
+                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_reset_depth)));
             }
             Tok::Word(name) if name == "." => {
                 if tagged || item == None || item == Some(LetItem::Skip) {
@@ -1864,6 +1885,7 @@ fn core_word_in(xs: &mut State) -> Xresult {
 
 fn core_word_let(xs: &mut State) -> Xresult {
     let mut lf = LetFlow::default();
+    xs.code_emit(Opcode::NativeCall(XfnPtr(let_save_depth)))?;
     build_let_in(xs, &mut lf)?;
     if let Some(else_start) = lf.else_start {
         for i in lf.matches.iter() {
@@ -3318,6 +3340,14 @@ mod tests {
             depth 0 assert-eq
             a 10 assert-eq
             b 20 assert-eq");
+    }
+
+    #[test]
+    fn test_let_else() {
+        eval_boot!("1 let 2 else depth 0 assert-eq in ").unwrap();
+        assert_eq!(Err(Xerr::StackUnderflow), eval_boot!(" let 2 else depth 0 assert-eq in "));
+        eval_boot!(" [ [ 1 2 ] ] let [ [ 2 ] ] else depth 0 assert-eq in").unwrap();
+        eval_boot!("222 [ [ 1 2 ] ] let [ [ 2 ] ] else depth 1 assert-eq 222 assert-eq in").unwrap();
     }
 
     #[test]
