@@ -96,11 +96,11 @@ impl fmt::Display for Xerr {
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
-            Xerr::AssertFailed => f.write_str("assertion failed"),
+            Xerr::AssertFailed => f.write_str("assertion failed: false"),
             Xerr::AssertEqFailed { a, b } => {
-                writeln!(f, "assertion failed, a <> b")?;
-                writeln!(f, "b: {:?}", b)?;
-                write!(f, "a: {:?}", a)
+                writeln!(f, "assertion failed: b a <>")?;
+                writeln!(f, "a: {:?}", a)?;
+                write!(f, "b: {:?}", b)
             }
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::ToBytestrError { .. } => f.write_str("bytestr need to be divisible by 8"),
@@ -190,10 +190,6 @@ impl Xerr {
 
     pub(crate) fn unbalanced_let_in() -> Xerr {
         Xerr::ErrorMsg(xstr_literal!("balance `let` with closing `in`"))
-    }
-
-    pub(crate) fn unbalanced_let_binding() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!("unbalanced let binding"))
     }
 
     pub(crate) fn let_name_or_lit() -> Xerr {
