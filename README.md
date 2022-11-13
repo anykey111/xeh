@@ -117,6 +117,7 @@ New word definition starts with ":" then word name and body follow, definition e
 
 Variable is just a word that return a single value from the memory cell.
 Variable definition starts with "var" word then name follow, initial value is taken from the stack.
+Special word "!" sets the new value of variable.
 
 ```
     # define a new global variable 
@@ -130,7 +131,8 @@ Variable definition starts with "var" word then name follow, initial value is ta
     ;
 ```
 
-Local variable is a variable that available only inside the word definition, initial variable is taken from the stack.
+Local variable is a variable that available only inside the word definition, initial value is taken from the stack.
+Local variable is read-only.
 
 ```
     # locals
@@ -257,4 +259,25 @@ Initial value is taken from the stack and must be defined inside of the meta mod
 
 ```
     ( 1.0 60.0 / const FRAME-TIME )
+```
+
+## Advanced variable definition
+
+Advanced variable definition starts with `let` word,
+then pattern description follow, definition ends with `in` word.
+Every name in the pattern bind the new variable, literal in the pattern
+ensure that value is exactly same, otherwise error is raised.
+Word `else` in the pattern define alternative error handling path.
+
+```
+    # bind 1 to a
+    1 let a in
+    # test, a = 1
+    a let 1 in 
+    # error, a <> 2
+    a let 2 in
+    # custom error handler
+    a let 2 else "invalid value" println in
+    # bind multiple values from the vec
+    [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ] in
 ```
