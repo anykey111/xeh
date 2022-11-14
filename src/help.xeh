@@ -465,6 +465,18 @@ Negative index access items from the tail of the vector."
 3 f println" doc-example
 ] "local" doc!
 
+"Bind names to the values inside of a data structure.
+Raise error if structure didn't match with user definition.
+Optional `else` path is taken in case of error.
+    let <name-or-literal> in
+    let <name-or-literal> else CODE in"
+.[ doc-for-core
+    "1 let a in
+    [ 1 2 ] let [ c d ]
+    a let 2 else \"invalid value\" println in"  doc-example
+] dup "let" doc!
+"in" doc!
+
 "Duplicate top of the stack."
 .[ doc-for-core
     "x -- x x" stack-comment
