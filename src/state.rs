@@ -426,7 +426,11 @@ impl State {
 
     fn build_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
-            None => self.code_emit(Opcode::Resolve(Xstr::from(name.as_str()))),
+            None => {
+                //FIXME: need late binding?
+                self.code_emit(Opcode::Resolve(Xstr::from(name.as_str())))?;
+                Err(Xerr::UnknownWord(Xstr::from(name.as_str())))
+            },
             Some(Entry::Constant(c)) => {
                 let op = self.load_value_opcode(c.clone());
                 self.code_emit(op)
@@ -2691,9 +2695,9 @@ mod tests {
         assert_eq!(Ok(Cell::Int(0)), xs.pop_data());
         // empty range
         let mut xs = State::boot().unwrap();
-        xs.eval("0 3 do i loop").unwrap();
+        xs.eval("0 3 do I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
-        xs.eval("0 0 do i loop").unwrap();
+        xs.eval("0 0 do I loop").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range
         assert_ne!(OK, xs.eval("0 0.5 do i loop"));
@@ -3101,7 +3105,7 @@ mod tests {
             OK
         );
         assert_eq!(
-            eval_boot!(" \"X\" X 10 . X tag-of \"X\" assert-eq"),
+            eval_boot!("20 var X  \"X\" X 10 . X tag-of \"X\" assert-eq"),
             Err(Xerr::ExpectingLiteral)
         );
         assert_eq!(
@@ -3134,7 +3138,7 @@ mod tests {
 
     #[test]
     fn test_unbalanced_flow() {
-        assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("[1 2 ]"));
+        assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("1 2 ]"));
         assert_eq!(Err(Xerr::unbalanced_endif()), eval_boot!("[ endif ]"));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
@@ -3298,7 +3302,7 @@ mod tests {
         eval_ok!(xs, "1 let 2 else 3 in
         depth 1 assert-eq
         3 assert-eq");
-        assert_eq!(Err(Xerr::unbalanced_let_in()), xs.eval("a let 2 else"));
+        assert_eq!(Err(Xerr::unbalanced_let_in()), xs.eval("1 let 2 else"));
     }
 
     #[test]
