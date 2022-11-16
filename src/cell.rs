@@ -93,7 +93,7 @@ impl fmt::Debug for Cell {
                 16 => write!(f, "{:x}", n),
                 _ => write!(f, "{}", n),
             },
-            Cell::Real(r) => write!(f, "{:0.1}", r),
+            Cell::Real(r) => write!(f, "{}", r),
             Cell::Str(s) if flags.fitscreen() && s.len() > STR_ELIDE_LEN =>
                 write!(f, "\"{} ...", s.split_at(STR_ELIDE_LEN).0),
             Cell::Str(s) => write!(f, "{:?}", s.as_str()),
