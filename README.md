@@ -280,4 +280,25 @@ Word `else` in the pattern define alternative error handling path.
     a let 2 else "invalid value" println in
     # bind multiple values from the vec
     [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ] in
+    # bind tag of the value
+    \"x\" 10 with-tag let val . tag in
+```
+
+## Source code injection
+
+Meta evaluation result might serve as input for compilation.When compiler see immediate word `~)` instead of the closing bracket, first compiler join result into a string and then treat that string as a part of the source code.
+
+```
+    # assign number for each name starting from 0
+    : my-enum
+        local names
+        names length 0 do
+            [ I " var " names I get ] concat
+        loop
+    ;
+    
+    # define variables from list
+    ( [ "aa" "bb" "cc" ] my-enum ~)
+
+    bb println 
 ```
