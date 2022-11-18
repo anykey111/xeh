@@ -165,14 +165,15 @@ impl State {
     pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
         let flags = self
             .get_var(self.fmt_flags)
-            .map(|val| FmtFlags::from(val))?;
+            .and_then(|val| FmtFlags::parse(val))?;
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
     pub fn fmt_cell_safe(&self, val: &Cell) -> Xresult1<String> {
         let flags = self
             .get_var(self.fmt_flags)
-            .map(|val| FmtFlags::from(val).set_fitscreen(true))?;
+            .and_then(|val| FmtFlags::parse(val))?
+            .set_fitscreen(true);
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
@@ -745,6 +746,8 @@ impl State {
         self.defword("NO-PREFIX", |xs| set_fmt_prefix(xs, false))?;
         self.defword("TAGS", |xs| set_fmt_tags(xs, true))?;
         self.defword("NO-TAGS", |xs| set_fmt_tags(xs, false))?;
+        self.defword("UPCASE", |xs| set_fmt_upcase(xs, true))?;
+        self.defword("LOCASE", |xs| set_fmt_upcase(xs, false))?;
         self.def_immediate("see", core_word_see)?;
         OK
     }
@@ -2280,23 +2283,32 @@ fn core_word_newline(xs: &mut State) -> Xresult {
     xs.print("\n")
 }
 
+
+fn current_fmt_flags(xs: &mut State) -> Xresult1<FmtFlags> {
+    let f = xs.get_var(xs.fmt_flags)?;
+    FmtFlags::parse(f)
+}
+
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
-    let old_flags = xs.get_var(xs.fmt_flags)?;
-    let flags = FmtFlags::from(old_flags).set_base(n).build();
+    let flags = current_fmt_flags(xs)?.set_base(n).build();
     xs.set_var(xs.fmt_flags, flags)?;
     OK
 }
 
 fn set_fmt_prefix(xs: &mut State, show: bool) -> Xresult {
-    let old_flags = xs.get_var(xs.fmt_flags)?;
-    let flags = FmtFlags::from(old_flags).set_show_prefix(show).build();
+    let flags = current_fmt_flags(xs)?.set_show_prefix(show).build();
     xs.set_var(xs.fmt_flags, flags)?;
     OK
 }
 
 fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
-    let old_flags = xs.get_var(xs.fmt_flags)?;
-    let flags = FmtFlags::from(old_flags).set_show_tags(show).build();
+    let flags = current_fmt_flags(xs)?.set_show_tags(show).build();
+    xs.set_var(xs.fmt_flags, flags)?;
+    OK
+}
+
+fn set_fmt_upcase(xs: &mut State, show: bool) -> Xresult {
+    let flags = current_fmt_flags(xs)?.set_upcase(show).build();
     xs.set_var(xs.fmt_flags, flags)?;
     OK
 }
@@ -2748,6 +2760,18 @@ mod tests {
         assert_eq!(Some("0o12".to_string()), xs.read_stdout());
         xs.eval("BIN 3 print").unwrap();
         assert_eq!(Some("0b11".to_string()), xs.read_stdout());
+    }
+
+    #[test]
+    fn test_fmt_upcase() {
+        let mut xs = State::boot().unwrap();
+        xs.intercept_stdout(true);
+        xs.eval("HEX 255 print").unwrap();
+        assert_eq!(Some("0xff".to_string()), xs.read_stdout());
+        xs.eval("HEX UPCASE 255 print").unwrap();
+        assert_eq!(Some("0xFF".to_string()), xs.read_stdout());
+        xs.eval("HEX LOCASE 10 print").unwrap();
+        assert_eq!(Some("0xa".to_string()), xs.read_stdout());
     }
 
     #[test]

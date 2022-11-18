@@ -4,6 +4,7 @@ const FMT_BASE_MASK: usize = 0xff;
 const FMT_PREFIX_BIT: usize = 0b00001_00000000;
 const FMT_TAGS_BIT: usize = 0b00010_00000000;
 const FMT_FITSCREEN_BIT: usize   = 0b00100_00000000;
+const FMT_UPCASE_BIT: usize = 0b01000_00000000;
 
 pub struct FmtFlags(usize);
 
@@ -14,8 +15,8 @@ impl Default for FmtFlags {
 }
 
 impl FmtFlags {
-    pub fn from(c: &Cell) -> Self {
-        c.to_usize().map(|n| FmtFlags(n)).unwrap_or_default()
+    pub fn parse(c: &Cell) -> Xresult1<Self> {
+        c.to_usize().map(|n| FmtFlags(n))
     }
 
     pub fn set_base(self, n: usize) -> Self {
@@ -44,6 +45,18 @@ impl FmtFlags {
         } else {
             FmtFlags(self.0 & !FMT_TAGS_BIT)
         }
+    }
+
+    pub fn set_upcase(&self, t: bool) -> Self {
+        if t {
+            FmtFlags(self.0 | FMT_UPCASE_BIT)
+        } else {
+            FmtFlags(self.0 & !FMT_UPCASE_BIT)
+        }
+    }
+
+    pub fn upcase(&self) -> bool {
+        (self.0 & FMT_UPCASE_BIT) > 0
     }
 
     pub fn show_tags(&self) -> bool {

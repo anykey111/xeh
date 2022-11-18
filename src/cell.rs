@@ -89,8 +89,20 @@ impl fmt::Debug for Cell {
                 2 => write!(f, "{:b}", n),
                 8 if flags.show_prefix() => write!(f, "{:#o}", n),
                 8 => write!(f, "{:o}", n),
-                16 if flags.show_prefix() => write!(f, "{:#x}", n),
-                16 => write!(f, "{:x}", n),
+                16 if flags.show_prefix() => {
+                    if flags.upcase() {
+                        write!(f, "{:#X}", n)
+                    } else {
+                        write!(f, "{:#x}", n)
+                    }
+                }
+                16 => {
+                    if flags.upcase() {
+                        write!(f, "{:X}", n)
+                    } else {
+                        write!(f, "{:x}", n)
+                    }
+                }
                 _ => write!(f, "{}", n),
             },
             Cell::Real(r) => write!(f, "{}", r),
