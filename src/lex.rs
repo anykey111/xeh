@@ -36,8 +36,8 @@ pub struct Lex {
     start_pos: usize,
 }
 
-const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
-const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
+pub(crate) const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
+pub(crate) const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
 const PARSE_BITSTR_ERRMSG: Xstr = xstr_literal!("parse bitstr error");
 const UNTERMINATED_STR_ERRMSG: Xstr = xstr_literal!("unterminated string");
 const UNTERMINATED_BITSTR_ERRMSG: Xstr = xstr_literal!("unterminated bit-string");

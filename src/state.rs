@@ -732,6 +732,8 @@ impl State {
         self.defword("println", core_word_println)?;
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
+        self.defword("str>number", core_word_str_to_num)?;
+        self.defword("str-split", core_word_str_split)?;
         self.def_immediate("include", core_word_include)?;
         self.def_immediate("require", core_word_require)?;
         self.defword("tag-of", core_word_tag_of)?;
@@ -2112,21 +2114,21 @@ fn core_word_vec_at(xs: &mut State) -> Xresult {
     xs.push_data(x)
 }
 
-fn vector_relative_index(v: &Xvec, index: isize) -> Xresult1<usize> {
+fn vector_relative_index(len: usize, index: isize) -> Xresult1<usize> {
     if index >= 0 {
         Ok(index as usize)
     } else {
         let rel_index = index.abs() as usize;
-        if rel_index > v.len() {
-            Ok(v.len() - (rel_index % v.len()))
+        if rel_index > len {
+            Ok(len - (rel_index % len))
         } else {
-            Ok(v.len() - rel_index)
+            Ok(len- rel_index)
         }
     }
 }
 
 fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
-    let new_index = vector_relative_index(v, index)?;
+    let new_index = vector_relative_index(v.len(), index)?;
     v.get(new_index).ok_or_else(|| Xerr::OutOfBounds(new_index))
 }
 
@@ -2283,6 +2285,37 @@ fn core_word_newline(xs: &mut State) -> Xresult {
     xs.print("\n")
 }
 
+fn core_word_str_to_num(xs: &mut State) -> Xresult {
+    let base = current_fmt_flags(xs)?.base() as u32;
+    let val = xs.pop_data()?;
+    let s = val.to_xstr()?;
+    if s.find('.').is_some() {
+        let r: Xreal = s.parse().map_err(|_| Xerr::ParseError {
+            msg: crate::lex::PARSE_FLOAT_ERRMSG,
+            substr: s.substr(..),
+        })?;
+        xs.push_data(Cell::Real(r))
+    } else {
+        let i = Xint::from_str_radix(&s, base).map_err(|_|
+            Xerr::ParseError {
+                msg: crate::lex::PARSE_INT_ERRMSG,
+                substr: s.substr(..),
+        })?;
+        xs.push_data(Cell::from(i))
+    }
+}
+
+fn core_word_str_split(xs: &mut State) -> Xresult {
+    let at = xs.pop_data()?.to_isize()?;
+    let s = xs.pop_data()?.to_xstr()?;
+    let i = vector_relative_index(s.len(), at)?;
+    if i >= s.len() {
+        return Err(Xerr::OutOfBounds(i));
+    }
+    let (head, rest) = s.split_at(i);
+    xs.push_data(Cell::from(rest))?;
+    xs.push_data(Cell::from(head))
+}
 
 fn current_fmt_flags(xs: &mut State) -> Xresult1<FmtFlags> {
     let f = xs.get_var(xs.fmt_flags)?;
@@ -2735,6 +2768,24 @@ mod tests {
         eval_ok!(xs, "[ 1 2 3 ] -4 get");
         assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
         assert_ne!(OK, xs.eval("[ 1 ] \"0\" get"));
+    }
+
+    #[test]
+    fn test_str_split() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "\"ab\" 1 str-split \"a\" assert-eq \"b\" assert-eq");
+        eval_ok!(xs, "\"ab\" 0 str-split \"\" assert-eq \"ab\" assert-eq");
+        eval_ok!(xs, "\"abc\" -1 str-split \"ab\" assert-eq \"c\" assert-eq");
+        assert_eq!(Err(Xerr::OutOfBounds(2)), xs.eval("\"cc\" 2 str-split"));
+    }
+
+    #[test]
+    fn test_str_to_num() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "\"255\" str>number 255 assert-eq");
+        eval_ok!(xs, "HEX \"ff\" str>number 255 assert-eq");
+        eval_ok!(xs, "\"0.0\" str>number 0.0 assert-eq");
+        assert_ne!(OK, xs.eval("\"10X\" str>number"));
     }
 
     #[test]
