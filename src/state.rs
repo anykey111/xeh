@@ -684,6 +684,7 @@ impl State {
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
         self.def_immediate("#", core_word_comment)?;
+        self.def_immediate("defer", core_word_defer)?;
         self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
@@ -1703,6 +1704,28 @@ fn core_word_comment(xs: &mut State) -> Xresult {
     if let Some(src) = xs.input.last_mut() {
         src.skip_line();
     }
+    OK
+}
+
+fn core_word_defer(xs: &mut State) -> Xresult {
+    let jump_over_org = xs.code_origin();
+    xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
+    let name = xs.next_name()?;
+    let word_start_org = xs.code_origin();
+    let xf = Xfn::Interp(word_start_org);
+    xs.code_emit(Opcode::Resolve(Xstr::from(name.as_str())))?;
+    xs.code_emit(Opcode::Ret)?;
+    let word_end_org = xs.code_origin();
+    let relative = jump_offset(jump_over_org, word_end_org);
+    xs.backpatch_jump(jump_over_org, relative)?;
+    xs.dict_insert(
+        &name,
+        Entry::Function {
+            immediate: false,
+            xf,
+            len: Some(word_end_org - word_start_org),
+        },
+    )?;
     OK
 }
 
@@ -2934,6 +2957,28 @@ mod tests {
             xs,
             " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq "
         );
+    }
+
+    #[test]
+    fn test_defer() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::UnknownWord("BB".into())), xs.eval(": AA BB ;"));
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "
+            defer CC
+            : EE CC ;
+            EE nil assert-eq
+            1 var CC
+            EE 1 assert-eq
+            defer GG
+            : FF GG ;
+            FF 2 assert-eq
+            : GG 2 ; 
+            defer WW
+            : QQ WW ;
+            ( 3 const WW ) 
+            QQ 3 assert-eq
+            ");
     }
 
     #[test]
