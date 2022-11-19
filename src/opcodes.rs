@@ -1,4 +1,4 @@
-use crate::cell::*;
+use crate::{cell::*, prelude::Xerr, prelude::Xresult1};
 
 pub type CellBox = std::rc::Rc<Cell>;
 
@@ -23,8 +23,15 @@ impl RelativeJump {
         RelativeJump(0)
     }
 
-    pub fn calculate(&self, ip: usize) -> usize {
-        debug_assert_ne!(self, &RelativeJump::uninit());
+    pub fn calculate(&self, ip: usize) -> Xresult1<usize> {
+        if self == &RelativeJump::uninit() {
+            Err(Xerr::InvalidAddress)
+        } else {
+            Ok(self.calculate_unsafe(ip))
+        }
+    }
+
+    pub fn calculate_unsafe(&self, ip: usize) -> usize {
         (ip as isize + self.0 as isize) as usize
     }
 
