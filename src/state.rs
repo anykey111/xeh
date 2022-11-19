@@ -425,12 +425,33 @@ impl State {
         }
     }
 
+    fn unknown_word_handler(&mut self, name: Xsubstr) -> Xresult {
+        let old_name = name.as_str();
+        let f = self.dict_entry("unknown-word-handler").and_then(|e| {
+            match e {
+                Entry::Function{xf, len: Some(_), ..} => Some(xf.clone()),
+                _ => None,
+            }
+        }).ok_or_else(|| Xerr::UnknownWord(Xstr::from(old_name)))?;
+        let old_name_xstr = Xstr::from(old_name);
+        self.context_open(ContextMode::MetaEval)?;
+        self.push_data(Cell::Str(old_name_xstr.clone()))?;
+        self.run_immediate(f)?;
+        let res = self.pop_data()?;
+        if res == NIL {
+            self.code_emit(Opcode::Resolve(old_name_xstr.clone()))?;
+            return Err(Xerr::UnknownWord(old_name_xstr));
+        } else {
+            self.code_emit_value(res)?
+        }
+        self.context_close()
+        
+    }
+
     fn build_word(&mut self, name: Xsubstr) -> Xresult {
         match self.dict_entry(name.as_str()) {
             None => {
-                //FIXME: need late binding?
-                self.code_emit(Opcode::Resolve(Xstr::from(name.as_str())))?;
-                Err(Xerr::UnknownWord(Xstr::from(name.as_str())))
+                self.unknown_word_handler(name)
             },
             Some(Entry::Constant(c)) => {
                 let op = self.load_value_opcode(c.clone());
@@ -2979,6 +3000,21 @@ mod tests {
             ( 3 const WW ) 
             QQ 3 assert-eq
             ");
+    }
+
+    #[test]
+    fn test_unknown_word_handler() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, ": unknown-word-handler \"aa\" assert-eq 1 ;  aa 1 assert-eq");
+        // test incomplete definition
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::UnknownWord("sss".into())), xs.eval(": unknown-word-handler sss ; eee"));
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::UnknownWord("fff".into())), xs.eval(": unknown-word-handler nil ; : hhh fff ; "));
+        // test empty handler
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, ": unknown-word-handler ; ggg");
+        assert_eq!(Cell::from("ggg"), xs.pop_data().unwrap());
     }
 
     #[test]
