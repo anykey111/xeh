@@ -370,6 +370,12 @@ generate-uint-list
 "Formatting option, omit the tag sticked to the value."
 .[ doc-for-fmt ] "NO-TAGS" doc!
 
+"Formatting otion, display in upper case."
+.[ doc-for-fmt ] "UPCASE" doc!
+
+"Formatting otion, display in lower case."
+.[ doc-for-fmt ] "LOCASE" doc!
+
 "Decompile the definition."
 .[  doc-for-core "<name> --" stack-comment
 ] "see" doc!
@@ -503,6 +509,31 @@ Optional `else` path is taken in case of error.
 .[ doc-for-core
     "x1 x2 -- x1 x2 x1" stack-comment
 ] "over" doc!
+
+"Define a word by name without defining its behaviour.
+Deffer word resolution to runtime."
+.[  doc-for-core "<name>" stack-comment
+    "# deffered definition
+     defer B 
+     : A B ;
+     # actual definition
+     : B 1 ;
+     A println" doc-example
+] "defer" doc!
+
+"Convert string to number using default base."
+.[ doc-for-core "str -- num" stack-comment
+    "HEX \"ff\" str>number" doc-example
+] "str>number" doc!
+
+"Split string into head and tail at given index."
+.[ doc-for-core "str int -- str str" stack-comment
+    "# split at index 1
+    \"hello\" 1 str-split # result \"h\" \"ello\"
+    # split from the tail
+    \"hello\" -1 str-split # result \"hell\" \"o\"
+    "
+] "str-split" doc!
 
 "Bit-shift left."
 .[ doc-for-bitwise
