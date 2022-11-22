@@ -1776,6 +1776,12 @@ enum LetItem {
     Value(Cell),
 }
 
+#[derive(Debug)]
+enum LetTag {
+    TagOf,
+    Rest,
+}
+
 
 fn let_save_depth(xs: &mut State) -> Xresult {
     let p = xs.data_stack.len();
@@ -1803,8 +1809,38 @@ fn build_let_match(xs: &mut State, lf: &mut LetFlow, val: Cell) -> Xresult {
     xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
 }
 
+fn build_let_match_vec_len(xs: &mut State, lf: &mut LetFlow, len: usize) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_len)))?;
+    xs.code_emit_value(Cell::from(len))?;
+    lf.matches.push(xs.code_origin());
+    xs.code_emit(Opcode::Nop)?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(let_test_vec_len)))
+}
+
+fn let_take_rest(xs: &mut State) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    let v = xs.top_data()?.vec()?;
+    let new_vec: Xvec = v.iter().skip(n).cloned().collect();
+    xs.push_data(Cell::from(new_vec))
+}
+
+fn let_test_vec_len(xs: &mut State) -> Xresult {
+    let nconsumed = xs.pop_data()?.to_usize()?;
+    let len = xs.pop_data()?.to_usize()?;
+    if nconsumed < len {
+        let msg = Xstr::from(format!("vector has {} more items remain", len - nconsumed));
+        Err(Xerr::ErrorMsg(msg))
+    } else {
+        OK
+    }
+}
+
 fn build_let_consume(xs: &mut State, lf: &mut LetFlow) -> Xresult {
     if let Some(idx) = lf.vec_pos.last_mut() {
+        if *idx == usize::MAX {
+            let msg = xstr_literal!("`&` already consumed all remaining items");
+            return Err(Xerr::ErrorMsg(msg));
+        }
         xs.code_emit_value(Cell::from(*idx))?;
         xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_at)))?;
         *idx += 1;
@@ -1832,8 +1868,8 @@ fn build_let_bind(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>) -> Xr
     }
 }
 
-fn build_let_in_done(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>, tagged: bool) -> Xresult {
-    if tagged {
+fn build_let_in_done(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>, tagged: Option<LetTag>) -> Xresult {
+    if tagged.is_some() {
         return Err(Xerr::let_name_or_lit());
     }
     if !lf.vec_pos.is_empty() {
@@ -1847,74 +1883,85 @@ fn build_let_in_done(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>, ta
     }
 }
 
+fn build_let_item(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>,
+                    tagged: Option<LetTag>) -> Xresult
+{
+    match tagged {
+        Some(LetTag::TagOf) => {
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+            build_let_bind(xs, lf, item)?;
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))
+        }
+        Some(LetTag::Rest) => {
+            if let Some(idx) = lf.vec_pos.last_mut() {
+                xs.code_emit_value(Cell::from(*idx))?;
+                *idx = usize::MAX;
+                xs.code_emit(Opcode::NativeCall(XfnPtr(let_take_rest)))?;
+                build_let_bind(xs, lf, item)
+            } else {
+                Err(Xerr::ErrorMsg(xstr_literal!("rest operation without a vector")))
+            }
+        }
+        None => {
+            build_let_bind(xs, lf, item)?;
+            build_let_consume(xs, lf)
+        }
+    }
+}
+
 fn build_let_in(xs: &mut State, lf: &mut LetFlow) -> Xresult {
     let mut item = Some(LetItem::Skip);
-    let mut tagged = false;
+    let mut tagged = None;
     loop {
         match xs.next_token()? {
             Tok::Word(name) if name == "in" => {
-                break build_let_in_done(xs, lf, item.take(), tagged);
+                break build_let_in_done(xs, lf, item.take(), tagged.take());
             }
             Tok::Word(name) if name == "else" => {
                 if lf.else_start.is_some() {
                     break Err(Xerr::unbalanced_let_in());
                 }
-                build_let_in_done(xs, lf, item.take(), tagged)?;
+                build_let_in_done(xs, lf, item.take(), tagged.take())?;
                 lf.else_start = Some(xs.code_origin() + 1);
                 xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
                 break xs.code_emit(Opcode::NativeCall(XfnPtr(let_reset_depth)));
             }
             Tok::Word(name) if name == "." => {
-                if tagged || item == None || item == Some(LetItem::Skip) {
+                if tagged.is_some() || item == None || item == Some(LetItem::Skip) {
                     break Err(Xerr::let_name_or_lit());
                 }
-                tagged = true;
+                tagged = Some(LetTag::TagOf);
             }
             Tok::Word(name) if name == "[" => {
-                if tagged {
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-                    build_let_bind(xs, lf, item.take())?;
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))?;
-                    tagged = false;
-                } else {
-                    build_let_bind(xs, lf, item.take())?;
-                    build_let_consume(xs, lf)?;
-                }
+                build_let_item(xs, lf, item.take(), tagged.take())?;
                 lf.vec_pos.push(0);
                 item = Some(LetItem::Skip);
             }
             Tok::Word(name) if name == "]" => {
-                if tagged {
+                if tagged.is_some() {
                     break Err(Xerr::let_name_or_lit());
                 }
                 build_let_bind(xs, lf, item.take())?;
                 let len = lf.vec_pos.pop().ok_or_else(|| Xerr::unbalanced_vec_builder())?;
-                xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_len)))?;
-                build_let_match(xs, lf, Cell::from(len))?;
+                if len < usize::MAX {
+                    build_let_match_vec_len(xs, lf, len)?;
+                }
+                item = Some(LetItem::Skip);
+            }
+            Tok::Word(name) if name == "&" => {
+                if tagged.is_some() {
+                    break Err(Xerr::let_name_or_lit());
+                }
+                build_let_bind(xs, lf, item.take())?;
+                tagged = Some(LetTag::Rest);
                 item = Some(LetItem::Skip);
             }
             Tok::Word(name) => {
-                if tagged {
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-                    build_let_bind(xs, lf, item.take())?;
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))?;
-                    tagged = false;
-                } else {
-                    build_let_bind(xs, lf, item.take())?;
-                    build_let_consume(xs, lf)?;
-                }
+                build_let_item(xs, lf, item.take(), tagged.take())?;
                 item = Some(LetItem::Name(name));
             }
             Tok::Literal(val) => {
-                if tagged {
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-                    build_let_bind(xs, lf, item.take())?;
-                    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tag_of)))?;
-                    tagged = false;
-                } else {
-                    build_let_bind(xs, lf, item.take())?;
-                    build_let_consume(xs, lf)?;
-                }
+                build_let_item(xs, lf, item.take(), tagged.take())?;
                 item = Some(LetItem::Value(val));
             }
             Tok::EndOfInput => break Err(Xerr::unbalanced_let_in()),
@@ -3500,6 +3547,31 @@ mod tests {
             depth 0 assert-eq
             a 10 assert-eq
             b 20 assert-eq");
+    }
+
+    #[test]
+    fn test_let_rest() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " [ 11 22 33 44 ] let [ x & xs ] in
+        x 11 assert-eq
+        xs [ 22 33 44 ] assert-eq
+        depth 0 assert-eq");
+        eval_ok!(xs, " [ ] let [ & ss ] in
+        ss [ ] assert-eq
+        depth 0 assert-eq");
+        eval_ok!(xs, " [ 11 22 ] let [ c e  & es ] in
+        c 11 assert-eq
+        e 22 assert-eq
+        es [ ] assert-eq
+        depth 0 assert-eq");
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" [ ] let [ & xs ys ] in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" [ ] let [ & & xs ] in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" [ ] let  & xs in"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval(" [ ] let  & in"));
     }
 
     #[test]

@@ -280,6 +280,8 @@ Word `else` in the pattern define alternative error handling path.
     a let 2 else "invalid value" println in
     # bind multiple values from the vec
     [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ] in
+    # bind all remaining items
+    [ 1 2 3 5 7  ] let [ a b & rest ]
     # bind tag of the value
     \"x\" 10 with-tag let val . tag in
 ```
