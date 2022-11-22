@@ -760,6 +760,7 @@ impl State {
         self.defword("with-tag", core_word_with_tag)?;
         self.defword("set-tagged", core_word_set_tagged)?;
         self.defword("get-tagged", core_word_get_tagged)?;
+        self.defword("any-tagged", core_word_any_tagged)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
         self.defword("DEC", |xs| set_fmt_base(xs, 10))?;
         self.defword("OCT", |xs| set_fmt_base(xs, 8))?;
@@ -2552,6 +2553,27 @@ fn core_word_get_tagged(xs: &mut State) -> Xresult {
     xs.push_data(item.unwrap_or_else(|| NIL))
 }
 
+fn find_tagged<'a>(root: &'a Cell, key: &Cell) -> Option<&'a Cell> {
+    if let Some(tag) = root.tag() {
+        if tag == key {
+            Some(root)
+        } else {
+            find_tagged(tag, key)
+        }
+    } else if let Ok(v) = root.vec() {
+        v.iter().find_map(|x| find_tagged(x, key))
+    } else {
+        None
+    }
+}
+
+fn core_word_any_tagged(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    let val = xs.pop_data()?;
+    let res = find_tagged(&val, &key).unwrap_or_else(|| &NIL);
+    xs.push_data(res.clone())
+}
+
 fn core_word_with_literal_tag(xs: &mut State) -> Xresult {
     match xs.next_token()? {
         Tok::Literal(val) => {
@@ -2645,6 +2667,15 @@ mod tests {
     fn test_vec_balanced() {
         let mut xs = State::boot().unwrap();
         assert_ne!(OK, xs.eval(" 1 [ 2 drop drop ] "));
+    }
+
+    #[test]
+    fn test_any_tagged() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "1 . 2 2 any-tagged 1 assert-eq
+            [ 5 . 7 ] 7 any-tagged 5 assert-eq
+            9 .[ 11 .[ 13 . 15 ] ] 15 any-tagged 13 assert-eq
+            depth 0 assert-eq");
     }
 
     #[test]
