@@ -731,8 +731,6 @@ impl State {
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
         self.defword("length", core_word_length)?;
-        self.defword("vec-len", core_word_vec_len)?;
-        self.defword("vec-at", core_word_vec_at)?;
         self.defword("get", core_word_get)?;
         self.defword("concat", core_word_concat)?;
         self.defword("join", core_word_join)?;
