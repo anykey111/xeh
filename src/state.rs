@@ -1937,6 +1937,7 @@ fn build_let_in(xs: &mut State, lf: &mut LetFlow) -> Xresult {
             Tok::Word(name) if name == "[" => {
                 build_let_item(xs, lf, item.take(), tagged.take())?;
                 lf.vec_pos.push(0);
+                lf.has_items = true;
                 item = Some(LetItem::Skip);
             }
             Tok::Word(name) if name == "]" => {
@@ -3551,6 +3552,7 @@ mod tests {
     #[test]
     fn test_let_vec() {
         let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " [ ] let [ ] in depth 0 assert-eq");
         eval_ok!(xs, " [ 10 20 ] let [ a b ] in
             depth 0 assert-eq
             a 10 assert-eq
