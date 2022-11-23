@@ -65,6 +65,12 @@ pub enum Xerr {
     Exit(isize),
 }
 
+pub(crate) const ASSERT_MSG: Cell = Cell::Str(xstr_literal!("assert.msg"));
+
+fn assert_get_msg(a: &Cell) -> Option<&str> {
+    a.get_tagged(&ASSERT_MSG)?.str().ok()
+}
+
 impl fmt::Display for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -98,9 +104,10 @@ impl fmt::Display for Xerr {
             Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
             Xerr::AssertFailed => f.write_str("assertion failed: false"),
             Xerr::AssertEqFailed { a, b } => {
-                writeln!(f, "assertion failed: b a <>")?;
-                writeln!(f, "a: {:?}", a)?;
-                write!(f, "b: {:?}", b)
+                let msg = assert_get_msg(&a).or_else(|| assert_get_msg(&b));
+                writeln!(f, "assertion failed: {}", msg.unwrap_or("not equals"))?;
+                writeln!(f, "{:?}", a)?;
+                write!(f, "{:?}", b)
             }
             Xerr::InternalError => f.write_str("InternalError"),
             Xerr::ToBytestrError { .. } => f.write_str("bytestr need to be divisible by 8"),
@@ -285,3 +292,18 @@ pub type Xresult = Xresult1<()>;
 pub type Xresult1<T> = Result<T, Xerr>;
 
 pub const OK: Xresult = Ok(());
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cell::Cell;
+    
+    #[test]
+    fn test_assert_eq() {
+        let msg = Xstr::from(xstr_literal!("test1"));
+        let a = ONE.set_tagged(ASSERT_MSG, Cell::Str(msg)).unwrap();
+        let err = Xerr::AssertEqFailed { a , b: ZERO};
+        assert_eq!("assertion failed: test1\n1\n0", format!("{}", err));
+    }
+    
+}

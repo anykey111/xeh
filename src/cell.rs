@@ -473,6 +473,12 @@ impl From<&str> for Cell {
     }
 }
 
+impl From<Xstr> for Cell {
+    fn from(x: Xstr) -> Self {
+        Cell::Str(x)
+    }
+}
+
 impl From<String> for Cell {
     fn from(x: String) -> Self {
         Cell::Str(Xstr::from(x))

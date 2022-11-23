@@ -1809,29 +1809,32 @@ fn build_let_match(xs: &mut State, lf: &mut LetFlow, val: Cell) -> Xresult {
 }
 
 fn build_let_match_vec_len(xs: &mut State, lf: &mut LetFlow, len: usize) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_len)))?;
-    xs.code_emit_value(Cell::from(len))?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(let_item_len)))?;
+    let msg = xstr_literal!("vector length mismatch");
+    let tagged_len = Cell::from(len).set_tagged(ASSERT_MSG, Cell::from(msg))?;
+    xs.code_emit_value(tagged_len)?;
     lf.matches.push(xs.code_origin());
     xs.code_emit(Opcode::Nop)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(let_test_vec_len)))
+    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
+}
+
+fn let_item_len(xs: &mut State) -> Xresult {
+    let n = xs.pop_data()?.vec()?.len();
+    xs.push_data(Cell::from(n))
+}
+
+fn let_item_at(xs: &mut State) -> Xresult {
+    let index = xs.pop_data()?.to_isize()?;
+    let v = xs.top_data()?.vec()?;
+    let x = vector_get(v, index)?.clone();
+    xs.push_data(x)
 }
 
 fn let_take_rest(xs: &mut State) -> Xresult {
     let n = xs.pop_data()?.to_usize()?;
-    let v = xs.top_data()?.vec()?;
+        let v = xs.top_data()?.vec()?;
     let new_vec: Xvec = v.iter().skip(n).cloned().collect();
     xs.push_data(Cell::from(new_vec))
-}
-
-fn let_test_vec_len(xs: &mut State) -> Xresult {
-    let nconsumed = xs.pop_data()?.to_usize()?;
-    let len = xs.pop_data()?.to_usize()?;
-    if nconsumed < len {
-        let msg = Xstr::from(format!("vector has {} more items remain", len - nconsumed));
-        Err(Xerr::ErrorMsg(msg))
-    } else {
-        OK
-    }
 }
 
 fn build_let_consume(xs: &mut State, lf: &mut LetFlow) -> Xresult {
@@ -1841,7 +1844,7 @@ fn build_let_consume(xs: &mut State, lf: &mut LetFlow) -> Xresult {
             return Err(Xerr::ErrorMsg(msg));
         }
         xs.code_emit_value(Cell::from(*idx))?;
-        xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_vec_at)))?;
+        xs.code_emit(Opcode::NativeCall(XfnPtr(let_item_at)))?;
         *idx += 1;
     }
     OK
@@ -2190,18 +2193,6 @@ fn core_word_length(xs: &mut State) -> Xresult {
         Cell::Bitstr(bs) => xs.push_data(Cell::from(bs.len())),
         val => Err(Xerr::type_not_supported(val.clone())),
     }
-}
-
-fn core_word_vec_len(xs: &mut State) -> Xresult {
-    let len = xs.pop_data()?.vec()?.len();
-    xs.push_data(Cell::from(len))
-}
-
-fn core_word_vec_at(xs: &mut State) -> Xresult {
-    let index = xs.pop_data()?.to_isize()?;
-    let v = xs.top_data()?.vec()?;
-    let x = vector_get(&v, index)?.clone();
-    xs.push_data(x)
 }
 
 fn vector_relative_index(len: usize, index: isize) -> Xresult1<usize> {
