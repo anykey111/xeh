@@ -2391,7 +2391,7 @@ fn core_word_str_split(xs: &mut State) -> Xresult {
     let at = xs.pop_data()?.to_isize()?;
     let s = xs.pop_data()?.to_xstr()?;
     let i = vector_relative_index(s.len(), at)?;
-    if i >= s.len() {
+    if i > s.len() {
         return Err(Xerr::OutOfBounds(i));
     }
     let (head, rest) = s.split_at(i);
@@ -2885,10 +2885,11 @@ mod tests {
     #[test]
     fn test_str_split() {
         let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "\"x\" 1 str-split \"x\" assert-eq \"\" assert-eq");
         eval_ok!(xs, "\"ab\" 1 str-split \"a\" assert-eq \"b\" assert-eq");
         eval_ok!(xs, "\"ab\" 0 str-split \"\" assert-eq \"ab\" assert-eq");
         eval_ok!(xs, "\"abc\" -1 str-split \"ab\" assert-eq \"c\" assert-eq");
-        assert_eq!(Err(Xerr::OutOfBounds(2)), xs.eval("\"cc\" 2 str-split"));
+        assert_eq!(Err(Xerr::OutOfBounds(3)), xs.eval("\"cc\" 3 str-split"));
     }
 
     #[test]
