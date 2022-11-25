@@ -779,15 +779,10 @@ impl State {
 
     fn dict_insert(&mut self, name: &str, entry: Entry) -> Xresult1<usize> {
         let wa = self.dict.len();
-        let help = if self.ctx.mode == ContextMode::MetaEval {
-            CellRef::default()
-        } else {
-            self.defvar_anonymous(NIL)?
-        };
         self.dict.push(DictEntry {
             name: Xstr::from(name),
             entry,
-            help,
+            help: CellRef::default(),
         });
         Ok(wa)
     }
@@ -798,6 +793,10 @@ impl State {
 
     fn dict_key(&self, name: &str) -> Option<&DictEntry> {
         self.dict.iter().rfind(|x| x.name == name)
+    }
+
+    fn dict_mut(&mut self, name: &str) -> Option<&mut DictEntry> {
+        self.dict.iter_mut().rfind(|x| x.name == name)
     }
 
     fn code_origin(&self) -> usize {
@@ -945,8 +944,8 @@ impl State {
                 return Err(Xerr::ErrorMsg(Xstr::from(msg)));
             }
         }
-            OK
-        }
+        OK
+    }
 
     pub fn set_heap_limit(&mut self, limit: Option<usize>) -> Xresult {
         self.heap_limit = limit;
@@ -983,7 +982,7 @@ impl State {
         }
         OK
     }
-
+    
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
         self.insn_meter_increase()?;
@@ -2201,11 +2200,17 @@ fn core_word_doc(xs: &mut State) -> Xresult {
     let help = xs.pop_data()?;
     let _testtype = help.str()?;
     let name = name.to_xstr()?;
-    let cref = xs
+    let mut cref = xs
         .dict_key(&name)
-        .ok_or_else(|| Xerr::UnknownWord(name))?
+        .ok_or_else(|| Xerr::UnknownWord(name.clone()))?
         .help;
-    xs.set_var(cref, help)
+    if cref == CellRef::default() {
+        cref = xs.alloc_cell(help)?;
+        xs.dict_mut(&name).unwrap().help = cref;
+        OK
+    } else {
+        xs.set_var(cref, help)
+    }
 }
 
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
