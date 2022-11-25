@@ -146,8 +146,10 @@ pub struct State {
     special: Vec<Special>,
     ctx: Context,
     nested: Vec<Context>,
-    counter: usize,
-    counter_limit: usize,
+    insn_meter: usize,
+    insn_limit: Option<usize>,
+    heap_limit: Option<usize>,
+    stack_limit: Option<usize>,
     // expose for rrlog debug
     pub reverse_log: Option<Vec<ReverseStep>>,
     stdout: Option<String>,
@@ -875,6 +877,8 @@ impl State {
         if self.ctx.mode == ContextMode::MetaEval {
             return Err(Xerr::const_context());
         }
+        #[cfg(feature = "calc_limit")]
+        self.check_heap_limit()?;
         let idx = self.heap.len();
         self.heap.push(val);
         Ok(CellRef::from_index(idx))
@@ -917,35 +921,72 @@ impl State {
         }
     }
 
-    pub fn set_calc_limit(&mut self, insn_limit: usize) -> Xresult {
-        self.counter = 0;
-        self.counter_limit = insn_limit;
+    pub fn check_calc_limit_enabled(&self) -> Xresult {
+        #[cfg(feature = "calc_limit")]
+        { OK }
         #[cfg(not(feature = "calc_limit"))]
         {
-            let msg =  xstr_literal!("calc_limit feature disabled");
-            Err(Xerr::ErrorMsg(msg))
-        }
-        #[cfg(feature = "calc_limit")]
-        {
-            OK
+            let msg = xstr_literal!("calc_limit feature disabled, check your project settings");
+            Err(Xerr::ErrorMsg(e));
         }
     }
 
-    fn increase_counter(&mut self) -> Xresult {
+    pub fn set_stack_limit(&mut self, limit: Option<usize>) -> Xresult {
+        self.stack_limit = limit;
+        self.check_calc_limit_enabled()
+    }
+
+    fn check_stack_limit(&mut self) -> Xresult {
         #[cfg(feature = "calc_limit")]
         {
-            self.counter += 1;
-            if self.counter == self.counter_limit {
-                let msg =  xstr_literal!("Calculation limit reached");
-                return Err(Xerr::ErrorMsg(msg));
+            let limit = self.stack_limit.unwrap_or(usize::MAX);
+            if self.data_stack.len() >= limit {
+                let msg = format!("stack limit reached: {}", limit);
+                return Err(Xerr::ErrorMsg(Xstr::from(msg)));
             }
+        }
+            OK
+        }
+
+    pub fn set_heap_limit(&mut self, limit: Option<usize>) -> Xresult {
+        self.heap_limit = limit;
+        self.check_calc_limit_enabled()
+    }
+
+    fn check_heap_limit(&mut self) -> Xresult {
+        #[cfg(feature = "calc_limit")]
+        {
+            let limit = self.heap_limit.unwrap_or(usize::MAX);
+            if self.heap.len() >= limit {
+                let msg = format!("heap limit reached: {} of {}", self.heap.len(), limit);
+                return Err(Xerr::ErrorMsg(Xstr::from(msg)));
+            }
+        }
+        OK
+    }
+
+    pub fn set_insn_limit(&mut self, limit: Option<usize>) -> Xresult {
+        self.insn_meter = 0;
+        self.insn_limit = limit;
+        self.check_calc_limit_enabled()
+    }
+
+    fn insn_meter_increase(&mut self) -> Xresult {
+        #[cfg(feature = "calc_limit")]
+        {
+            let limit = self.insn_limit.unwrap_or(usize::MAX);
+            if self.insn_meter >= limit {
+                let msg = format!("insn limit reached: {}", limit);
+                return Err(Xerr::ErrorMsg(Xstr::from(msg)));
+            }
+            self.insn_meter += 1;
         }
         OK
     }
 
     fn fetch_and_run(&mut self) -> Xresult {
         let ip = self.ip();
-        self.increase_counter()?;
+        self.insn_meter_increase()?;
         match &self.code[ip] {
             Opcode::Nop => {
                 self.next_ip();
@@ -1303,6 +1344,8 @@ impl State {
     }
 
     pub fn push_data(&mut self, data: Cell) -> Xresult {
+        #[cfg(feature = "calc_limit")]
+        self.check_stack_limit()?;
         if self.is_recording() {
             self.add_reverse_step(ReverseStep::PopData);
         }
@@ -3492,10 +3535,25 @@ mod tests {
     }
 
     #[test]
-    fn test_calc_limit() {
+    fn test_resource_limit() {
         let mut xs = State::boot().unwrap();
-        xs.set_calc_limit(4).unwrap();
-        assert_ne!(OK, xs.eval("1 2 3 4"));
+        xs.set_insn_limit(Some(4)).unwrap();
+        assert_eq!(OK, xs.eval("1 2 3 4"));
+        assert_ne!(OK, xs.eval("5"));
+        let mut xs = State::boot().unwrap();
+        xs.set_stack_limit(Some(2)).unwrap();
+        assert_eq!(OK, xs.eval("1"));
+        assert_eq!(OK, xs.eval("2"));
+        assert_ne!(OK, xs.eval("3"));
+        let mut xs = State::boot().unwrap();
+        let heap_limit = 300;
+        xs.set_heap_limit(Some(heap_limit)).unwrap();
+        let n = xs.heap.len();
+        assert!(n < heap_limit);
+        for _ in n..heap_limit {
+            assert!(xs.alloc_cell(ONE).is_ok());
+        }
+        assert!(xs.alloc_cell(ONE).is_err());
     }
 
     #[test]
