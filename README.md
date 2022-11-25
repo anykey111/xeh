@@ -1,15 +1,14 @@
 # The HEX Programming Language
 
 XEH is a dynamic, stack-oriented programming language designed for the interactive coding. Main language domain is binary data parsing.
-Its look like FORTH, but its not. XEH doesn't provide low-level memory access, uses immutable data structures and reference-counted garbage collector.
+Its look like FORTH, but its not. XEH uses immutable data structures and reference-counting garbage collector.
 
 Features:
 
-* Builtin debugger with reverse step option.
-* Whole program state snapshot and rollback.
-* Immutable REPL, evaluate result without commiting changes to the program state until you like it.
-* Simple meta-programming, everyting might be evaluated at compile time if it doesn't try to modify runtime state.
-* Data tagging, stick attribute to any value, even integer maybe tagged.
+* Builtin reverse debugger.
+* Trial and error REPL mode, preview result of the evaluation without commiting the changes.
+* Runtime compilation and compile-time evaluation.
+* Tagging, arbitrary annotation of data.
 
 Try online:
 [XEH Playground](https://anykey111.github.io/)
