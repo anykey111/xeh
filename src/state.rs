@@ -220,13 +220,13 @@ impl State {
             }
             Opcode::Resolve(name) => format!("resolve    {:?}", &name),
             Opcode::Ret => format!("ret"),
-            Opcode::JumpIf(rel) => format!("jumpif     #{:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::JumpIfNot(rel) => format!("jumpifnot  {:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::Jump(rel) => format!("jump       {:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::CaseOf(rel) => format!("caseof     {:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::Do(rel) => format!("do         {:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::Loop(rel) => format!("loop       {:#05x}", rel.calculate_unsafe(ip)),
-            Opcode::Break(rel) => format!("break      {:#05x}", rel.calculate_unsafe(ip)),
+            Opcode::JumpIf(rel) => format!("jumpif     #{:#05x}", rel.calculate(ip)),
+            Opcode::JumpIfNot(rel) => format!("jumpifnot  {:#05x}", rel.calculate(ip)),
+            Opcode::Jump(rel) => format!("jump       {:#05x}", rel.calculate(ip)),
+            Opcode::CaseOf(rel) => format!("caseof     {:#05x}", rel.calculate(ip)),
+            Opcode::Do(rel) => format!("do         {:#05x}", rel.calculate(ip)),
+            Opcode::Loop(rel) => format!("loop       {:#05x}", rel.calculate(ip)),
+            Opcode::Break(rel) => format!("break      {:#05x}", rel.calculate(ip)),
             Opcode::Load(a) => format!("load       {}", a.index()),
             Opcode::LoadI64(i) => format!("loadi64    {}", i),
             Opcode::LoadF64(i) => format!("loadf64    {}", i),
@@ -951,11 +951,11 @@ impl State {
                 self.next_ip();
             }
             Opcode::Jump(rel) => {
-                let new_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 self.set_ip(new_ip);
             }
             Opcode::JumpIf(rel) => {
-                let new_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 if self.pop_data()?.cond_true()? {
                     self.set_ip(new_ip);
                 } else {
@@ -963,7 +963,7 @@ impl State {
                 }
             }
             Opcode::JumpIfNot(rel) => {
-                let new_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 if !self.pop_data()?.cond_true()? {
                     self.set_ip(new_ip);
                 } else {
@@ -971,7 +971,7 @@ impl State {
                 }
             }
             Opcode::CaseOf(rel) => {
-                let new_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 let a = self.pop_data()?;
                 let b = self.top_data()?;
                 if &a == b {
@@ -1086,24 +1086,24 @@ impl State {
                 self.next_ip();
             }
             Opcode::Do(rel) => {
-                let done_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 let l = do_init(self)?;
                 if l.range.is_empty() {
-                    self.set_ip(done_ip);
+                    self.set_ip(new_ip);
                 } else {
                     self.push_loop(l)?;
                     self.next_ip();
                 }
             }
             Opcode::Break(rel) => {
-                let break_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 self.pop_loop()?;
-                self.set_ip(break_ip);
+                self.set_ip(new_ip);
             }
             Opcode::Loop(ref rel) => {
-                let done_ip = rel.calculate(ip)?;
+                let new_ip = rel.calculate(ip);
                 if self.loop_next()? {
-                    self.set_ip(done_ip);
+                    self.set_ip(new_ip);
                 } else {
                     self.pop_loop()?;
                     self.next_ip();
