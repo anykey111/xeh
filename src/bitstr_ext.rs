@@ -58,6 +58,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("dump-at", word_dump_at)?;
     xs.defword("bits", word_bitstr)?;
     xs.defword("bytes", word_bytes)?;
+    xs.defword("bitstr-len", bitstr_len)?;
     xs.defword("bitstr-append", bitstring_append)?;
     xs.defword("bitstr-not", word_bitstr_not)?;
     xs.defword("bitstr-and", bitstring_and)?;
@@ -195,6 +196,11 @@ fn move_offset_checked(xs: &mut Xstate, pos: usize) -> Xresult {
             offset: pos,
         })
     }
+}
+
+fn bitstr_len(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.bitstr()?.len();
+    xs.push_data(Cell::from(n))
 }
 
 fn word_in_bytes(xs: &mut Xstate) -> Xresult {
