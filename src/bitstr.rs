@@ -352,6 +352,10 @@ impl Bitstr {
         }
     }
 
+    pub fn bits_range(&self) -> BitstrRange {
+        self.range.clone()
+    }
+
     pub fn bytes_range(&self) -> BitstrRange {
         let i = self.range.start / 8;
         let e = upper_bound_index(self.range.end);

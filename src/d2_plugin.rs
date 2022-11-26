@@ -74,12 +74,13 @@ fn data_set(xs: &mut Xstate) -> Xresult {
     let x = xs.pop_data()?.to_usize()?;
     let index = y * d2.width + x;
     let color = if let Some(pal) = &d2.pal {
-        *pal.get(d2.color as usize)
-            .ok_or(Xerr::OutOfBounds(d2.color as usize))?
+        let pal_idx = d2.color as usize;
+        *pal.get(pal_idx).ok_or(Xerr::out_of_bounds(pal_idx, pal.len()))?
     } else {
         d2.color
     };
-    let p = d2.data.get_mut(index).ok_or(Xerr::OutOfBounds(index))?;
+    let d2_len = d2.data.len();
+    let p = d2.data.get_mut(index).ok_or(Xerr::out_of_bounds(index, d2_len))?;
     *p = color;
     OK
 }

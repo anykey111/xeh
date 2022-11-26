@@ -1,6 +1,7 @@
 use crate::cell::*;
 use crate::state::Flow;
 
+use std::ops::Range;
 use std::fmt;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -36,7 +37,10 @@ pub enum Xerr {
         filename: Xstr,
         reason: Xstr,
     },
-    OutOfBounds(usize),
+    OutOfBounds {
+        index: Xint,
+        range: Range<usize>,
+    },
     AssertFailed,
     AssertEqFailed {
         a: Cell,
@@ -101,7 +105,8 @@ impl fmt::Display for Xerr {
             Xerr::ExpectingLiteral => f.write_str("expecting literal value"),
             Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
-            Xerr::OutOfBounds(index) => write!(f, "index {} out of bounds", index),
+            Xerr::OutOfBounds { index, range } =>
+                write!(f, "index {} out of bounds {:?}", index, range),
             Xerr::AssertFailed => f.write_str("assertion failed: false"),
             Xerr::AssertEqFailed { a, b } => {
                 let msg = assert_get_msg(&a).or_else(|| assert_get_msg(&b));
@@ -281,6 +286,24 @@ impl Xerr {
         Xerr::ErrorMsg(xstr_literal!(
             "the meta-eval context can operate only with const variables"
         ))
+    }
+
+    pub(crate) fn out_of_bounds(idx: usize, len: usize) -> Xerr {
+        Xerr::OutOfBounds {
+            index: idx as Xint,
+            range: 0..len
+        }
+    }
+
+    pub(crate) fn out_of_bounds_rel(ridx: isize, len: usize) -> Xerr {
+        Xerr::OutOfBounds {
+            index: ridx as Xint,
+            range: 0..len
+        }
+    }
+
+    pub(crate) fn out_of_range(idx: usize, range: Range<usize>) -> Xerr {
+        Xerr::OutOfBounds { index: idx as Xint, range }
     }
 
     pub (crate) fn type_not_supported(val: Cell) -> Xerr {

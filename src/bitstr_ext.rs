@@ -235,7 +235,7 @@ fn dump_bitstr_at(xs: &mut Xstate, start: usize, ncols: usize) -> Xresult {
     let end = s.end().min(start + 16 * ncols * 8);
     let ss = s
         .substr(start, end)
-        .ok_or_else(|| Xerr::OutOfBounds(start))?;
+        .ok_or_else(|| Xerr::out_of_range(start, s.bits_range()))?;
     dump_bitstr(xs, &ss, ncols)
 }
 
@@ -312,7 +312,7 @@ fn word_open_input(xs: &mut Xstate) -> Xresult {
 
 fn word_close_input(xs: &mut Xstate) -> Xresult {
     let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
-    let last = stash.last().ok_or_else(|| Xerr::OutOfBounds(0))?;
+    let last = stash.last().ok_or_else(|| Xerr::out_of_bounds(0, stash.len()))?;
     let offset = last.tag().unwrap_or(&ZERO).clone();
     let input = last.value().clone();
     let stash = stash.drop_last().unwrap();
@@ -527,7 +527,7 @@ fn word_bytes(xs: &mut Xstate) -> Xresult {
 fn rest_bits(xs: &mut Xstate) -> Xresult1<Xbitstr> {
     let rest = xs.get_var(xs.bitstr_mod.input)?.bitstr()?.clone();
     let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
-    rest.seek(start).ok_or_else(|| Xerr::OutOfBounds(start))
+    rest.seek(start).ok_or_else(|| Xerr::out_of_range(start, rest.bits_range()))
 }
 
 fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
@@ -612,7 +612,7 @@ fn bitstr_real_tag(bs: Bitstr, bo: Byteorder) -> Cell {
 fn nulbytestr_read(xs: &mut Xstate) -> Xresult1<Bitstr> {
     let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
     let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
-    let ss = s.seek(start).ok_or_else(|| Xerr::OutOfBounds(start))?;
+    let ss = s.seek(start).ok_or_else(|| Xerr::out_of_range(start, s.bits_range()))?;
     if !ss.is_bytestr() {
         return Err(Xerr::ToBytestrError(ss));
     }
@@ -624,7 +624,7 @@ fn nulbytestr_read(xs: &mut Xstate) -> Xresult1<Bitstr> {
         }
     }
     let end = start + len;
-    s.substr(start, end).ok_or_else(|| Xerr::OutOfBounds(end))
+    s.substr(start, end).ok_or_else(|| Xerr::out_of_range(end, ss.bits_range()))
 }
 
 fn nulbytestr_word(xs: &mut Xstate) -> Xresult {
@@ -824,7 +824,7 @@ mod tests {
     fn test_bitstr_open() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval(include_str!("test-data/test-binary-input.xeh")).unwrap();
-        assert_eq!(Err(Xerr::OutOfBounds(0)), xs.eval("close-input"));
+        assert_eq!(Err(Xerr::out_of_bounds(0, 0)), xs.eval("close-input"));
     }
     
     #[test]

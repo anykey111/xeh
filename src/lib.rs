@@ -6,6 +6,7 @@ macro_rules! xstr_literal {
 }
 
 mod arith;
+mod range;
 pub mod bitstr;
 pub mod bitstr_ext;
 pub mod cell;

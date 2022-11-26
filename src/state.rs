@@ -598,6 +598,7 @@ impl State {
 
     pub fn boot() -> Xresult1<State> {
         let mut xs = Self::core()?;
+        crate::range::load(&mut xs)?;
         crate::bitstr_ext::load(&mut xs)?;
         Ok(xs)
     }
@@ -755,7 +756,7 @@ impl State {
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
         self.defword("str>number", core_word_str_to_num)?;
-        self.defword("str-split", core_word_str_split)?;
+        self.defword("str-slice", core_word_str_slice)?;
         self.def_immediate("include", core_word_include)?;
         self.def_immediate("require", core_word_require)?;
         self.defword("tag-of", core_word_tag_of)?;
@@ -2244,22 +2245,26 @@ fn core_word_length(xs: &mut State) -> Xresult {
     }
 }
 
-fn vector_relative_index(len: usize, index: isize) -> Xresult1<usize> {
-    if index >= 0 {
-        Ok(index as usize)
-    } else {
-        let rel_index = index.abs() as usize;
-        if rel_index > len {
-            Ok(len - (rel_index % len))
+fn relative_index(len: usize, index: isize) -> Option<usize> {
+    if index < 0 {
+        let ridx = index.abs() as usize;
+        if ridx > len {
+            None
         } else {
-            Ok(len- rel_index)
+            Some(len - ridx)
         }
+    } else if (index as usize) < len {
+        Some(index as usize)
+    } else {
+        None
     }
 }
 
-fn vector_get<'a>(v: &'a Xvec, index: isize) -> Xresult1<&'a Cell> {
-    let new_index = vector_relative_index(v.len(), index)?;
-    v.get(new_index).ok_or_else(|| Xerr::OutOfBounds(new_index))
+fn vector_get<'a>(v: &'a Xvec, ridx: isize) -> Xresult1<&'a Cell> {
+    let abs_idx = relative_index(v.len(), ridx)
+        .ok_or_else(|| Xerr::out_of_bounds_rel(ridx, v.len()))?;
+    v.get(abs_idx)
+        .ok_or_else(|| Xerr::out_of_bounds(abs_idx, v.len()))
 }
 
 fn core_word_get(xs: &mut State) -> Xresult {
@@ -2435,16 +2440,34 @@ fn core_word_str_to_num(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_str_split(xs: &mut State) -> Xresult {
-    let at = xs.pop_data()?.to_isize()?;
-    let s = xs.pop_data()?.to_xstr()?;
-    let i = vector_relative_index(s.len(), at)?;
-    if i > s.len() {
-        return Err(Xerr::OutOfBounds(i));
+fn slicing_index(idx: isize, len: usize) -> usize {
+    if idx < 0 {
+        let ridx = idx.abs() as usize;
+        len - ridx.min(len)
+    } else {
+        (idx as usize).min(len)
+   }
+}
+
+fn core_word_str_slice(xs: &mut State) -> Xresult {
+    let doto = xs.pop_data()?;
+    let range = crate::range::parse_do_to(&doto)?.range();
+    let xstr = xs.pop_data()?.to_xstr()?;
+    let slen = xstr.chars().count();
+    let e = slicing_index(range.end, slen);
+    let mut i = slicing_index(range.start, slen);
+    let mut acc = String::new();
+    let mut it = xstr.chars().skip(i);
+    println!("i={:?} e={:?}", i, e);
+    while i < e {
+        if let Some(c) = it.next() {
+            acc.push(c);
+        } else {
+            break;
+        }
+        i += 1;
     }
-    let (head, rest) = s.split_at(i);
-    xs.push_data(Cell::from(rest))?;
-    xs.push_data(Cell::from(head))
+    xs.push_data(Cell::from(acc))
 }
 
 fn current_fmt_flags(xs: &mut State) -> Xresult1<FmtFlags> {
@@ -2501,7 +2524,7 @@ fn core_word_see(xs: &mut State) -> Xresult {
             }
             let end = p + n;
             if end > xs.code.len() {
-                return Err(Xerr::OutOfBounds(end));
+                return Err(Xerr::out_of_bounds(end, xs.code.len()));
             }
             for i in *p..end {
                 writeln!(buf, "{:05X}: {}", i, &xs.fmt_opcode(i, &xs.code[i])).unwrap();
@@ -2915,7 +2938,7 @@ mod tests {
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
         xs.eval("[ 11 22 33 ] -2 get").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::OutOfBounds(100)), xs.eval("[ 1 2 3 ] 100 get"));
+        assert_eq!(Err(Xerr::out_of_range(100, 0..3)), xs.eval("[ 1 2 3 ] 100 get"));
     }
 
     #[test]
@@ -2925,19 +2948,39 @@ mod tests {
         assert_eq!(Cell::from(2isize), xs.pop_data().unwrap());
         eval_ok!(xs, "[ 1 2 3 ] -1 get");
         assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
-        eval_ok!(xs, "[ 1 2 3 ] -4 get");
-        assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
+        assert_eq!(Err(Xerr::out_of_bounds_rel(-4, 3)), xs.eval("[ 1 2 3 ] -4 get"));
         assert_ne!(OK, xs.eval("[ 1 ] \"0\" get"));
     }
 
     #[test]
-    fn test_str_split() {
+    fn test_str_slice() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "\"x\" 1 str-split \"x\" assert-eq \"\" assert-eq");
-        eval_ok!(xs, "\"ab\" 1 str-split \"a\" assert-eq \"b\" assert-eq");
-        eval_ok!(xs, "\"ab\" 0 str-split \"\" assert-eq \"ab\" assert-eq");
-        eval_ok!(xs, "\"abc\" -1 str-split \"ab\" assert-eq \"c\" assert-eq");
-        assert_eq!(Err(Xerr::OutOfBounds(3)), xs.eval("\"cc\" 3 str-split"));
+        eval_ok!(xs, "
+            \"asf\" 0  str-slice \"\" assert-eq
+            \"asf\" 1  str-slice \"a\" assert-eq
+            \"asf\" 2  str-slice \"as\" assert-eq
+            \"asf\" 3  str-slice \"asf\" assert-eq
+            \"asf\" 4  str-slice \"asf\" assert-eq
+            \"asf\" -1 str-slice \"as\" assert-eq
+            \"asf\" -2 str-slice \"a\" assert-eq
+            \"asf\" -3 str-slice \"\" assert-eq
+            \"asf\" -4 str-slice \"\" assert-eq
+        ");
+    }
+
+    #[test]
+    fn test_str_slice_range() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs,"
+            \"asf\"  2  1 range str-slice \"s\" assert-eq
+            \"asf\" -1 -2 range str-slice \"s\" assert-eq
+            \"asf\" -2 -1 range str-slice \"\" assert-eq
+            \"asf\"  0 range-from str-slice \"asf\" assert-eq
+            \"asf\" -1 range-from str-slice \"f\" assert-eq
+            \"asf\" -2 range-from str-slice \"sf\" assert-eq
+            \"asf\" -3 range-from str-slice \"asf\" assert-eq
+            \"asf\" -4 range-from str-slice \"asf\" assert-eq
+        ");
     }
 
     #[test]
@@ -3018,7 +3061,7 @@ mod tests {
     fn test_immediate() {
         let mut xs = State::boot().unwrap();
         let res = xs.compile(": f [ ] 0 get immediate ; f");
-        assert_eq!(Err(Xerr::OutOfBounds(0)), res);
+        assert_eq!(Err(Xerr::out_of_range(0, 0..0)), res);
     }
 
     #[test]
@@ -3480,7 +3523,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         xs.eval(": test3 0 get ;").unwrap();
         let res = xs.eval("[ ] test3");
-        assert_eq!(Err(Xerr::OutOfBounds(0)), res);
+        assert_eq!(Err(Xerr::out_of_range(0, 0..0)), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
             concat!("<buffer#0>:1:11\n", ": test3 0 get ;\n", "----------^")
