@@ -1654,6 +1654,18 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
 }
 
 fn core_word_leave(xs: &mut State) -> Xresult {
+    let has_loops = xs.flow_stack[xs.ctx.fs_len..]
+            .iter()
+            .rev()
+            .any(|x|
+        match x {
+            Flow::Begin{..} | Flow::While{..} | Flow::Do {..} => true,
+            _ => false,
+        }
+    );
+    if !has_loops {
+        return Err(Xerr::unbalanced_leave());
+    }
     let org = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
     xs.push_flow(Flow::Leave(org))
@@ -1760,7 +1772,8 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             }
             xs.backpatch_jump(start, offs)
         }
-        _ => Err(Xerr::unbalanced_fn_builder()),
+        None => Err(Xerr::unbalanced_fn_builder()),
+        other => Xerr::control_flow_error(other.as_ref()),
     }
 }
 
@@ -2857,7 +2870,11 @@ mod tests {
             xs.eval("begin until repeat")
         );
         assert_eq!(
-            xs.eval(": stop? leave ; begin stop? repeat"),
+            Err(Xerr::unbalanced_leave()),
+            xs.eval(": f leave ; ")
+        );
+        assert_eq!(
+            xs.eval(": f2 ; ;"),
             Err(Xerr::unbalanced_fn_builder())
         );
     }
