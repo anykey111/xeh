@@ -756,6 +756,7 @@ impl State {
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
         self.defword("str>number", core_word_str_to_num)?;
+        self.defword("str-split-at", core_word_str_split_at)?;
         self.defword("str-slice", core_word_str_slice)?;
         self.def_immediate("include", core_word_include)?;
         self.def_immediate("require", core_word_require)?;
@@ -2449,16 +2450,12 @@ fn slicing_index(idx: isize, len: usize) -> usize {
    }
 }
 
-fn core_word_str_slice(xs: &mut State) -> Xresult {
-    let doto = xs.pop_data()?;
-    let range = crate::range::parse_do_to(&doto)?.range();
-    let xstr = xs.pop_data()?.to_xstr()?;
-    let slen = xstr.chars().count();
+fn slice_str(s: &Xstr, range: Range<isize>) -> String {
+    let slen = s.chars().count();
     let e = slicing_index(range.end, slen);
     let mut i = slicing_index(range.start, slen);
     let mut acc = String::new();
-    let mut it = xstr.chars().skip(i);
-    println!("i={:?} e={:?}", i, e);
+    let mut it = s.chars().skip(i);
     while i < e {
         if let Some(c) = it.next() {
             acc.push(c);
@@ -2467,7 +2464,24 @@ fn core_word_str_slice(xs: &mut State) -> Xresult {
         }
         i += 1;
     }
-    xs.push_data(Cell::from(acc))
+    acc
+}
+
+fn core_word_str_slice(xs: &mut State) -> Xresult {
+    let doto = xs.pop_data()?;
+    let range = crate::range::parse_do_to(&doto)?.range();
+    let xstr = xs.pop_data()?.to_xstr()?;
+    let slice = slice_str(&xstr, range);
+    xs.push_data(Cell::from(slice))
+}
+
+fn core_word_str_split_at(xs: &mut State) -> Xresult {
+    let at = xs.pop_data()?.to_isize()?;
+    let s = xs.pop_data()?.to_xstr()?;
+    let head = slice_str(&s, 0..at);
+    let tail = slice_str(&s, at..isize::MAX);
+    xs.push_data(Cell::from(tail))?;
+    xs.push_data(Cell::from(head))
 }
 
 fn current_fmt_flags(xs: &mut State) -> Xresult1<FmtFlags> {

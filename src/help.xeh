@@ -529,11 +529,18 @@ Deffer word resolution to runtime."
 "Split string into head and tail at given index."
 .[ doc-for-core "str int -- str str" stack-comment
     "# split at index 1
-    \"hello\" 1 str-split # result \"h\" \"ello\"
+    \"hello\" 1 str-split-at # result \"h\" \"ello\"
     # split from the tail
-    \"hello\" -1 str-split # result \"hell\" \"o\"
-    "
-] "str-split" doc!
+    \"hello\" -1 str-split-at # result \"hell\" \"o\"
+    " doc-example
+] "str-split-at" doc!
+
+"Slice string till index."
+.[ doc-for-core "str int -- str" stack-comment 
+    "\"abc\" 1 str-slice # result \"a\"
+    \"abc\" -1 str-slice # result \"ab\"
+    \"abc\" 3 . 2 str-slice # result \"c\"" doc-example
+] "str-slice" doc!
 
 "Bit-shift left."
 .[ doc-for-bitwise
