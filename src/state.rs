@@ -186,10 +186,11 @@ impl State {
     }
 
     pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
-        let ref_name = |cr| {
-            match cr {
-                &CellRef::Env(idx) => format!("env.{:#x}", idx),
-                &CellRef::Heap(idx) => format!("heap.{:#x}", idx),
+        let ref_name = |cr: &CellRef| {
+            match cr.index() {
+                CellIdx::Env(idx) => format!("env.{:#x}", idx),
+                CellIdx::Heap(idx) => format!("heap.{:#x}", idx),
+                CellIdx::Uninit => format!("uninitialized"),
             }
         };
         match op {
@@ -871,11 +872,11 @@ impl State {
     }
 
     fn cell_ref(&self, cref: CellRef) -> Xresult1<&Cell> {
-        match cref {
-            CellRef::Env(idx) => self.ctx.env
+        match cref.index() {
+            CellIdx::Env(idx) => self.ctx.env
                 .get(idx)
                 .ok_or_else(|| Xerr::cell_out_of_bounds(cref)),
-            CellRef::Heap(idx) => {
+            CellIdx::Heap(idx) => {
                 if self.ctx.mode == ContextMode::MetaEval {
                     Err(Xerr::const_context())
                 } else {
@@ -883,31 +884,32 @@ impl State {
                         .get(idx)
                         .ok_or_else(|| Xerr::cell_out_of_bounds(cref))
                 }
+            },
+            CellIdx::Uninit => {
+                Err(Xerr::cell_out_of_bounds(cref))
             }
         }
     }
 
     fn swap_cell_ref(&mut self, cref: CellRef, mut val: Cell) -> Xresult {
-        match cref {
-            CellRef::Env(idx) => {
+        match cref.index() {
+            CellIdx::Env(idx) =>
                 std::mem::swap(
                     self.ctx.env
                         .get_mut(idx)
                         .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
-                    &mut val,
-                );
-            }
-            CellRef::Heap(idx) => {
+                    &mut val),
+            CellIdx::Heap(idx) => {
                 if self.ctx.mode == ContextMode::MetaEval {
-                    return Err(Xerr::const_context());
+                    return Err(Xerr::const_context())
                 }
                 std::mem::swap(
                     self.heap
                         .get_mut(idx)
                         .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
-                    &mut val,
-                );
+                    &mut val);
             }
+            CellIdx::Uninit => return Err(Xerr::cell_out_of_bounds(cref)),
         }
         if self.is_recording() {
             self.add_reverse_step(ReverseStep::SwapRef(cref, val));
@@ -923,13 +925,14 @@ impl State {
         self.check_heap_limit()?;
         let idx = self.heap.len();
         self.heap.push(val);
-        Ok(CellRef::Heap(idx))
+        Ok(CellRef::heap_ref(idx))
     }
 
     fn alloc_env(&mut self, val: Cell) -> Xresult1<CellRef> {
         let idx = self.ctx.env.len();
+        let cref = CellRef::env_ref(idx)?;
         self.ctx.env.push(val);
-        Ok(CellRef::Env(idx))
+        Ok(cref)
     }
 
     fn run_immediate(&mut self, x: Xfn) -> Xresult {
@@ -1331,12 +1334,13 @@ impl State {
                 f.locals.pop();
             }
             ReverseStep::SwapRef(cref, val) => {
-                let old_ref = match cref {
-                    CellRef::Env(idx) => self.ctx.env.get_mut(idx)
-                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
-                    CellRef::Heap(idx) => self.heap.get_mut(idx)
-                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
-                };
+                let old_ref = match cref.index() {
+                    CellIdx::Env(idx) => self.ctx.env.get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref)),
+                    CellIdx::Heap(idx) => self.heap.get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref)),
+                    CellIdx::Uninit => Err(Xerr::cell_out_of_bounds(cref)),
+                }?;
                 *old_ref = val;
             }
         }
@@ -2598,15 +2602,13 @@ fn core_word_see(xs: &mut State) -> Xresult {
        } 
         Entry::Constant(_) => buf.push_str("constant\n"),
         Entry::Variable(cref) => {
-            if cref.is_initialized() {
-                match cref {
-                    CellRef::Env(idx) =>
-                        writeln!(buf, "variable, index {}\n", idx).unwrap(),
-                    CellRef::Heap(idx) =>
-                        writeln!(buf, "env variable, index {}\n", idx).unwrap(),
-                }
-            } else {
-                buf.push_str("variable, not initialized\n");
+            match cref.index() {
+                CellIdx::Env(idx) =>
+                    writeln!(buf, "variable, index {}\n", idx).unwrap(),
+                    CellIdx::Heap(idx) =>
+                    writeln!(buf, "env variable, index {}\n", idx).unwrap(),
+                CellIdx::Uninit => 
+                    buf.push_str("variable, not initialized\n"),
             }
         }
     }

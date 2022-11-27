@@ -305,11 +305,13 @@ impl Xerr {
     }
 
     pub(crate) fn cell_out_of_bounds(cref: CellRef) -> Xerr {
-        match cref {
-            CellRef::Env(idx) => 
+        match cref.index() {
+            CellIdx::Env(idx) => 
                 Xerr::ErrorMsg(Xstr::from(format!("env address {:#x} out of bounds", idx))),
-            CellRef::Heap(idx) => 
+            CellIdx::Heap(idx) => 
                 Xerr::ErrorMsg(Xstr::from(format!("heap address {:#x} out of bounds", idx))),
+            CellIdx::Uninit =>
+            Xerr::ErrorMsg(Xstr::from("uninitialized reference")),
         }
     }
 

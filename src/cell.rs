@@ -33,20 +33,50 @@ pub enum Xfn {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum CellRef {
+pub struct CellRef(usize);
+
+#[derive(Debug)]
+pub enum CellIdx {
+    Uninit,
     Heap(usize),
     Env(usize)
 }
 
+const ENV_INDEX_LIMIT: usize = 1000;
+const ENV_INDEX_START: usize = usize::MAX - ENV_INDEX_LIMIT - 1;
+
 impl Default for CellRef {
     fn default() -> Self {
-        Self::Heap(usize::MAX)
+        Self(usize::MAX)
     }
 }
 
 impl CellRef {
     pub fn is_initialized(&self) -> bool {
         self != &Self::default()
+    }
+    
+    pub fn heap_ref(idx: usize) -> CellRef {
+        Self(idx)
+    }
+
+    pub fn env_ref(idx: usize) -> Xresult1<CellRef> {
+        if idx < ENV_INDEX_LIMIT {
+            Ok(Self(idx + ENV_INDEX_START))
+        } else {
+            let s = format!("env variables limit: {}", ENV_INDEX_LIMIT);
+            Err(Xerr::ErrorMsg(Xstr::from(s)))
+        }
+    }
+
+    pub fn index(&self) -> CellIdx {
+        if self.0 < ENV_INDEX_START {
+            CellIdx::Heap(self.0)
+        } else if self.0 == usize::MAX {
+            CellIdx::Uninit
+        } else {
+            CellIdx::Env(self.0 - ENV_INDEX_START)
+        }
     }
 }
 
