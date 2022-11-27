@@ -282,7 +282,7 @@ impl Xerr {
 
     pub(crate) fn const_context() -> Xerr {
         Xerr::ErrorMsg(xstr_literal!(
-            "the meta-eval context can operate only with const variables"
+            "the meta-eval context can operate only with constants"
         ))
     }
 
