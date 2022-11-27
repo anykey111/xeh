@@ -32,7 +32,6 @@ pub enum Xerr {
         msg: Xstr,
     },
     TypeNotSupported { val: Cell },
-    InvalidAddress,
     IOError {
         filename: Xstr,
         reason: Xstr,
@@ -103,7 +102,6 @@ impl fmt::Display for Xerr {
             ),
             Xerr::ExpectingName => f.write_str("expecting a word name"),
             Xerr::ExpectingLiteral => f.write_str("expecting literal value"),
-            Xerr::InvalidAddress => f.write_str("InvalidAddress"),
             Xerr::IOError { filename, reason } => write!(f, "{}: {}", filename, reason),
             Xerr::OutOfBounds { index, range } =>
                 write!(f, "index {} out of bounds {:?}", index, range),
@@ -304,6 +302,23 @@ impl Xerr {
 
     pub(crate) fn out_of_range(idx: usize, range: Range<usize>) -> Xerr {
         Xerr::OutOfBounds { index: idx as Xint, range }
+    }
+
+    pub(crate) fn cell_out_of_bounds(cref: CellRef) -> Xerr {
+        match cref {
+            CellRef::Env(idx) => 
+                Xerr::ErrorMsg(Xstr::from(format!("env address {:#x} out of bounds", idx))),
+            CellRef::Heap(idx) => 
+                Xerr::ErrorMsg(Xstr::from(format!("heap address {:#x} out of bounds", idx))),
+        }
+    }
+
+    pub(crate) fn word_out_of_bounds(idx: usize) -> Xerr {
+        Xerr::ErrorMsg(Xstr::from(format!("word index {:#x} out of bounds", idx)))
+    }
+
+    pub(crate) fn local_out_of_bounds(idx: usize) -> Xerr {
+        Xerr::ErrorMsg(Xstr::from(format!("local variable index {:#} out of bounds", idx)))
     }
 
     pub (crate) fn type_not_supported(val: Cell) -> Xerr {

@@ -97,6 +97,7 @@ struct Context {
     di_len: usize,
     ip: usize,
     mode: ContextMode,
+    env: Vec<Cell>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -164,22 +165,33 @@ pub struct State {
 }
 
 impl State {
-    pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
-        let flags = self
+    pub fn get_fmt_flags(&self) -> Xresult1<FmtFlags> {
+        self
             .get_var(self.fmt_flags)
-            .and_then(|val| FmtFlags::parse(val))?;
+            .and_then(|val| FmtFlags::parse(val))
+    }
+
+    pub fn set_fmt_flags(&mut self, new_flags: FmtFlags) -> Xresult {
+        self.set_var(self.fmt_flags, new_flags.build())
+    }
+
+    pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
+        let flags = self.get_fmt_flags()?;
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
     pub fn fmt_cell_safe(&self, val: &Cell) -> Xresult1<String> {
-        let flags = self
-            .get_var(self.fmt_flags)
-            .and_then(|val| FmtFlags::parse(val))?
-            .set_fitscreen(true);
+        let flags = self.get_fmt_flags()?.set_fitscreen(true);
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
     pub fn fmt_opcode(&self, ip: usize, op: &Opcode) -> String {
+        let ref_name = |cr| {
+            match cr {
+                &CellRef::Env(idx) => format!("env.{:#x}", idx),
+                &CellRef::Heap(idx) => format!("heap.{:#x}", idx),
+            }
+        };
         match op {
             Opcode::Call(x) => {
                 let name = self
@@ -229,12 +241,12 @@ impl State {
             Opcode::Do(rel) => format!("do         {:#05x}", rel.calculate(ip)),
             Opcode::Loop(rel) => format!("loop       {:#05x}", rel.calculate(ip)),
             Opcode::Break(rel) => format!("break      {:#05x}", rel.calculate(ip)),
-            Opcode::Load(a) => format!("load       {}", a.index()),
+            Opcode::Load(a) => format!("load       {}", ref_name(a)),
             Opcode::LoadI64(i) => format!("loadi64    {}", i),
             Opcode::LoadF64(i) => format!("loadf64    {}", i),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
-            Opcode::Store(a) => format!("store      {}", a.index()),
+            Opcode::Store(a) => format!("store      {}", ref_name(a)),
             Opcode::InitLocal(i) => format!("initlocal  {}", i),
             Opcode::LoadLocal(i) => format!("loadlocal  {}", i),
             Opcode::Nop => format!("nop"),
@@ -530,6 +542,7 @@ impl State {
             di_len: self.dict.len(),
             ip: self.code_origin(),
             mode,
+            env: self.ctx.env.clone(),
         };
         if tmp.mode == ContextMode::MetaEval {
             // set bottom stack limit for meta interpreter
@@ -590,7 +603,7 @@ impl State {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
         xs.intercept_stdout(true);
-        xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
+        xs.fmt_flags = xs.alloc_env(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::arith::load(&mut xs)?;
         Ok(xs)
@@ -603,21 +616,27 @@ impl State {
         Ok(xs)
     }
 
+    pub fn defenv(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
+        let cref = self.alloc_env(val)?;
+        self.dict_insert(name, Entry::Variable(cref))?;
+        Ok(cref)
+    }
+
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
-        let cref = self.alloc_cell(val)?;
+        let cref = self.alloc_heap(val)?;
         self.dict_insert(name, Entry::Variable(cref))?;
         Ok(cref)
     }
 
     pub fn defvar_anonymous(&mut self, val: Cell) -> Xresult1<CellRef> {
-        self.alloc_cell(val)
+        self.alloc_heap(val)
     }
 
     //#[cfg(test)]
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name).ok_or_else(|| Xerr::UnknownWord(Xstr::from(name)))? {
-            Entry::Variable(a) => self.cell_ref(*a),
+            Entry::Variable(a) => self.get_var(*a),
             Entry::Constant(a) => Ok(a),
             //Entry::Function{xf,..} => Ok(Cell::Fun(xf.clone())),
             _ => Err(Xerr::InternalError),
@@ -852,29 +871,51 @@ impl State {
     }
 
     fn cell_ref(&self, cref: CellRef) -> Xresult1<&Cell> {
-        self.heap
-            .get(cref.index())
-            .ok_or_else(|| Xerr::InvalidAddress)
+        match cref {
+            CellRef::Env(idx) => self.ctx.env
+                .get(idx)
+                .ok_or_else(|| Xerr::cell_out_of_bounds(cref)),
+            CellRef::Heap(idx) => {
+                if self.ctx.mode == ContextMode::MetaEval {
+                    Err(Xerr::const_context())
+                } else {
+                    self.heap
+                        .get(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))
+                }
+            }
+        }
     }
 
-    fn swap_cell_ref(&mut self, cref: CellRef, val: Cell) -> Xresult {
-        if self.ctx.mode == ContextMode::MetaEval {
-            return Err(Xerr::const_context());
+    fn swap_cell_ref(&mut self, cref: CellRef, mut val: Cell) -> Xresult {
+        match cref {
+            CellRef::Env(idx) => {
+                std::mem::swap(
+                    self.ctx.env
+                        .get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
+                    &mut val,
+                );
+            }
+            CellRef::Heap(idx) => {
+                if self.ctx.mode == ContextMode::MetaEval {
+                    return Err(Xerr::const_context());
+                }
+                std::mem::swap(
+                    self.heap
+                        .get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
+                    &mut val,
+                );
+            }
         }
-        let mut old = val;
-        std::mem::swap(
-            self.heap
-                .get_mut(cref.index())
-                .ok_or_else(|| Xerr::InvalidAddress)?,
-            &mut old,
-        );
         if self.is_recording() {
-            self.add_reverse_step(ReverseStep::SwapRef(cref, old));
+            self.add_reverse_step(ReverseStep::SwapRef(cref, val));
         }
         OK
     }
 
-    fn alloc_cell(&mut self, val: Cell) -> Xresult1<CellRef> {
+    fn alloc_heap(&mut self, val: Cell) -> Xresult1<CellRef> {
         if self.ctx.mode == ContextMode::MetaEval {
             return Err(Xerr::const_context());
         }
@@ -882,7 +923,13 @@ impl State {
         self.check_heap_limit()?;
         let idx = self.heap.len();
         self.heap.push(val);
-        Ok(CellRef::from_index(idx))
+        Ok(CellRef::Heap(idx))
+    }
+
+    fn alloc_env(&mut self, val: Cell) -> Xresult1<CellRef> {
+        let idx = self.ctx.env.len();
+        self.ctx.env.push(val);
+        Ok(CellRef::Env(idx))
     }
 
     fn run_immediate(&mut self, x: Xfn) -> Xresult {
@@ -1092,14 +1139,14 @@ impl State {
             }
             Opcode::Load(cref) => {
                 let cref = *cref;
-                let val = self.cell_ref(cref)?.clone();
+                let val = self.get_var(cref)?.clone();
                 self.push_data(val)?;
                 self.next_ip();
             }
             Opcode::Store(cref) => {
                 let cref = *cref;
                 let val = self.pop_data()?;
-                self.swap_cell_ref(cref, val)?;
+                self.set_var(cref, val)?;
                 self.next_ip();
             }
             Opcode::InitLocal(i) => {
@@ -1123,7 +1170,7 @@ impl State {
                     .locals
                     .get(i)
                     .cloned()
-                    .ok_or_else(|| Xerr::InvalidAddress)?;
+                    .ok_or_else(|| Xerr::local_out_of_bounds(i))?;
                 self.push_data(val)?;
                 self.next_ip();
             }
@@ -1284,12 +1331,13 @@ impl State {
                 f.locals.pop();
             }
             ReverseStep::SwapRef(cref, val) => {
-                let a = self
-                    .heap
-                    .get_mut(cref.index())
-                    .ok_or_else(|| Xerr::InvalidAddress)?;
-                let mut b = val;
-                std::mem::swap(a, &mut b);
+                let old_ref = match cref {
+                    CellRef::Env(idx) => self.ctx.env.get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
+                    CellRef::Heap(idx) => self.heap.get_mut(idx)
+                        .ok_or_else(|| Xerr::cell_out_of_bounds(cref))?,
+                };
+                *old_ref = val;
             }
         }
         OK
@@ -1762,7 +1810,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
             match xs
                 .dict
                 .get_mut(dict_idx)
-                .ok_or_else(|| Xerr::InvalidAddress)?
+                .ok_or_else(|| Xerr::word_out_of_bounds(dict_idx))?
             {
                 DictEntry {
                     entry: Entry::Function { ref mut len, .. },
@@ -2075,7 +2123,7 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
 
 fn build_global_variable(xs: &mut State, name: Xsubstr) -> Xresult {
     if xs.flow_stack.is_empty() {
-        let a = xs.alloc_cell(Cell::Nil)?;
+        let a = xs.alloc_heap(Cell::Nil)?;
         xs.dict_insert(&name, Entry::Variable(a))?;
         xs.code_emit(Opcode::Store(a))
     } else {
@@ -2219,12 +2267,12 @@ fn core_word_doc(xs: &mut State) -> Xresult {
         .dict_key(&name)
         .ok_or_else(|| Xerr::UnknownWord(name.clone()))?
         .help;
-    if cref == CellRef::default() {
-        cref = xs.alloc_cell(help)?;
+    if cref.is_initialized() {
+        xs.set_var(cref, help)
+    } else {
+        cref = xs.defvar_anonymous(help)?;
         xs.dict_mut(&name).unwrap().help = cref;
         OK
-    } else {
-        xs.set_var(cref, help)
     }
 }
 
@@ -2435,7 +2483,7 @@ fn core_word_newline(xs: &mut State) -> Xresult {
 }
 
 fn core_word_str_to_num(xs: &mut State) -> Xresult {
-    let base = current_fmt_flags(xs)?.base() as u32;
+    let base = xs.get_fmt_flags()?.base() as u32;
     let val = xs.pop_data()?;
     let s = val.to_xstr()?;
     if s.find('.').is_some() {
@@ -2497,33 +2545,24 @@ fn core_word_str_split_at(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(head))
 }
 
-fn current_fmt_flags(xs: &mut State) -> Xresult1<FmtFlags> {
-    let f = xs.get_var(xs.fmt_flags)?;
-    FmtFlags::parse(f)
-}
-
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
-    let flags = current_fmt_flags(xs)?.set_base(n).build();
-    xs.set_var(xs.fmt_flags, flags)?;
-    OK
+    let flags = xs.get_fmt_flags()?.set_base(n);
+    xs.set_fmt_flags(flags)
 }
 
 fn set_fmt_prefix(xs: &mut State, show: bool) -> Xresult {
-    let flags = current_fmt_flags(xs)?.set_show_prefix(show).build();
-    xs.set_var(xs.fmt_flags, flags)?;
-    OK
+    let flags = xs.get_fmt_flags()?.set_show_prefix(show);
+    xs.set_fmt_flags(flags)
 }
 
 fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
-    let flags = current_fmt_flags(xs)?.set_show_tags(show).build();
-    xs.set_var(xs.fmt_flags, flags)?;
-    OK
+    let flags = xs.get_fmt_flags()?.set_show_tags(show);
+    xs.set_fmt_flags(flags)
 }
 
 fn set_fmt_upcase(xs: &mut State, show: bool) -> Xresult {
-    let flags = current_fmt_flags(xs)?.set_upcase(show).build();
-    xs.set_var(xs.fmt_flags, flags)?;
-    OK
+    let flags = xs.get_fmt_flags()?.set_upcase(show);
+    xs.set_fmt_flags(flags)
 }
 
 fn core_word_see(xs: &mut State) -> Xresult {
@@ -2560,7 +2599,12 @@ fn core_word_see(xs: &mut State) -> Xresult {
         Entry::Constant(_) => buf.push_str("constant\n"),
         Entry::Variable(cref) => {
             if cref.is_initialized() {
-                writeln!(buf, "variable, index {}\n", cref.index()).unwrap();
+                match cref {
+                    CellRef::Env(idx) =>
+                        writeln!(buf, "variable, index {}\n", idx).unwrap(),
+                    CellRef::Heap(idx) =>
+                        writeln!(buf, "env variable, index {}\n", idx).unwrap(),
+                }
             } else {
                 buf.push_str("variable, not initialized\n");
             }
@@ -3102,12 +3146,8 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
-        eval_ok!(xs, "( 2 2 + )");
+        eval_ok!(xs, "( : test4 2 2 + ; test4 )");
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        eval_ok!(xs, "10 var x  ( ( x nil assert-eq  ) )");
-        eval_ok!(xs, "(  [ x 0 do I loop ] )");
-        let v = xs.pop_data().unwrap().to_vec().unwrap();
-        assert_eq!(10, v.len());
         eval_ok!(xs, ": f [ ( 3 3 * ) ] ; f 0 get");
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
@@ -3130,6 +3170,9 @@ mod tests {
     fn test_meta_var() {
         let mut xs = State::boot().unwrap();
         let res = xs.eval(" ( 2 var x ) x println");
+        assert_eq!(Err(Xerr::const_context()), res);
+        let mut xs = State::boot().unwrap();
+        let res = xs.eval(" 1 var x ( x nil assert-eq ) ");
         assert_eq!(Err(Xerr::const_context()), res);
     }
 
@@ -3630,9 +3673,9 @@ mod tests {
         let n = xs.heap.len();
         assert!(n < heap_limit);
         for _ in n..heap_limit {
-            assert!(xs.alloc_cell(ONE).is_ok());
+            assert!(xs.alloc_heap(ONE).is_ok());
         }
-        assert!(xs.alloc_cell(ONE).is_err());
+        assert!(xs.alloc_heap(ONE).is_err());
     }
 
     #[test]

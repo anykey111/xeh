@@ -40,7 +40,7 @@ macro_rules! def_data_word_real {
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrState::default();
     let empty = Cell::from(Xbitstr::new());
-    m.big_endian = xs.defvar("big?", ZERO)?;
+    m.big_endian = xs.defenv("big?", ZERO)?;
     m.input = xs.defvar("input", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
@@ -1008,6 +1008,12 @@ mod tests {
         xs.eval("big 123 32 int!").unwrap();
         let bs = xs.pop_data().unwrap().to_bitstr().unwrap();
         assert_eq!(bs, Xbitstr::from(vec![0, 0, 0, 123]));
+    }
+
+    #[test]
+    fn test_bitstr_env() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval("( big 255 u16! |00ff| assert-eq )").unwrap();
     }
 
     #[test]
