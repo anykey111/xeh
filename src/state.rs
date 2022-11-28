@@ -612,6 +612,7 @@ impl State {
 
     pub fn boot() -> Xresult1<State> {
         let mut xs = Self::core()?;
+        crate::istype::load(&mut xs)?;
         crate::range::load(&mut xs)?;
         crate::bitstr_ext::load(&mut xs)?;
         Ok(xs)
