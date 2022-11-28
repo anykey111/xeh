@@ -64,6 +64,7 @@ pub enum Xerr {
     BitstrSliceError(Xbitstr),
     // just text error
     ErrorMsg(Xstr),
+    UserError(Cell),
     // Stop interpreter execution
     Exit(isize),
 }
@@ -76,8 +77,10 @@ fn assert_get_msg(a: &Cell) -> Option<&str> {
 
 impl fmt::Display for Xerr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use fmt::Debug;
         match self {
             Xerr::ErrorMsg(s) => f.write_str(s),
+            Xerr::UserError(err_value)  => err_value.fmt(f),
             Xerr::UnknownWord(s) => write!(f, "unknown word {}", s),
             Xerr::ParseError { msg, .. } => write!(f, "{}", msg),
             Xerr::StrDecodeError { msg, .. } => write!(f, "{}", msg),

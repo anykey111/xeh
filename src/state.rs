@@ -290,12 +290,13 @@ impl State {
     }
 
     pub fn pretty_error(&self) -> Option<String> {
+        use std::fmt::Write;
         let ec = self.last_error.as_ref()?;
-        let errmsg = if let Some(loc) = &ec.location {
-            format!("{}\n{:?}", ec.err, loc)
-        } else {
-            format!("{}", ec.err)
-        };
+        let flags = FmtFlags::default().set_fitscreen(true);
+        let mut errmsg = format!("{:1$}", ec.err, flags.into_raw());
+        if let Some(loc) = &ec.location {
+            write!(errmsg, "\n{:?}", loc).unwrap();
+        }
         Some(errmsg)
     }
 
@@ -797,6 +798,7 @@ impl State {
         self.defword("UPCASE", |xs| set_fmt_upcase(xs, true))?;
         self.defword("LOCASE", |xs| set_fmt_upcase(xs, false))?;
         self.def_immediate("see", core_word_see)?;
+        self.defword("error", core_word_error)?;
         OK
     }
 
@@ -2616,6 +2618,11 @@ fn core_word_see(xs: &mut State) -> Xresult {
     xs.print(&buf)
 }
 
+fn core_word_error(xs: &mut State) -> Xresult {
+    let err_value = xs.pop_data()?;
+    Err(Xerr::UserError(err_value))
+}
+
 fn filename_literal(xs: &mut State) -> Xresult1<Xstr> {
     if let Tok::Literal(val) = xs.next_token()? {
         if let Cell::Str(path) = val {
@@ -3821,6 +3828,12 @@ mod tests {
     fn test_inject() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "include \"src/test-data/test-inject.xeh\"");
+    }
+
+    #[test]
+    fn test_user_error() {
+        let mut xs = State::boot().unwrap();
+        assert_eq!(Err(Xerr::UserError(Cell::from(55))), xs.eval("55 error"));
     }
 
     #[test]
