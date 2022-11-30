@@ -97,14 +97,14 @@ struct Context {
     di_len: usize,
     ip: usize,
     mode: ContextMode,
-    env: Vec<Cell>,
+    env: Xvec,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Frame {
     fn_addr: usize,
     return_to: usize,
-    locals: Vec<Cell>,
+    locals: Xvec,
 }
 
 #[derive(Debug, Clone)]
@@ -546,8 +546,10 @@ impl State {
             mode,
             env: self.ctx.env.clone(),
         };
-        if tmp.mode == ContextMode::MetaEval {
-            // set bottom stack limit for meta interpreter
+        if self.ctx.mode == tmp.mode {
+            tmp.ds_len = self.ctx.ds_len;
+        } else {
+            // different modes should't see stack of each other
             tmp.ds_len = self.data_stack.len();
         }
         std::mem::swap(&mut self.ctx, &mut tmp);
@@ -934,7 +936,7 @@ impl State {
     fn alloc_env(&mut self, val: Cell) -> Xresult1<CellRef> {
         let idx = self.ctx.env.len();
         let cref = CellRef::env_ref(idx)?;
-        self.ctx.env.push(val);
+        self.ctx.env.push_back_mut(val);
         Ok(cref)
     }
 
@@ -1162,7 +1164,7 @@ impl State {
                 if idx < frame.locals.len() {
                     frame.locals[idx] = val;
                 } else {
-                    frame.locals.push(val);
+                    frame.locals.push_back_mut(val);
                 }
                 if self.is_recording() {
                     self.add_reverse_step(ReverseStep::DropLocal(idx));
@@ -1334,7 +1336,7 @@ impl State {
             }
             ReverseStep::DropLocal(_) => {
                 let f = self.top_frame()?;
-                f.locals.pop();
+                f.locals.drop_last_mut();
             }
             ReverseStep::SwapRef(cref, val) => {
                 let old_ref = match cref.index() {
@@ -3804,6 +3806,12 @@ mod tests {
             ");
         assert_eq!(xs.pop_data(), Ok(Cell::from(33)));
         assert!(xs.pop_data().is_err());
+    }
+
+    #[test]
+    fn test_meta_stack() {
+        let mut xs = State::boot().unwrap();
+        xs.eval(" ( 1 ( drop ) )").unwrap();
     }
 
     #[test]
