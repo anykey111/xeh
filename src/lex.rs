@@ -194,7 +194,7 @@ impl Lex {
                             self.take_char();
                             self.tmp.pop();
                         }
-                        Some('x') | Some('_') => {
+                        Some('x') => {
                             radix = 16;
                             self.take_char();
                             self.tmp.pop();
@@ -404,16 +404,15 @@ mod tests {
             ]
         );
 
-        let res = tokenize_input("0x00_ff 123_0_00_ 0b_1_1").unwrap();
-        assert_eq!(res, vec![int(255), int(123000), int(3)]);
+        let res = tokenize_input("0x00_ff 123_0_00_ 0b_1_1 0_ 0_.1").unwrap();
+        assert_eq!(res, vec![int(255), int(123000), int(3), int(0), real(0.1)]);
 
         assert!(tokenize_input("0f").is_err());
         assert!(tokenize_input("12-").is_err());
         assert!(tokenize_input("-0x").is_err());
         assert!(tokenize_input("-0b").is_err());
-        assert!(tokenize_input("0_").is_err());
+        assert!(tokenize_input("0_f").is_err());
         assert!(tokenize_input("0x0.1").is_err());
-        assert!(tokenize_input("0_.1").is_err());
 
         let res = tokenize_input("1.2 0.1_1").unwrap();
         assert_eq!(res, vec![real(1.2), real(0.11)]);
