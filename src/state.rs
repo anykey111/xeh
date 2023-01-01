@@ -641,7 +641,7 @@ impl State {
     //#[cfg(test)]
     pub fn get_var_value(&self, name: &str) -> Xresult1<&Cell> {
         match self.dict_entry(name).ok_or_else(|| Xerr::UnknownWord(Xstr::from(name)))? {
-            Entry::Variable(a) => self.get_var(*a),
+            Entry::Variable(a) => self.cell_ref_for_mode(*a, ContextMode::Eval),
             Entry::Constant(a) => Ok(a),
             //Entry::Function{xf,..} => Ok(Cell::Fun(xf.clone())),
             _ => Err(Xerr::InternalError),
@@ -877,12 +877,16 @@ impl State {
     }
 
     fn cell_ref(&self, cref: CellRef) -> Xresult1<&Cell> {
+        self.cell_ref_for_mode(cref, self.ctx.mode.clone())
+    }
+
+    fn cell_ref_for_mode(&self, cref: CellRef, mode: ContextMode) -> Xresult1<&Cell> {
         match cref.index() {
             CellIdx::Env(idx) => self.ctx.env
                 .get(idx)
                 .ok_or_else(|| Xerr::cell_out_of_bounds(cref)),
             CellIdx::Heap(idx) => {
-                if self.ctx.mode == ContextMode::MetaEval {
+                if mode == ContextMode::MetaEval {
                     Err(Xerr::const_context())
                 } else {
                     self.heap
