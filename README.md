@@ -76,11 +76,11 @@ Video: [Youtube](https://www.youtube.com/@xeh-lang)
     nil
 
     # bit-string consist of arbitrary number of bits
-    # hex digits 0..9 A..F represent 4 bit chunk of data
-    # "-" and "x" represent a single bit
+    # hex digits 0-9 and A-F represent 4 bit chunk of data
+    # letters "o" and "i" represent a single bit, zero and one
     |F1|    # 0b1111_0001
-    |x--x|  # 0b1001
-    |F1x|   # 0b1111_0001_1
+    |iooi|  # 0b1001
+    |F1i|   # 0b1111_0001_1
 ```
 
 ## Words, Variables and Locals

@@ -169,9 +169,9 @@ impl fmt::Debug for Cell {
                     }
                     for i in (0..n).rev() {
                         if (x & (1 << i)) > 0{
-                            f.write_char('x')?;
+                            f.write_char('i')?;
                         } else {
-                            f.write_char('-')?;
+                            f.write_char('o')?;
                         }
                     }
                 }
