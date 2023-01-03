@@ -14,3 +14,9 @@ universal-debug:
 
 test_ps:
 	$env:RUST_BACKTRACE = 1; cargo test
+
+test-examples: docs/examples/*.xeh
+	[ -f "$(basename $<).bin" ] \
+		&& target/debug/xeh -i "$<.bin" $< \
+		|| target/debug/xeh $<
+

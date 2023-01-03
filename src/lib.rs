@@ -51,7 +51,7 @@ pub mod c_api {
     #[no_mangle]
     pub unsafe extern "C" fn xeh_close(xs: *mut Xstate) {
         if xs != null_mut() {
-            Box::from_raw(xs);
+            drop(Box::from_raw(xs));
         }
     }
 
@@ -143,6 +143,8 @@ pub mod c_api {
 
     #[no_mangle]
     pub unsafe extern "C" fn xeh_release(x: *mut Xcell) {
-        Box::from_raw(x);
+        if x != null_mut() {
+            drop(Box::from_raw(x));
+        }
     }
 }
