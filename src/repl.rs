@@ -167,9 +167,9 @@ const REPL_CMD_HINTS: &[Xstr] = &[
 
 fn switch_to_trial(st: &mut ReplState) {
     if st.trial.is_none() {
-        println!("Trial and error mode!");
-        println!("* everyting evaluating on-fly");
-        println!("* hit Enter to freeze changes");
+        println!("# Trial and error mode!");
+        println!("# Everyting is evaluating on-fly, hit Enter to freeze the changes.");
+        println!("# Switch between modes using /repl and /trial commands.");
         st.trial = Some(Default::default());
         st.snapshot();
     }
@@ -177,7 +177,8 @@ fn switch_to_trial(st: &mut ReplState) {
 
 fn switch_to_repl(st: &mut ReplState) {
     if st.trial.take().is_some() {
-        println!("Back to REPL!");
+        println!("# Read-Eval-Print-Loop mode!");
+        println!("# Switch between modes using /repl and /trial commands.");
     }
 }
 
