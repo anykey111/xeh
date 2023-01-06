@@ -260,34 +260,35 @@ Initial value is taken from the stack and must be defined inside of the meta mod
     ( 1.0 60.0 / const FRAME-TIME )
 ```
 
-## Advanced variable definition
+## Destructuring
 
-Advanced variable definition starts with `let` word,
-then pattern description follow, definition ends with `in` word.
-Every name in the pattern bind the new variable, literal in the pattern
-ensure that value is exactly same, otherwise error is raised.
-Word `else` in the pattern define alternative error handling path.
+    let PATTERN in
 
-```
+Ensure that each name in the PATTERN have corresponding value.
+Using literal instead of the name test that value is exactly match, otherwise error is raised.
+
     # bind 1 to a
     1 let a in
     # test, a = 1
     a let 1 in 
     # error, a <> 2
     a let 2 in
-    # custom error handler
-    a let 2 else "invalid value" println in
     # bind multiple values from the vec
     [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ] in
-    # bind all remaining items
-    [ 1 2 3 5 7  ] let [ a b & rest ]
+    # slice first two items of the vector and bind remaining to the xs
+    [ 1 2 3 5 7  ] let [ x1 x2 & xs ]
     # bind tag of the value
     \"x\" 10 with-tag let val . tag in
-```
+
+_There is another unstable form._
+
+    let PATTERN else CODE in
+
+Jump to the CODE when PATTERN didn't match. In such case rest of the scope may contains partialy initialized bindings.
 
 ## Source code injection
 
-Meta evaluation result might serve as input for compilation.When compiler see immediate word `~)` instead of the closing bracket, first compiler join result into a string and then treat that string as a part of the source code.
+Meta evaluation result might serve as input for compilation. When compiler see immediate word `~)` instead of the closing bracket, first compiler join result into a string and then treat that string as a part of the source code.
 
 ```
     # assign number for each name starting from 0
