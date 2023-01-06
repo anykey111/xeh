@@ -1,20 +1,20 @@
-|01 02| open-input
+|01 02| open-bitstr
 u8 1 assert-eq
 
 # open another bitstring
-|03| open-input
+|03| open-bitstr
 offset 0 assert-eq
 remain 8 assert-eq
 u8 3 assert-eq
 input |03| >bitstr assert-eq
-close-input
+close-bitstr
 
 # check that everyting is same as before
 offset 8 assert-eq
 remain 8 assert-eq
 u8 2 assert-eq
 remain 0 assert-eq
-close-input
+close-bitstr
 
 offset 0 assert-eq
 remain 0 assert-eq

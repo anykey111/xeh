@@ -150,13 +150,13 @@ loop" doc-example
     "-- int" stack-comment
 ] "remain" doc!
 
-"Temporary open the new binary until the close-input called."
+"Set bitstr as default binary input."
 .[ doc-for-bitstr 
     "bitstr --" stack-comment
-] "open-input" doc!
+] "open-bitstr" doc!
 
-"Drop current binary, restore the previous one from oh-hold."
-.[ doc-for-bitstr ] "close-input" doc!
+"Close current binary input, restore the previous one from oh-hold."
+.[ doc-for-bitstr ] "close-bitstr" doc!
 
 "Reposition offset."
 .[ doc-for-bitstr
