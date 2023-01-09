@@ -42,10 +42,13 @@ Video: [Youtube](https://www.youtube.com/@xeh-lang)
 
 ## Comments
 
+Single line comment starts with the `#` character and skip everyting till the end of line.
+At least one whitespace or the beginnig of the line should precede the comment.
+
 ```
-    # single line comment
-    # whitespace or end of line should follow after sharp char
-    #this is not a comment
+# this is a comment
+"hello" println         #this is a comment
+"world" println# error: unknown word `println#`
 ```
 
 ## Literals

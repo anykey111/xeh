@@ -8,6 +8,8 @@ use std::iter::Iterator;
 pub enum Tok {
     EndOfInput,
     Word(Xsubstr),
+    Whitespace(Xsubstr),
+    Comment(Xsubstr),
     Literal(Xcell),
 }
 
@@ -72,7 +74,20 @@ impl Lex {
         }
     }
 
-    fn skip_whitespaces(&mut self) {
+    pub fn last_substr(&self) -> Xsubstr {
+        self.buf.substr(self.start_pos..self.pos)
+    }
+
+    pub fn next_nonws(&mut self) -> Xresult1<Tok> {
+        match self.next() {
+            Ok(Tok::Whitespace(_)) | Ok(Tok::Comment(_)) => self.next(),
+            tok => tok,
+        }
+    }
+
+    pub fn next(&mut self) -> Xresult1<Tok> {
+        self.start_pos = self.pos;
+        let start = self.pos;
         while let Some(c) = self.peek_char() {
             if c.is_ascii_whitespace() {
                 self.take_char();
@@ -80,16 +95,20 @@ impl Lex {
                 break;
             }
         }
-    }
-
-    pub fn last_substr(&self) -> Xsubstr {
-        self.buf.substr(self.start_pos..self.pos)
-    }
-
-    pub fn next(&mut self) -> Xresult1<Tok> {
-        self.skip_whitespaces();
-        self.start_pos = self.pos;
-        let start = self.pos;
+        if self.pos > start {
+            let ws = self.buf.substr(start..self.pos);
+            return Ok(Tok::Whitespace(ws));
+        }
+        if let Some('#') = self.peek_char() {
+            while let Some(c) = self.peek_char() {
+                if c == '\n' {
+                    break;
+                }
+                self.take_char();
+            }
+            let s = self.buf.substr(start..self.pos);
+            return Ok(Tok::Comment(s));
+        }
         match self.take_char() {
             None => Ok(Tok::EndOfInput),
             Some('"') | Some('“') => {
@@ -347,6 +366,7 @@ mod tests {
         let mut res = Vec::new();
         loop {
             match it.next()? {
+                Tok::Whitespace(_) => (),
                 Tok::EndOfInput => break Ok(res),
                 t => res.push(t),
             }
@@ -361,11 +381,12 @@ mod tests {
         let res = tokenize_input("\n\t \r    \n ").unwrap();
         assert_eq!(res, vec![]);
 
-        let res = tokenize_input("\n\t# 567").unwrap();
-        assert_eq!(res, vec![word("#"), int(567)]);
-
-        let res = tokenize_input("\n\t#123").unwrap();
-        assert_eq!(res, vec![word("#123")]);
+        let mut lex = Lex::new(Xstr::from("\n\t# 567\n#"));
+        assert_eq!(Ok(Tok::Whitespace("\n\t".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("# 567".into())), lex.next());
+        assert_eq!(Ok(Tok::Whitespace("\n".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("#".into())), lex.next());
+        assert_eq!(Ok(Tok::EndOfInput), lex.next());
 
         let res = tokenize_input("a#b").unwrap();
         assert_eq!(res, vec![word("a#b")]);
@@ -480,12 +501,12 @@ mod tests {
         let s3 = Xbitstr::from_bin_str("0111 0111 00 1111").unwrap();
         assert_eq!(&Tok::Literal(Cell::from(s3)), it.next().unwrap());
         
-        match Lex::new(Xstr::from(" | f")).next() {
+        match Lex::new(Xstr::from(" | f")).next_nonws() {
             Err(Xerr::ParseError { msg,..}) => assert_eq!(msg, UNTERMINATED_BITSTR_ERRMSG),
             other => panic!("{:?}", other),
         }
 
-        match Lex::new(Xstr::from(" | ff g| ")).next() {
+        match Lex::new(Xstr::from(" | ff g| ")).next_nonws() {
             Err(Xerr::ParseError { msg, substr}) => {
                 assert_eq!(msg, PARSE_BITSTR_ERRMSG);
                 assert_eq!(substr.range().start, 6);

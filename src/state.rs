@@ -414,6 +414,7 @@ impl State {
                 self.run()?;
             }
             match self.next_token()? {
+                Tok::Whitespace(_) | Tok::Comment(_) => (),
                 Tok::EndOfInput => {
                     if self.nested.len() != ctx_depth {
                         break Err(Xerr::unbalanced_context());
@@ -520,7 +521,7 @@ impl State {
 
     fn next_token(&mut self) -> Xresult1<Tok> {
         if let Some(lex) = self.input.last_mut() {
-            let res = lex.next();
+            let res = lex.next_nonws();
             self.last_token = Some(lex.last_substr());
             if let Ok(Tok::EndOfInput) = &res {
                 self.input.pop();
@@ -731,7 +732,6 @@ impl State {
         self.def_immediate("]", core_word_vec_end)?;
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
-        self.def_immediate("#", core_word_comment)?;
         self.def_immediate("defer", core_word_defer)?;
         self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
@@ -1838,13 +1838,6 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_comment(xs: &mut State) -> Xresult {
-    if let Some(src) = xs.input.last_mut() {
-        src.skip_line();
-    }
-    OK
-}
-
 fn core_word_defer(xs: &mut State) -> Xresult {
     let jump_over_org = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
@@ -2034,6 +2027,7 @@ fn build_let_in(xs: &mut State, lf: &mut LetFlow) -> Xresult {
     let mut tagged = None;
     loop {
         match xs.next_token()? {
+            Tok::Whitespace(_) | Tok::Comment(_) => (),
             Tok::Word(name) if name == "in" => {
                 break build_let_in_done(xs, lf, item.take(), tagged.take());
             }
