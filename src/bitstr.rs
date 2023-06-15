@@ -19,7 +19,7 @@ pub const NATIVE: Byteorder = BIG;
 
 type BitstrRange = Range<usize>;
 
-fn upper_bound_index(num_bits: usize) -> usize {
+pub fn upper_bound_index(num_bits: usize) -> usize {
     let n = if (num_bits % 8) > 0 { 1 } else { 0 };
     (num_bits / 8) + n
 }

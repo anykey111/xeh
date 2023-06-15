@@ -78,6 +78,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("read-all", word_read_all)?;
     xs.defword("scratch", word_scratch)?;
     xs.defword(".comment", word_add_comment)?;
+    xs.defword("random-bits", random_bits)?;
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
     def_data_word!(xs, 32);
@@ -685,6 +686,20 @@ fn word_add_comment(xs: &mut Xstate) -> Xresult {
     xs.push_data(tagged)
 }
 
+fn random_bits(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    let i = crate::bitstr::upper_bound_index(n);
+    let mut buf = Vec::with_capacity(i);
+    buf.resize(i, 0);
+    getrandom::getrandom(buf.as_mut_slice()).unwrap();
+    let bs = if n % 8 > 0 {
+        Xbitstr::from(buf).read(n).unwrap()
+    } else {
+        Xbitstr::from(buf)
+    };
+    xs.push_data(Cell::from(bs))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1038,6 +1053,19 @@ mod tests {
             scratchpad 1 get
             dup tag-of [ \"text1\" . \"comment\" ] assert-eq
             tag-of 0 get tag-of \"comment\" assert-eq
+        ").unwrap();
+    }
+
+    #[test]
+    fn test_random_bits() {
+        let mut xs = Xstate::boot().unwrap();
+        xs.eval("
+            15 random-bits
+            length 15 assert-eq
+        ").unwrap();
+        xs.eval("
+            16 random-bits
+            length 16 assert-eq
         ").unwrap();
     }
 
