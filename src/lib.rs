@@ -10,6 +10,7 @@ mod range;
 mod istype;
 pub mod bitstr;
 pub mod bitstr_ext;
+pub mod base_ext;
 pub mod cell;
 pub mod d2_plugin;
 pub mod error;

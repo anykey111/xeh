@@ -22,6 +22,8 @@ memchr = "2.5"
 arcstr = "1.1.4"
 
 mapr = { version = "0.8", optional = true }
+base32 = "0.4.0"
+base64 = "0.21.2"
 
 #[lib] # for lipo builds
 #crate-type = ["staticlib"]

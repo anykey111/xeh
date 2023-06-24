@@ -619,6 +619,7 @@ impl State {
         crate::istype::load(&mut xs)?;
         crate::range::load(&mut xs)?;
         crate::bitstr_ext::load(&mut xs)?;
+        crate::base_ext::load(&mut xs)?;
         Ok(xs)
     }
 

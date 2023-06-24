@@ -421,7 +421,7 @@ fn bitstr_to_utf8(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(s))
 }
 
-fn bitstr_concat(val: Cell) -> Xresult1<Bitstr> {
+pub fn bitstr_concat(val: Cell) -> Xresult1<Bitstr> {
     match val.value() {
         Cell::Str(s) => Ok(Bitstr::from(s.to_string().into_bytes())),
         Cell::Vector(v) => {
