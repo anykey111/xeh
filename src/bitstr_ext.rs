@@ -50,7 +50,9 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.bitstr_mod = m;
     xs.defword("open-bitstr", word_open_bitstr)?;
     xs.defword("close-bitstr", word_close_bitstr)?;
-    xs.defword("in-bytes", word_in_bytes)?;
+    xs.defword(">b", b_units)?;
+    xs.defword(">kb", kb_units)?;
+    xs.defword(">mb", mb_units)?;
     xs.defword("seek", word_seek)?;
     xs.defword("remain", word_remain)?;
     xs.defword("find", word_find)?;
@@ -204,9 +206,19 @@ fn bitstr_len(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(n))
 }
 
-fn word_in_bytes(xs: &mut Xstate) -> Xresult {
-    let pos = xs.pop_data()?.to_usize()?;
-    xs.push_data(Cell::from(pos * 8))
+fn b_units(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    xs.push_data(Cell::Int(n as Xint * 8))
+}
+
+fn kb_units(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    xs.push_data(Cell::Int(n as Xint * 8 * 1024))
+}
+
+fn mb_units(xs: &mut Xstate) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    xs.push_data(Cell::Int(n as Xint * 8 * 1024 * 1024))
 }
 
 fn word_seek(xs: &mut Xstate) -> Xresult {
@@ -891,9 +903,11 @@ mod tests {
     }
 
     #[test]
-    fn test_in_bytes() {
+    fn test_units() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval("10 in-bytes 80 assert-eq").unwrap();
+        xs.eval("1 >b 8 assert-eq").unwrap();
+        xs.eval("1 >kb 8192 assert-eq").unwrap();
+        xs.eval("1 >mb 8388608 assert-eq").unwrap();
     }
 
     #[test]
