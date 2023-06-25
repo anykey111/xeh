@@ -603,6 +603,35 @@ Deffer word resolution to runtime."
     "x y --" stack-comment
 ] "d2-data!" doc!
 
+"Encode BASE32 string."
+.[ doc-for-bitstr
+    "bytestr -- str" stack-comment
+] "base32" doc!
+
+"Decode BASE32 string, returns nil on error."
+.[ doc-for-bitstr
+    "str -- bytestr" stack-comment
+] "base32>" doc!
+
+"Encode Crockford's Base32 string."
+.[ doc-for-bitstr
+    "bytestr -- str" stack-comment
+] "base32hex" doc!
+
+"Decode Crockford's Base32 string, returns nil on error."
+.[ doc-for-bitstr
+    "str -- bytestr" stack-comment
+] "base32hex>" doc!
+
+"Encode BASE64 string."
+.[ doc-for-bitstr
+    "bytestr -- str" stack-comment
+] "base64" doc!
+
+"Decode BASE64 string, returns nil on error."
+.[ doc-for-bitstr
+    "str -- bytestr" stack-comment
+] "base64>" doc!
 
 "Encode Zero85 string."
 .[ doc-for-bitstr

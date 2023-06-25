@@ -3,10 +3,11 @@ use crate::prelude::*;
 
 pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("base32", base32_encode)?;
+    xs.defword("base32>", base32_decode)?;
     xs.defword("base32hex", base32hex_encode)?;
-    xs.defword("from-base32", base32_decode)?;
-    xs.defword("from-base32hex", base32hex_decode)?;
+    xs.defword("base32hex>", base32hex_decode)?;
     xs.defword("base64", base64_encode)?;
+    xs.defword("base64>", base64_decode)?;
     xs.defword("zero85", zero85_encode)?;
     xs.defword("zero85>", zero85_decode)?;
     OK
@@ -29,20 +30,27 @@ pub fn base32hex_encode(xs: &mut Xstate) -> Xresult {
     base32_encode2(xs, base32::Alphabet::Crockford)
 }
 
-pub fn base32_decode2(xs: &mut Xstate, alphabet: base32::Alphabet) -> Xresult {
+pub fn base32_decode2(xs: &mut Xstate, alphabet: base32::Alphabet) -> Xresult1<Xbitstr> {
     let s = xs.pop_data()?.to_xstr()?;
     let res = base32::decode(alphabet, &s)
         .ok_or_else(|| Xerr::ErrorMsg(xstr_literal!("base32 decode error")))?;
-    let bs = Cell::from(Xbitstr::from(res));
-    xs.push_data(bs)
+   Ok(Xbitstr::from(res))
 }
 
 pub fn base32_decode(xs: &mut Xstate) -> Xresult {
-    base32_decode2(xs, base32::Alphabet::RFC4648 { padding: true })
+    if let Ok(bs) = base32_decode2(xs, base32::Alphabet::RFC4648 { padding: true }) {
+        xs.push_data(Cell::from(bs))
+    } else {
+        xs.push_data(NIL)
+    }
 }
 
 pub fn base32hex_decode(xs: &mut Xstate) -> Xresult {
-    base32_decode2(xs, base32::Alphabet::Crockford)
+    if let Ok(bs) = base32_decode2(xs, base32::Alphabet::Crockford) {
+        xs.push_data(Cell::from(bs))
+    } else {
+        xs.push_data(NIL)
+    }
 }
 
 pub fn base64_encode(xs: &mut Xstate) -> Xresult {
@@ -55,11 +63,22 @@ pub fn base64_encode(xs: &mut Xstate) -> Xresult {
     xs.push_data(s)
 }
 
-pub fn base64_decode(xs: &mut Xstate) -> Xresult {
+pub fn base64_decode2(xs: &mut Xstate) -> Xresult1<Xbitstr> {
     use base64::{Engine as _, engine::general_purpose};
     let s = xs.pop_data()?.to_xstr()?;
     let res = general_purpose::STANDARD.decode(&s)
         .map_err(|_| Xerr::ErrorMsg(xstr_literal!("base64 decode error")))?;
+    Ok(Xbitstr::from(res))
+}
+
+pub fn base64_decode(xs: &mut Xstate) -> Xresult {
+    if let Ok(bs) = base64_decode2(xs) {
+        xs.push_data(Cell::from(bs))
+    } else {
+        xs.push_data(NIL)        
+    }
+}
+
 pub fn zero85_encode(xs: &mut Xstate) -> Xresult {
     let val = xs.pop_data()?;
     let bs = crate::bitstr_ext::bitstr_concat(val)?;
@@ -84,6 +103,7 @@ pub fn zero85_decode(xs: &mut Xstate) -> Xresult {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,7 +112,16 @@ mod tests {
     fn test_base32() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval("|4131| base32  \"IEYQ====\" assert-eq").unwrap();
+        xs.eval(" \"IEYQ====\" base32> |4131| assert-eq").unwrap();
+        xs.eval(" \"``\" base32> nil assert-eq").unwrap();
+
         xs.eval("|4131| base32hex  \"84RG\" assert-eq").unwrap();
+        xs.eval(" \"84RG\" base32hex> |4131| assert-eq").unwrap();
+        xs.eval(" |4131| base64 \"QTE=\" assert-eq").unwrap();
+
+        xs.eval(" \"QTE=\" base64> |4131| assert-eq").unwrap();
+        xs.eval(" \"``\" base64> nil assert-eq").unwrap();
+        
         xs.eval("|86 4F D2 6F B5 59 F7 5B| zero85 \"HelloWorld\" assert-eq").unwrap();
         xs.eval("\"HelloWorld\" zero85> |86 4F D2 6F B5 59 F7 5B| assert-eq").unwrap();
 
