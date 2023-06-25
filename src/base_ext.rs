@@ -7,7 +7,8 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("from-base32", base32_decode)?;
     xs.defword("from-base32hex", base32hex_decode)?;
     xs.defword("base64", base64_encode)?;
-    xs.defword("from-base64", base64_decode)?;
+    xs.defword("zero85", zero85_encode)?;
+    xs.defword("zero85>", zero85_decode)?;
     OK
 }
 
@@ -59,8 +60,28 @@ pub fn base64_decode(xs: &mut Xstate) -> Xresult {
     let s = xs.pop_data()?.to_xstr()?;
     let res = general_purpose::STANDARD.decode(&s)
         .map_err(|_| Xerr::ErrorMsg(xstr_literal!("base64 decode error")))?;
-    let bs = Cell::from(Xbitstr::from(res));
-    xs.push_data(bs)
+pub fn zero85_encode(xs: &mut Xstate) -> Xresult {
+    let val = xs.pop_data()?;
+    let bs = crate::bitstr_ext::bitstr_concat(val)?;
+    let bytes = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
+    let res = z85::encode(&bytes);
+    let s = Xstr::from(res);
+    xs.push_data(Cell::from(s))
+}
+
+pub fn zero85_decode_res(xs: &mut Xstate) -> Xresult1<Xbitstr> {
+    let s = xs.pop_data()?.to_xstr()?;
+    let res = z85::decode(&s)
+        .map_err(|_| Xerr::ErrorMsg(xstr_literal!("zero85 decode error")))?;
+    Ok(Xbitstr::from(res))
+}
+
+pub fn zero85_decode(xs: &mut Xstate) -> Xresult {
+    if let Ok(bs) = zero85_decode_res(xs) {
+        xs.push_data(Cell::from(bs))
+    } else {
+        xs.push_data(NIL)
+    }
 }
 
 #[cfg(test)]
@@ -72,8 +93,16 @@ mod tests {
         let mut xs = Xstate::boot().unwrap();
         xs.eval("|4131| base32  \"IEYQ====\" assert-eq").unwrap();
         xs.eval("|4131| base32hex  \"84RG\" assert-eq").unwrap();
-        xs.eval(" \"84RG\" from-base32hex |4131| assert-eq").unwrap();
-        xs.eval(" \"IEYQ====\" from-base32 |4131| assert-eq").unwrap();
-        xs.eval(" \"QTE=\" from-base64 |4131| assert-eq").unwrap();
+        xs.eval("|86 4F D2 6F B5 59 F7 5B| zero85 \"HelloWorld\" assert-eq").unwrap();
+        xs.eval("\"HelloWorld\" zero85> |86 4F D2 6F B5 59 F7 5B| assert-eq").unwrap();
+
+        xs.eval("\"JTKVSB%%)wK0E.X)V>+}o?pNmC{O&4W4b!Ni{Lh6\" zero85>
+            |8E 0B DD 69 76 28 B9 1D 
+            8F 24 55 87 EE 95 C5 B0 
+            4D 48 96 3F 79 25 98 77 
+            B4 9C D9 06 3A EA D3 B7|
+            assert-eq").unwrap();
+
+        xs.eval("\"JTK``\" zero85> nil assert-eq").unwrap();
     }
 }

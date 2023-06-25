@@ -603,4 +603,16 @@ Deffer word resolution to runtime."
     "x y --" stack-comment
 ] "d2-data!" doc!
 
+
+"Encode Zero85 string."
+.[ doc-for-bitstr
+    "bytestr -- str" stack-comment
+] "zero85" doc!
+
+"Decode Zero85 string, returns nil on error."
+.[ doc-for-bitstr
+    "str -- bytestr" stack-comment
+] "zero85>" doc!
+
+
 depth 0 = assert
