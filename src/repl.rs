@@ -203,7 +203,7 @@ fn run_line(st: &mut ReplState, line: &str) {
         st.rollback();
         OK
     } else {
-        let res = st.xs.eval(line);
+        let res = st.xs.compile(&line).and_then(|_| st.xs.run());
         if st.trial.is_some() {
             st.update_xstate();
         }
