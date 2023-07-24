@@ -1,4 +1,4 @@
-# The HEX Programming Language
+# The XEH Programming Language
 
 XEH is a dynamic, stack-oriented programming language designed for the interactive coding. Main language domain is binary data parsing.
 Its look like FORTH, but its not. XEH uses immutable data structures and reference-counting garbage collector.
