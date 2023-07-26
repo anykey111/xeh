@@ -207,6 +207,16 @@ fn run_line(st: &mut ReplState, line: &str) {
         if st.trial.is_some() {
             st.update_xstate();
         }
+        let n = st.xs.data_depth();
+        for i in 0..n {
+            if i > 15 {
+                println!("...");
+                break;
+            }
+            let val = st.xs.get_data(i);
+            let s = st.xs.format_cell(val.unwrap()).unwrap();
+            println!("{}", s);
+        }
         res
     };
     if let Err(e) = &res {
