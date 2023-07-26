@@ -426,8 +426,8 @@ impl Bitstr {
     }
 
     pub fn invert(self) -> Bitstr {
-        let r = self.range.clone();
         let mut s = self.detach();
+        let r = s.bits_range();
         let data = s.data_mut();
         for pos in r {
             let i = pos / 8;
@@ -709,6 +709,15 @@ mod tests {
         let c_inv = c.invert();
         assert_eq!(c_inv.bits().collect::<Vec<_>>(), vec![1, 0, 0, 0, 0]);
         assert_eq!(c_inv.data[0], 0x80);
+    }
+
+    #[test]
+    fn test_invert_detached() {
+        let mut a = Bitstr::from_bin_str("00000000 10101010").unwrap();
+        a.read(8).unwrap();
+        let  b = a.read(8).unwrap();
+        let c = b.invert();
+        assert_eq!("01010101".to_string(), c.to_bin_string());
     }
 
     #[test]
