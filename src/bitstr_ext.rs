@@ -68,8 +68,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstr-xor", bitstring_xor)?;
     xs.defword("hex>bitstr", hex_to_bitstr)?;
     xs.defword("bitstr>hex", bitstr_to_hex)?;
-    xs.defword("bin>bitstr", bin_to_bitstr)?;
-    xs.defword("bitstr>bin", bitstr_to_bin)?;
     xs.defword(">bitstr", into_bitstr)?;
     xs.defword("bitstr>utf8", bitstr_to_utf8)?;
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
@@ -384,22 +382,6 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
 fn bitstr_to_hex(xs: &mut Xstate) -> Xresult {
     let bs = xs.pop_data()?;
     xs.push_data(Cell::from(bs.bitstr()?.to_hex_string()))
-}
-
-fn bin_to_bitstr(xs: &mut Xstate) -> Xresult {
-    let s = xs.pop_data()?.to_xstr()?;
-    match Bitstr::from_bin_str(&s) {
-        Ok(bs) => xs.push_data(Cell::from(bs)),
-        Err(pos) => Err(Xerr::ParseError {
-            msg: xstr_literal!("bin string parse error"),
-            substr: s.substr(pos..),
-        }),
-    }
-}
-
-fn bitstr_to_bin(xs: &mut Xstate) -> Xresult {
-    let s = xs.pop_data()?.bitstr()?.to_bin_string();
-    xs.push_data(Cell::from(s))
 }
 
 fn into_bitstr(xs: &mut Xstate) -> Xresult {
@@ -763,7 +745,7 @@ mod tests {
             },
             other => panic!("{:?}", other),
         }
-        let res = xs.eval(" \"111111\" bin>bitstr open-bitstr \"11101\" bin>bitstr magic");
+        let res = xs.eval(" |xxx xxx| open-bitstr |xxx.x| magic");
         match &res {
             Err(Xerr::MatchError { fail_pos, .. }) => assert_eq!(&3, fail_pos),
             other => panic!("{:?}", other),
@@ -805,14 +787,14 @@ mod tests {
         {
             xs.eval("big 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            let bs = Bitstr::from_bin_str("00").unwrap();
+            let bs = Bitstr::from_int(0, 2, BIG);
             assert_eq!(&bitstr_int_tag(bs, BIG), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
             xs.eval("little 2 int").unwrap();
             let val = xs.pop_data().unwrap();
-            let bs = Bitstr::from_bin_str("00").unwrap();
+            let bs = Bitstr::from_int(0, 2, LITTLE);
             assert_eq!(&bitstr_int_tag(bs, LITTLE), val.tag().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
@@ -981,17 +963,10 @@ mod tests {
     }
 
     #[test]
-    fn test_bitstr_to_bin() {
+    fn test_bitstr_to_xeh() {
         let mut xs = Xstate::boot().unwrap();
-        xs.eval(" \"faee\" hex>bitstr bitstr>hex").unwrap();
-        assert_eq!(Ok(Xstr::from("faee")), xs.pop_data().unwrap().to_xstr());
-    }
-
-    #[test]
-    fn test_bitstr_to_hex() {
-        let mut xs = Xstate::boot().unwrap();
-        xs.eval(" \"1100\" bin>bitstr bitstr>bin").unwrap();
-        assert_eq!(Ok(Xstr::from("1100")), xs.pop_data().unwrap().to_xstr());
+        xs.eval(" \"f0E\" hex>bitstr bitstr>hex").unwrap();
+        assert_eq!(Ok(Xstr::from("f0e")), xs.pop_data().unwrap().to_xstr());
     }
 
     #[test]

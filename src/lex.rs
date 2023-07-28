@@ -492,16 +492,19 @@ mod tests {
     #[test]
     fn test_bitstr_literal() {
         let res = tokenize_input("|FF|  |x..x| | 77 .. f |").unwrap();
-        let mut it = res.iter();
+        let mut it = res.iter().map(|x| match x {
+            Tok::Literal(Cell::Bitstr(s)) => s,
+            _ => panic!("unexpected {:?}", x)
+        });
 
-        let s1 = Xbitstr::from_bin_str("1111 1111").unwrap();
-        assert_eq!(&Tok::Literal(Cell::from(s1)), it.next().unwrap());
+        let s1 = it.next().unwrap();
+        assert_eq!(vec![0xff], s1.to_bytes_with_padding());
         
-        let s2 = Xbitstr::from_bin_str("1001").unwrap();
-        assert_eq!(&Tok::Literal(Cell::from(s2)), it.next().unwrap());
+        let s2 = it.next().unwrap();
+        assert_eq!(vec![0x9], s2.to_bytes_with_padding());
 
-        let s3 = Xbitstr::from_bin_str("0111 0111 00 1111").unwrap();
-        assert_eq!(&Tok::Literal(Cell::from(s3)), it.next().unwrap());
+        let s3 = it.next().unwrap();
+        assert_eq!(vec![0x77, 0xf], s3.to_bytes_with_padding());
         
         match Lex::new(Xstr::from(" | f")).next_nonws() {
             Err(Xerr::ParseError { msg,..}) => assert_eq!(msg, UNTERMINATED_BITSTR_ERRMSG),

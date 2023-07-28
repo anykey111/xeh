@@ -42,7 +42,7 @@ use std::fmt;
 
 impl fmt::Debug for Bitstr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.to_bin_string())
+        write!(f, "{:?}", crate::cell::Cell::Bitstr(self.clone()))
     }
 }
 
@@ -69,20 +69,8 @@ impl BitvecBuilder {
         res.range.end = self.len;
         res
     }
-}
 
-#[derive(Clone, Default)]
-pub struct Bitstr {
-    range: BitstrRange,
-    data: Rc<Cow<'static, [u8]>>,
-}
-
-impl Bitstr {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn from_bin_str(s: &str) -> Result<Bitstr, usize> {
+    pub fn from_bits_str(s: &str) -> Result<Bitstr, usize> {
         let mut tmp = BitvecBuilder::default();
         for (pos, c) in s.chars().enumerate() {
             if c.is_ascii_whitespace() {
@@ -97,10 +85,18 @@ impl Bitstr {
         Ok(tmp.finish())
     }
 
-    pub fn to_bin_string(&self) -> String {
-        let mut s = String::with_capacity(self.len());
-        s.extend(self.bits().map(|x| if x > 0 { '1' } else { '0' }));
-        return s;
+}
+
+
+#[derive(Clone, Default)]
+pub struct Bitstr {
+    range: BitstrRange,
+    data: Rc<Cow<'static, [u8]>>,
+}
+
+impl Bitstr {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn from_hex_str(s: &str) -> Result<Bitstr, usize> {
@@ -623,7 +619,7 @@ mod tests {
         let b = s.read(4).unwrap();
         assert_eq!(b.append(&a).to_bytes().unwrap(), vec![0x31]);
 
-        let mut s = Bitstr::from_bin_str("0 1000000 0 0111011 0 1111000").unwrap();
+        let mut s = BitvecBuilder::from_bin_str("0 1000000 0 0111011 0 1111000").unwrap();
         s.read(1).unwrap();
         let a = s.read(7).unwrap();
         let a_bits: Vec<_> = a.bits().collect();
@@ -683,27 +679,27 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let f = Bitstr::from_bin_str("1111").unwrap();
+        let f = BitvecBuilder::from_bin_str("1111").unwrap();
         let res = Bitstr::from(vec![0xaa, 0xbb])
             .insert(4, &f)
             .unwrap()
             .insert(16, &f)
             .unwrap();
         assert_eq!(vec![0xaf, 0xab, 0xfb], res.to_bytes().unwrap());
-        let z5 = Bitstr::from_bin_str("00000").unwrap();
-        let res = Bitstr::from_bin_str("111111")
+        let z5 = BitvecBuilder::from_bin_str("00000").unwrap();
+        let res = BitvecBuilder::from_bin_str("111111")
             .unwrap()
             .insert(3, &z5)
             .unwrap();
-        assert_eq!(Bitstr::from_bin_str("11100000111").unwrap(), res);
+        assert_eq!(BitvecBuilder::from_bin_str("11100000111").unwrap(), res);
     }
 
     #[test]
     fn test_invert() {
-        let mut a = Bitstr::from_bin_str("01111111 01111111").unwrap();
+        let mut a = BitvecBuilder::from_bin_str("01111111 01111111").unwrap();
         let b = a.clone().invert();
-        assert_eq!("1000000010000000", b.to_bin_string().as_str());
-        assert_eq!("0111111101111111", b.invert().to_bin_string().as_str());
+        assert_eq!(BitvecBuilder::from_bin_str("1000000010000000").unwrap(), b);
+        assert_eq!(BitvecBuilder::from_bin_str("0111111101111111").unwrap(), b.invert());
         let c = a.read(5).unwrap();
         assert_eq!(c.bits().collect::<Vec<_>>(), vec![0, 1, 1, 1, 1]);
         let c_inv = c.invert();
@@ -713,11 +709,11 @@ mod tests {
 
     #[test]
     fn test_invert_detached() {
-        let mut a = Bitstr::from_bin_str("00000000 10101010").unwrap();
+        let mut a = BitvecBuilder::from_bin_str("00000000 10101010").unwrap();
         a.read(8).unwrap();
         let  b = a.read(8).unwrap();
         let c = b.invert();
-        assert_eq!("01010101".to_string(), c.to_bin_string());
+        assert_eq!(BitvecBuilder::from_bin_str("01010101").unwrap(), c);
     }
 
     #[test]
@@ -827,17 +823,6 @@ mod tests {
     }
 
     #[test]
-    fn test_from_bin_str() {
-        let s = "10111001001";
-        let bs = Bitstr::from_bin_str(s).unwrap();
-        assert_eq!(bs.len(), s.len());
-        assert_eq!(s, bs.to_bin_string().as_str());
-        assert_eq!(Err(7), Bitstr::from_bin_str("11 11 02"));
-        let bs = Bitstr::from_bin_str("1 1 1 1 1 1 1").unwrap();
-        assert_eq!(*bs.data, vec![0xfe]);
-    }
-
-    #[test]
     fn test_from_hex_str() {
         let s = "fe1";
         let bs = Bitstr::from_hex_str(s).unwrap();
@@ -889,12 +874,12 @@ mod tests {
         let d = Bitstr::from(vec![0x34]);
         assert!(c.eq_with(&d));
         assert!(!c.eq_with(&a));
-        let s1 = Bitstr::from_bin_str("1000 1000 111").unwrap();
+        let s1 = BitvecBuilder::from_bin_str("1000 1000 111").unwrap();
         let s2 = s1.clone();
         assert!(s1.eq_with(&s2));
-        let s3 = Bitstr::from_bin_str("1000 1000 1111").unwrap();
+        let s3 = BitvecBuilder::from_bin_str("1000 1000 1111").unwrap();
         assert!(!s1.eq_with(&s3));
-        let s4 = Bitstr::from_bin_str("1000 1000 011").unwrap();
+        let s4 = BitvecBuilder::from_bin_str("1000 1000 011").unwrap();
         assert!(!s1.eq_with(&s4));
     }
 

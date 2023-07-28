@@ -185,12 +185,6 @@ loop" doc-example
     "\"ff FF 11\" hex>bitstr" doc-example
 ] "hex>bitstr" doc!
 
-"Parse base 2 string, ignore whitespaces."
-.[ doc-for-bitstr
-    "str -- bitstr" stack-comment
-    "\"1001 0001\" bin>bitstr" doc-example
-] "bin>bitstr" doc!
-
 "Decode UTF-8 string from bitstr."
 .[ doc-for-bitstr
     "bitstr -- str" stack-comment
