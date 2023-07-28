@@ -1,14 +1,10 @@
-# The XEH Programming Language
+# What is XEH?
 
-XEH is a dynamic, stack-oriented programming language designed for the interactive coding. Main language domain is binary data parsing.
-Its look like FORTH, but its not. XEH uses immutable data structures and reference-counting garbage collector.
+XEH is a dynamic, stack-oriented scripting language designed for live coding
+as well as a tool for binary data parsing and construction.
 
-Features:
+What make XEH interestig is ability to save snapshot, test something and rollback without restarting the whole program, just like in video game!
 
-* Builtin reverse debugger.
-* Trial and error REPL mode, preview result of the evaluation without commiting the changes.
-* Runtime compilation and compile-time evaluation.
-* Tagging, arbitrary annotation of data.
 
 Try online:
 [XEH Playground](https://anykey111.github.io/)
@@ -18,7 +14,6 @@ Video: [Youtube](https://www.youtube.com/@xeh-lang)
 # Building and Running
 
 ```
-    # build core library and command line tools
     cargo build --release
 
     # command line options
