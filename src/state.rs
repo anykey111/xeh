@@ -3136,11 +3136,11 @@ mod tests {
         xs.eval(" [ ] >bitstr print").unwrap();
         assert_eq!(Some("||".to_string()), xs.read_stdout());
         xs.eval(" 0b111101 6 uint! print").unwrap();
-        assert_eq!(Some("|Foi|".to_string()), xs.read_stdout());
-        xs.eval(" |88o| print").unwrap();
-        assert_eq!(Some("|88 o|".to_string()), xs.read_stdout());
-        xs.eval(" | i o | print").unwrap();
-        assert_eq!(Some("|io|".to_string()), xs.read_stdout());
+        assert_eq!(Some("|F.x|".to_string()), xs.read_stdout());
+        xs.eval(" |88.| print").unwrap();
+        assert_eq!(Some("|88 .|".to_string()), xs.read_stdout());
+        xs.eval(" | x . | print").unwrap();
+        assert_eq!(Some("|x.|".to_string()), xs.read_stdout());
     }
 
     #[test]

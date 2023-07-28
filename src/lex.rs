@@ -4,6 +4,10 @@ use crate::error::*;
 use std::fmt;
 use std::iter::Iterator;
 
+
+pub(crate) const BIT_CLR_CHAR: char = '.';
+pub(crate) const BIT_SET_CHAR: char = 'x';
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
     EndOfInput,
@@ -170,11 +174,9 @@ impl Lex {
                         }
                     } else if c.is_ascii_whitespace() {
                         continue;
-                    } else if c == '#' {
-                        self.skip_line();
-                    } else if c == 'o' {
+                    } else if c == BIT_CLR_CHAR {
                         builder.append_bit(0);
-                    } else if c == 'i' {
+                    } else if c == BIT_SET_CHAR {
                         builder.append_bit(1);
                     } else if c == '|' {
                         let bs = builder.finish();
@@ -489,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_bitstr_literal() {
-        let res = tokenize_input("|FF|  |iooi| | 77 oo f |").unwrap();
+        let res = tokenize_input("|FF|  |x..x| | 77 .. f |").unwrap();
         let mut it = res.iter();
 
         let s1 = Xbitstr::from_bin_str("1111 1111").unwrap();

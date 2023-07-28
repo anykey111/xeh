@@ -79,11 +79,12 @@ At least one whitespace or the beginnig of the line should precede the comment.
     nil
 
     # bit-string consist of arbitrary number of bits
-    # hex digits 0-9 and A-F represent 4 bit chunk of data
-    # letters "o" and "i" represent a single bit, zero and one
-    |F1|    # 0b1111_0001
-    |iooi|  # 0b1001
-    |F1i|   # 0b1111_0001_1
+    # hex digits "0".."9", and "A..F" represent 4 bit chunk of data
+    |F0|    # 11110000
+
+    # letters "x" and "." represent single bit of value 1 or 0
+    |x..x|  # 1001
+    |F0x|   # 111100001
 ```
 
 ## Words, Variables and Locals
