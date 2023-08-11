@@ -70,7 +70,7 @@ impl BitvecBuilder {
         res
     }
 
-    pub fn from_bits_str(s: &str) -> Result<Bitstr, usize> {
+    pub fn from_bin_str(s: &str) -> Result<Bitstr, usize> {
         let mut tmp = BitvecBuilder::default();
         for (pos, c) in s.chars().enumerate() {
             if c.is_ascii_whitespace() {
