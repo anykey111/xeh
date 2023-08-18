@@ -54,6 +54,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("zero?", core_word_is_zero)?;
     xs.defword("positive?", core_word_is_positive)?;
     xs.defword("negative?", core_word_is_negative)?;
+    xs.defword("popcnt", core_word_popcnt)?;
     OK
 }
 
@@ -330,6 +331,11 @@ fn core_word_random(xs: &mut State) -> Xresult {
 fn core_word_round(xs: &mut State) -> Xresult {
     let x = xs.pop_data()?.to_real()?;
     xs.push_data(Cell::from(x.round()))
+}
+
+fn core_word_popcnt(xs: &mut State) -> Xresult {
+    let x = xs.pop_data()?.to_xint()?;
+    xs.push_data(Cell::from(x.count_ones()))
 }
 
 #[cfg(test)]
