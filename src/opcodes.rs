@@ -51,6 +51,7 @@ pub enum Opcode {
     LoadNil,
     LoadI64(i64),
     LoadF64(f64),
+    LoadStr(Xstr),
     LoadCell(CellBox),
     Store(CellRef),
     InitLocal(usize),

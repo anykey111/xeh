@@ -245,6 +245,7 @@ impl State {
             Opcode::Load(a) => format!("load       {}", ref_name(a)),
             Opcode::LoadI64(i) => format!("loadi64    {}", i),
             Opcode::LoadF64(i) => format!("loadf64    {}", i),
+            Opcode::LoadStr(i) => format!("loadstr    {}", i),
             Opcode::LoadNil => format!("loadnil"),
             Opcode::LoadCell(c) => format!("loadcell  {:?}", c),
             Opcode::Store(a) => format!("store      {}", ref_name(a)),
@@ -836,6 +837,7 @@ impl State {
             Cell::Int(i) if i64::MIN as Xint <= i && i <= i64::MAX as Xint => {
                 Opcode::LoadI64(i as i64)
             }
+            Cell::Str(s) => Opcode::LoadStr(s),
             Cell::Nil => Opcode::LoadNil,
             val => Opcode::LoadCell(CellBox::from(val)),
         }
@@ -1130,6 +1132,11 @@ impl State {
                         self.fetch_and_run()?;
                     }
                 }
+            }
+            Opcode::LoadStr(x) => {
+                let val = Cell::from(x.clone());
+                self.push_data(val)?;
+                self.next_ip();
             }
             Opcode::LoadF64(x) => {
                 let val = Cell::from(*x);
