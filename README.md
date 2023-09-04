@@ -8,7 +8,6 @@ What make XEH interestig is ability to save snapshot, test something and rollbac
 
 Try online:
 [XEH Playground](https://anykey111.github.io/)
-Chat: [Discord](https://discord.gg/8jqwmta9)
 Video: [Youtube](https://www.youtube.com/@xeh-lang)
 
 # Building and Running
