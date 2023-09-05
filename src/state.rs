@@ -2678,7 +2678,7 @@ fn core_word_see(xs: &mut State) -> Xresult {
     let mut buf = String::new();
     match xs.dict_entry(&name).ok_or_else(||Xerr::UnknownWord(Xstr::from(name.as_str())))? {
         Entry::Function { immediate, xf: Xfn::Native(p), .. } => {
-            write!(buf, "word, bultin {:?}", p).unwrap();
+            write!(buf, "word, native {:?}", p).unwrap();
             if *immediate {
                 buf.push_str(", immediate\n");
             } else {
