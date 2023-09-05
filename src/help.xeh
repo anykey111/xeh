@@ -395,10 +395,10 @@ generate-uint-list
 "Get vector item at index.
 Negative index access items from the tail of the vector."
 .[ doc-for-core "vec int -- val" stack-comment
-    "[ 5 7 ] 0 get
+    "[ 5 7 ] 0 nth
     # get last item of the vec
-    [ 5 7 ] -1 get" doc-example
-] "get" doc!
+    [ 5 7 ] -1 nth" doc-example
+] "nth" doc!
 
 "Concatenate vector of values into a string."
 .[ doc-for-core "vec -- str" stack-comment

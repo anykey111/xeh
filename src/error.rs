@@ -184,6 +184,7 @@ impl Xerr {
             Flow::CaseOf { .. } => Self::unbalanced_endof(),
             Flow::CaseEndOf { .. } => Self::unbalanced_endcase(),
             Flow::Vec { .. } => Self::unbalanced_vec_builder(),
+            Flow::Map { .. } => Self::unbalanced_map_builder(),
             Flow::TagVec { .. } => Self::unbalanced_tag_vec_builder(),
             Flow::Fun { .. } => Self::unbalanced_fn_builder(),
             Flow::Do { .. } => Self::unbalanced_do(),
@@ -219,6 +220,11 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
+    pub(crate) fn unbalanced_map_builder() -> Xerr {
+        let msg = xstr_literal!("unbalanced map builder");
+        Xerr::ControlFlowError { msg }
+    }
+
     pub(crate) fn unbalanced_tag_vec_builder() -> Xerr {
         let msg = xstr_literal!("unbalanced tag vector builder");
         Xerr::ControlFlowError { msg }
@@ -226,6 +232,16 @@ impl Xerr {
 
     pub(crate) fn vec_stack_underflow() -> Xerr {
         let msg = xstr_literal!("vector stack underflow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn map_stack_underflow() -> Xerr {
+        let msg = xstr_literal!("map stack underflow");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn map_missing_key() -> Xerr {
+        let msg = xstr_literal!("missing key element");
         Xerr::ControlFlowError { msg }
     }
 

@@ -3,6 +3,7 @@ use crate::fmt_flags::FmtFlags;
 use crate::state::State;
 
 pub type Xvec = rpds::Vector<Cell>;
+pub type Xmap = rpds::RedBlackTreeMap<Cell, Cell>;
 pub type Xstr = arcstr::ArcStr;
 pub type Xsubstr = arcstr::Substr;
 pub type XfnType = fn(&mut State) -> Xresult;
@@ -88,6 +89,7 @@ pub enum Cell {
     Real(Xreal),
     Str(Xstr),
     Vector(Xvec),
+    Map(Xmap),
     Fun(Xfn),
     Bitstr(Xbitstr),
     AnyRc(Xanyrc),
@@ -147,6 +149,20 @@ impl fmt::Debug for Cell {
                     }
                 }
                 f.write_str("]")
+            }
+            Cell::Map(m) => {
+                f.write_str("{ ")?;
+                for (i, (k, v)) in m.iter().enumerate() {
+                    v.fmt(f)?;
+                    f.write_str(" ")?;
+                    k.fmt(f)?;
+                    f.write_str(" ")?;
+                    if flags.fitscreen() && i > VEC_ELIDE_LEN {
+                        f.write_str("... ")?;
+                        break;
+                    }
+                }
+                f.write_str("}")
             }
             Cell::Fun(x) => write!(f, "{:?}", x),
             Cell::Bitstr(s) => {
@@ -213,6 +229,7 @@ impl PartialEq for Cell {
             (Cell::Str(a), Cell::Str(b)) => a == b,
             (Cell::Bitstr(a), Cell::Bitstr(b)) => a == b,
             (Cell::Vector(a), Cell::Vector(b)) => a == b,
+            (Cell::Map(a), Cell::Map(b)) => a == b,
             (Cell::Fun(a), Cell::Fun(b)) => a == b,
             _ => false,
         }
@@ -245,6 +262,7 @@ const INT_TYPE_NAME: Xstr = xstr_literal!("int");
 const REAL_TYPE_NAME: Xstr = xstr_literal!("real");
 const STR_TYPE_NAME: Xstr = xstr_literal!("str");
 const VEC_TYPE_NAME: Xstr = xstr_literal!("vec");
+const MAP_TYPE_NAME: Xstr = xstr_literal!("map");
 const FUN_TYPE_NAME: Xstr = xstr_literal!("fun");
 const BITSTR_TYPE_NAME: Xstr = xstr_literal!("bitstr");
 const ANY_TYPE_NAME: Xstr = xstr_literal!("any");
@@ -263,6 +281,7 @@ impl Cell {
             Cell::Real { .. } => REAL_TYPE_NAME,
             Cell::Str { .. } => STR_TYPE_NAME,
             Cell::Vector { .. } => VEC_TYPE_NAME,
+            Cell::Map { .. } => MAP_TYPE_NAME,
             Cell::Fun { .. } => FUN_TYPE_NAME,
             Cell::Bitstr { .. } => BITSTR_TYPE_NAME,
             Cell::AnyRc { .. } => ANY_TYPE_NAME,
@@ -391,6 +410,8 @@ impl Cell {
 
     pub fn to_usize(&self) -> Xresult1<usize> {
         match self.value() {
+            Cell::Int(i) if *i < 0 =>
+                Err(cell_type_error(xstr_literal!("positive integer"), self.clone())),
             Cell::Int(i) => Ok(*i as usize),
             val => Err(cell_type_error(INT_TYPE_NAME, val.clone())),
         }

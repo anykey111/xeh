@@ -53,6 +53,7 @@ pub(crate) enum Flow {
     CaseOf(usize),
     CaseEndOf(usize),
     Vec,
+    Map,
     TagVec,
     Fun(FunctionFlow),
     Do { for_org: usize, body_org: usize },
@@ -732,6 +733,10 @@ impl State {
         self.def_immediate("repeat", core_word_repeat)?;
         self.def_immediate("[", core_word_vec_begin)?;
         self.def_immediate("]", core_word_vec_end)?;
+        self.def_immediate("{", core_word_map_begin)?;
+        self.def_immediate("}", core_word_map_end)?;
+        self.defword("conj", core_word_conj)?;
+        self.defword("disj", core_word_disj)?;
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
         self.def_immediate("defer", core_word_defer)?;
@@ -760,6 +765,7 @@ impl State {
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
         self.defword("length", core_word_length)?;
+        self.defword("nth", core_word_nth)?;
         self.defword("get", core_word_get)?;
         self.defword("concat", core_word_concat)?;
         self.defword("join", core_word_join)?;
@@ -1798,6 +1804,74 @@ fn vec_builder_end(xs: &mut State) -> Xresult {
     }
 }
 
+fn map_collect_till_ptr(xs: &mut State, stack_ptr: usize) -> Xresult1<Xmap> {
+    let top_ptr = xs.data_stack.len();
+    if top_ptr < stack_ptr {
+        Err(Xerr::map_stack_underflow())
+    } else if ((top_ptr - stack_ptr) % 2) != 0 {
+        Err(Xerr::map_missing_key())
+    } else {
+        let mut m = Xmap::new();
+        for x in (&xs.data_stack[stack_ptr..]).chunks(2) {
+            m.insert_mut(x[1].clone(), x[0].clone());
+        }
+        for _ in 0..top_ptr - stack_ptr {
+            xs.pop_data()?;
+        }
+        Ok(m)
+    }
+}
+
+fn map_builder_begin(xs: &mut State) -> Xresult {
+    let ptr = xs.data_stack.len();
+    xs.push_special(Special::VecStackStart(ptr))
+}
+
+fn map_builder_end(xs: &mut State) -> Xresult {
+    match xs.pop_special() {
+        Some(Special::VecStackStart(stack_ptr)) => {
+            let m = map_collect_till_ptr(xs, stack_ptr)?;
+            xs.push_data(Cell::Map(m))
+        }
+        _ => Err(Xerr::unbalanced_map_builder()),
+    }
+}
+
+fn core_word_map_begin(xs: &mut State) -> Xresult {
+    xs.push_flow(Flow::Map)?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_begin)))
+}
+
+fn core_word_map_end(xs: &mut State) -> Xresult {
+    match xs.pop_flow() {
+        Some(Flow::Map) => xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_end))),
+        _ => Err(Xerr::unbalanced_map_builder()),
+    }
+}
+
+fn core_word_conj(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    let val = xs.pop_data()?;
+    match xs.pop_data()? {
+        Cell::Map(mut m) => {
+            m.insert_mut(key, val);
+            xs.push_data(Cell::Map(m))
+        }
+        other => Err(Xerr::type_not_supported(other))
+    }
+}
+
+fn core_word_disj(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    match xs.pop_data()? {
+        Cell::Map(mut s) => {
+            s.remove_mut(&key);
+            xs.push_data(Cell::Map(s))
+        }
+        other => Err(Xerr::type_not_supported(other))
+    }
+}
+
 fn core_word_def_begin(xs: &mut State) -> Xresult {
     // jump over function body
     let start = xs.code_origin();
@@ -2344,10 +2418,28 @@ fn vector_get<'a>(v: &'a Xvec, ridx: isize) -> Xresult1<&'a Cell> {
         .ok_or_else(|| Xerr::out_of_bounds(abs_idx, v.len()))
 }
 
-fn core_word_get(xs: &mut State) -> Xresult {
+fn core_word_nth(xs: &mut State) -> Xresult {
     let index = xs.pop_data()?.to_isize()?;
     let v = xs.pop_data()?.to_vec()?;
     xs.push_data(vector_get(&v, index)?.clone())
+}
+
+fn core_word_get(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    match xs.pop_data()? {
+        Cell::Vector(v) => {
+            //fixme: remove Vector support?
+            let idx = key.to_usize()?;
+            let val = v.get(idx)
+                .ok_or_else(|| Xerr::out_of_bounds(idx, v.len()))?;
+            xs.push_data(val.clone())
+        }
+        Cell::Map(m) => {
+            let val = m.get(&key).unwrap_or_else(|| &NIL);
+            xs.push_data(val.clone())
+        }
+        other => Err(Xerr::type_not_supported(other)),
+    }
 }
 
 fn join_str_vec(xs: &mut State, v: &Xvec, sep: &Option<Xstr>) -> Xresult1<String> {
@@ -3025,24 +3117,53 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
+    fn test_nth() {
         let mut xs = State::boot().unwrap();
-        xs.eval("[ 11 22 33 ] 2 get").unwrap();
+        xs.eval("[ 11 22 33 ] 2 nth").unwrap();
         assert_eq!(Cell::from(33isize), xs.pop_data().unwrap());
-        xs.eval("[ 11 22 33 ] -2 get").unwrap();
+        xs.eval("[ 11 22 33 ] -2 nth").unwrap();
         assert_eq!(Cell::from(22isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::out_of_range(100, 0..3)), xs.eval("[ 1 2 3 ] 100 get"));
+        assert_eq!(Err(Xerr::out_of_range(100, 0..3)), xs.eval("[ 1 2 3 ] 100 nth"));
     }
 
     #[test]
-    fn test_get_relative() {
+    fn test_nth_relative() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "[ 1 2 3 ] -2 get");
+        eval_ok!(xs, "[ 1 2 3 ] -2 nth");
         assert_eq!(Cell::from(2isize), xs.pop_data().unwrap());
-        eval_ok!(xs, "[ 1 2 3 ] -1 get");
+        eval_ok!(xs, "[ 1 2 3 ] -1 nth");
         assert_eq!(Cell::from(3isize), xs.pop_data().unwrap());
-        assert_eq!(Err(Xerr::out_of_bounds_rel(-4, 3)), xs.eval("[ 1 2 3 ] -4 get"));
-        assert_ne!(OK, xs.eval("[ 1 ] \"0\" get"));
+        assert_eq!(Err(Xerr::out_of_bounds_rel(-4, 3)), xs.eval("[ 1 2 3 ] -4 nth"));
+        assert_ne!(OK, xs.eval("[ 1 ] \"0\" nth"));
+    }
+
+    #[test]
+    fn test_get() {
+        let mut xs = State::boot().unwrap();
+        xs.eval("
+            [ 11 22 33 ] 2 get 33 assert-eq
+            { 1 \"a\" 2 \"b\" 3 \"c\" }
+            dup \"b\" get 2 assert-eq
+            \"e\" get nil assert-eq
+            ").unwrap();
+    }
+
+    #[test]
+    fn test_map() {
+        let mut xs = State::boot().unwrap();
+        xs.eval("
+            { 1 \"a\" 3 \"c\" }  2 \"b\" conj
+            { 1 \"a\" 2 \"b\" 3 \"c\" } assert-eq
+
+            { 1 \"a\" 2 \"b\" 3 \"c\" } \"c\" disj
+            { 1 \"a\" 2 \"b\" } assert-eq
+
+            { 1 \"a\" 2 \"b\" } \"c\" disj
+            { 1 \"a\" 2 \"b\" } assert-eq
+            ").unwrap();
+        assert_ne!(OK, xs.eval("{ 1 \"a\" 3  }"));
+        assert_ne!(OK, xs.eval("{ 1 \"a\" "));
+        assert_ne!(OK, xs.eval(" 1 \"a\" } "));
     }
 
     #[test]
