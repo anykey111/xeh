@@ -1,19 +1,10 @@
 
-10 "ten!" with-tag
+10 { 1 "a" 2 "b" 3 "c" } with-tags
+tags { 1 "a" 2 "b" 3 "c" } assert-eq
 
-dup 10 assert-eq
+true ^{ 5 7 } 7 get-tag
+5 assert-eq
 
-tag-of "ten!" assert-eq
+true ^{ 11 ^{ 13 "bb" } "aa" } "aa" get-tag "bb" get-tag 13 assert-eq
 
-"a" "b" "c" with-tag with-tag
-
-dup tag-of "b" assert-eq
-
-tag-of tag-of "c" assert-eq
-
-22 33 with-tag tag-of 33 assert-eq
-
-1 2 with-tag 3 with-tag
-tag-of 3 assert-eq
-
-depth zero? assert
+depth 0 assert-eq

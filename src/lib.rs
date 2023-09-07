@@ -5,6 +5,48 @@ macro_rules! xstr_literal {
     }};
 }
 
+macro_rules! xeh_str_lit {
+    ($s:literal) => {{
+        const S: Xstr = arcstr::literal!($s);
+        Cell::Str(S)
+    }};
+}
+
+#[macro_export]
+macro_rules! xeh_map {
+    ($($k:expr => $v:expr),*) => {
+        {
+            #[allow(unused_mut)]
+            let mut m = $crate::cell::Xmap::new();
+            $(
+                m.insert_mut($crate::cell::Cell::from($k), $crate::cell::Cell::from($v));
+            )*
+            m
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! xeh_vec {
+    ($($e:expr),*) => {
+        {
+            #[allow(unused_mut)]
+            let mut v = $crate::cell::Xvec::new();
+            $(
+                v.push_back_mut($crate::cell::Cell::from($e));
+            )*
+            v
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! xeh_lit {
+    ($x:literal) => {{
+        $crate::cell::Cell::from($x)
+    }}
+}
+
 mod arith;
 mod range;
 mod istype;

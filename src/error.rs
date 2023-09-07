@@ -69,10 +69,10 @@ pub enum Xerr {
     Exit(isize),
 }
 
-pub(crate) const ASSERT_MSG: Cell = Cell::Str(xstr_literal!("assert.msg"));
+pub(crate) const ASSERT_MSG: Cell = xeh_str_lit!("assert.msg");
 
 fn assert_get_msg(a: &Cell) -> Option<&str> {
-    a.get_tagged(&ASSERT_MSG)?.str().ok()
+    a.lookup_tag(&ASSERT_MSG)?.str().ok()
 }
 
 impl fmt::Display for Xerr {
@@ -185,7 +185,7 @@ impl Xerr {
             Flow::CaseEndOf { .. } => Self::unbalanced_endcase(),
             Flow::Vec { .. } => Self::unbalanced_vec_builder(),
             Flow::Map { .. } => Self::unbalanced_map_builder(),
-            Flow::TagVec { .. } => Self::unbalanced_tag_vec_builder(),
+            Flow::Tags { .. } => Self::unbalanced_tag_map_builder(),
             Flow::Fun { .. } => Self::unbalanced_fn_builder(),
             Flow::Do { .. } => Self::unbalanced_do(),
             Flow::Let { ..} => Self::unbalanced_let_in(),
@@ -225,7 +225,7 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
-    pub(crate) fn unbalanced_tag_vec_builder() -> Xerr {
+    pub(crate) fn unbalanced_tag_map_builder() -> Xerr {
         let msg = xstr_literal!("unbalanced tag vector builder");
         Xerr::ControlFlowError { msg }
     }
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn test_assert_eq() {
         let msg = Xstr::from(xstr_literal!("test1"));
-        let a = ONE.set_tagged(ASSERT_MSG, Cell::Str(msg)).unwrap();
+        let a = ONE.insert_tag(ASSERT_MSG, Cell::Str(msg));
         let err = Xerr::AssertEqFailed { a , b: ZERO};
         assert_eq!("assertion failed: test1\n1\n0", format!("{}", err));
     }

@@ -5,10 +5,10 @@ use crate::prelude::*;
 use memchr::memmem;
 use std::fmt::Write;
 
-const RAW_LIT: Cell = Cell::Str(xstr_literal!("raw"));
-const BIG_LIT: Cell = Cell::Str(xstr_literal!("big"));
-const LEN_LIT: Cell = Cell::Str(xstr_literal!("len"));
-const COMMENT_LIT: Cell = Cell::Str(xstr_literal!("comment"));
+const BIG_LIT: Cell = xeh_str_lit!("big");
+const LEN_LIT: Cell = xeh_str_lit!("len");
+const COMMENT_LIT: Cell = xeh_str_lit!("comment");
+const OFFSET_LIT: Cell = xeh_str_lit!("offset");
 
 #[derive(Default, Clone)]
 pub struct BitstrState {
@@ -77,7 +77,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("write-all", word_write)?;
     xs.defword("read-all", word_read_all)?;
     xs.defword("scratch", word_scratch)?;
-    xs.defword(".comment", word_add_comment)?;
+    xs.defword("^comment", word_add_comment)?;
     xs.defword("random-bits", random_bits)?;
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -312,7 +312,7 @@ pub(crate) fn open_bitstr(xs: &mut Xstate, s: Bitstr) -> Xresult {
     let stash = xs
         .get_var(xs.bitstr_mod.stash)?
         .vec()?
-        .push_back(old_input.with_tag(old_offset));
+        .push_back(old_input.insert_tag(OFFSET_LIT.clone(), old_offset));
     xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))
 }
 
@@ -324,10 +324,10 @@ fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
 fn word_close_bitstr(xs: &mut Xstate) -> Xresult {
     let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
     let last = stash.last().ok_or_else(|| Xerr::out_of_bounds(0, stash.len()))?;
-    let offset = last.tag().unwrap_or(&ZERO).clone();
+    let offset = last.lookup_tag(&OFFSET_LIT).unwrap_or_else(|| &ZERO);
     let input = last.value().clone();
     let stash = stash.drop_last().unwrap();
-    xs.set_var(xs.bitstr_mod.offset, offset)?;
+    xs.set_var(xs.bitstr_mod.offset, offset.clone())?;
     xs.set_var(xs.bitstr_mod.input, input)?;
     xs.set_var(xs.bitstr_mod.stash, Cell::from(stash))?;
     OK
@@ -547,8 +547,7 @@ fn read_unsigned(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     }
     let x = s.to_uint(bo) as Xint;
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(s, bo));
-    xs.push_data(val)
+    xs.push_data(Cell::from(x).with_tags(bitstr_num_tags(s, bo)))
 }
 
 fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
@@ -558,8 +557,7 @@ fn read_signed(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
     }
     let x = s.to_int(bo);
     move_offset_checked(xs, s.end())?;
-    let val = Cell::from(x).with_tag(bitstr_int_tag(s, bo));
-    xs.push_data(val)
+    xs.push_data(Cell::from(x).with_tags(bitstr_num_tags(s, bo)))
 }
 
 fn read_signed_n(xs: &mut Xstate, n: usize) -> Xresult {
@@ -585,23 +583,16 @@ fn read_float(xs: &mut Xstate, n: usize, bo: Byteorder) -> Xresult {
         n => return Err(float_len_err(n)),
     };
     move_offset_checked(xs, s.end())?;
-    xs.push_data(Cell::from(val).with_tag(bitstr_real_tag(s, bo)))
+    xs.push_data(Cell::from(val).with_tags(bitstr_num_tags(s, bo)))
 }
 
-fn bitstr_int_tag(bs: Bitstr, bo: Byteorder) -> Cell {
-    bitstr_real_tag(bs, bo)
-}
-
-fn bitstr_real_tag(bs: Bitstr, bo: Byteorder) -> Cell {
-    let mut v = Xvec::new();
-    v.push_back_mut(Cell::from(bs.len()).with_tag(LEN_LIT));
-    if bo == BIG {
-        v.push_back_mut(TRUE.with_tag(BIG_LIT));
-    } else {
-        v.push_back_mut(FALSE.with_tag(BIG_LIT));
+fn bitstr_num_tags(bs: Bitstr, bo: Byteorder) -> Xmap {
+    let mut m = Xmap::new();
+    m.insert_mut(LEN_LIT, Cell::from(bs.len()));
+    if bo == BIG && bo != NATIVE {
+        m.insert_mut(BIG_LIT, TRUE);
     }
-    v.push_back_mut(Cell::from(bs).with_tag(RAW_LIT));
-    Cell::from(v)
+    m
 }
 
 fn nulbytestr_read(xs: &mut Xstate) -> Xresult1<Bitstr> {
@@ -676,7 +667,7 @@ fn word_scratch(xs: &mut Xstate) -> Xresult {
 fn word_add_comment(xs: &mut Xstate) -> Xresult {
     let comment = xs.pop_data()?;
     let val = xs.pop_data()?;
-    let tagged = val.set_tagged(COMMENT_LIT, comment)?;
+    let tagged = val.insert_tag(COMMENT_LIT, comment);
     xs.push_data(tagged)
 }
 
@@ -767,12 +758,12 @@ mod tests {
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::Int(1), val.value());
             let bs = Bitstr::from_hex_str("01").unwrap();
-            assert_eq!(&bitstr_int_tag(bs, NATIVE), val.tag().unwrap());
+            assert_eq!(&bitstr_num_tags(bs, NATIVE), val.tags().unwrap());
         }
         {
             xs.eval("16 bits").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(None, val.tag());
+            assert_eq!(None, val.tags());
             let s = val.value().to_bitstr().unwrap();
             assert_eq!(16, s.len());
             assert_eq!(vec![2, 3], s.to_bytes_with_padding());
@@ -780,7 +771,7 @@ mod tests {
         {
             xs.eval("2 bits").unwrap();
             let val = xs.pop_data().unwrap();
-            assert_eq!(None, val.tag());
+            assert_eq!(None, val.tags());
             let s = val.value().to_bitstr().unwrap();
             assert_eq!(2, s.len());
         }
@@ -788,14 +779,14 @@ mod tests {
             xs.eval("big 2 int").unwrap();
             let val = xs.pop_data().unwrap();
             let bs = Bitstr::from_int(0, 2, BIG);
-            assert_eq!(&bitstr_int_tag(bs, BIG), val.tag().unwrap());
+            assert_eq!(&bitstr_num_tags(bs, BIG), val.tags().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
             xs.eval("little 2 int").unwrap();
             let val = xs.pop_data().unwrap();
             let bs = Bitstr::from_int(0, 2, LITTLE);
-            assert_eq!(&bitstr_int_tag(bs, LITTLE), val.tag().unwrap());
+            assert_eq!(&bitstr_num_tags(bs, LITTLE), val.tags().unwrap());
             assert_eq!(&Cell::Int(0), val.value());
         }
         {
@@ -805,7 +796,7 @@ mod tests {
             xs.eval("64 big float").unwrap();
             let val = xs.pop_data().unwrap();
             assert_eq!(&Cell::from(f), val.value());
-            assert_eq!(&bitstr_real_tag(bs, BIG), val.tag().unwrap());
+            assert_eq!(&bitstr_num_tags(bs, BIG), val.tags().unwrap());
         }
     }
 

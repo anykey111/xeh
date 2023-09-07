@@ -14,7 +14,7 @@ pub type Xbitstr = crate::bitstr::Bitstr;
 pub type Xcell = Cell;
 
 pub struct WithTag {
-    tag: Cell,
+    tags: Xmap,
     value: Cell,
 }
 
@@ -199,12 +199,9 @@ impl fmt::Debug for Cell {
             },
             Cell::WithTag(rc) if flags.show_tags() => {
                 rc.value.fmt(f)?;
-                f.write_str(" .")?;
-                if !rc.tag.vec().is_ok() {
-                    f.write_char(' ')?;
-                }
-                rc.tag.fmt(f)
-            }
+                f.write_str(" ")?;
+                rc.tags.fmt(f)
+            },
             Cell::WithTag(rc) => rc.value.fmt(f),
         }
     }
@@ -303,53 +300,57 @@ impl Cell {
         }
     }
 
-    pub fn tag(&self) -> Option<&Cell> {
+    pub fn insert_tag(&self, key: Cell, val: Cell) -> Cell {
+        let new_tags = if let Some(tags) = self.tags() {
+            tags.insert(key, val)
+        } else {
+            Xmap::new().insert(key, val)
+        };
+        self.with_tags(new_tags)
+    }
+
+    pub fn remove_tag(&self, key: &Cell) -> Cell {
+        let new_tags = if let Some(tags) = self.tags() {
+            tags.remove(key)
+        } else {
+            Xmap::new()
+        };
+        self.with_tags(new_tags)
+    }
+
+    pub fn lookup_tag(&self, key: &Cell) -> Option<&Cell> {
+        self.tags().and_then(|tags| tags.get(key))
+    }
+
+    pub fn tags(&self) -> Option<&Xmap> {
         match self {
-            Cell::WithTag(rc) => Some(&rc.tag),
+            Cell::WithTag(rc) => Some(&rc.tags),
             _ => None,
         }
     }
 
-    pub fn with_tag(self, tag: Cell) -> Cell {
-        let tagged = match self {
-            Cell::WithTag(rc) => WithTag { tag, value: rc.value.clone() },
-            value => WithTag { tag, value },
-        };
-        Cell::WithTag(std::rc::Rc::new(tagged))
-    }
-    
-    pub fn get_tagged(&self, key: &Cell) -> Option<&Cell> {
-        self.tag()?.vec().ok()?.iter().find(|x| x.tag() == Some(&key))
-    }
-
-    pub fn set_tagged(self, key: Cell, val: Cell) -> Xresult1<Cell> {
-        match self.tag() {
-            Some(Cell::Vector(v )) => {
-                let tv = if let Some(i) = v.iter().position(|x| x.tag() == Some(&key)) {
-                    v.set(i, val.with_tag(key)).unwrap()
-                } else {
-                    v.push_back(val.with_tag(key))
-                };
-                Ok(self.with_tag(Cell::from(tv)))
-            }
-            Some(val) => {
-                Err(Xerr::TypeErrorMsg {
-                    val: val.clone(),
-                    msg: xstr_literal!("tagged vec")
-                })
-            }
-            None => {
-                let mut tv = Xvec::new();
-                tv.push_back_mut(val.with_tag(key));
-                Ok(self.with_tag(Cell::from(tv)))
-            }
-        }
+    pub fn with_tags(&self, tags: Xmap) -> Cell {
+        Cell::WithTag(std::rc::Rc::new(WithTag { value: self.value().clone(), tags }))
     }
 
     pub fn value(&self) -> &Cell {
         match self {
-            Cell::WithTag(rc) => rc.value.value(),
+            Cell::WithTag(rc) => &rc.value,
             _ => self,
+        }
+    }
+
+    pub fn as_map(&self) -> Xresult1<&Xmap> {
+        match self.value() {
+            Cell::Map(m) => Ok(m),
+            val => Err(cell_type_error(MAP_TYPE_NAME, val.clone())),
+        }
+    }
+
+    pub fn to_map(&self) -> Xresult1<Xmap> {
+        match self.value() {
+            Cell::Map(m) => Ok(m.clone()),
+            val => Err(cell_type_error(MAP_TYPE_NAME, val.clone())),
         }
     }
 
@@ -554,63 +555,47 @@ mod tests {
     }
 
     #[test]
-    fn cell_eq() {
+    fn test_tag_eq() {
         let a = Cell::from(33u8);
         let b = Cell::from(33u8);
         assert_eq!(&a, &b);
-        let c = b.with_tag(ZERO.clone());
+        let c = b.insert_tag(Cell::from("TAGKEY"), Cell::from("TAGVAL"));
         assert_eq!(&a, &c);
         let a = Cell::from(32.0);
         let b = Cell::from(32.0);
         assert_eq!(&a, &b);
-        let c = b.with_tag(ONE.clone());
-        assert_eq!(&a, &c);
-        let a = Cell::from("asd");
-        let b = Cell::from("asd");
-        assert_eq!(&a, &b);
-        let c = b.with_tag(ONE.clone());
+        let c = b.remove_tag(&Cell::from("TAGKEY"));
         assert_eq!(&a, &c);
     }
 
     #[test]
-    fn test_with_tag() {
-        let tag_a = Cell::from("a");
-        let c = ONE.with_tag(tag_a.clone());
-        assert_eq!(Some(&tag_a), c.tag());
-        assert_eq!(ONE, c);
+    fn test_insert_tag() {
+        const K1: Cell = xeh_str_lit!("K1");
+        const V1: Cell = xeh_str_lit!("V1");
+        const K2: Cell = xeh_str_lit!("K2");
+        const V2: Cell = xeh_str_lit!("V2");
+        let res: Cell = ONE.insert_tag(K1, V1);
+        assert_eq!(res.tags().unwrap(), &xeh_map![K1 => V1]);
+        
+        let res2 = res.insert_tag(K2, V2).insert_tag(K1, V1);
+        assert_eq!(res2.tags().unwrap(), &xeh_map![K1 => V1, K2 => V2]);
+        let res3 = res2.remove_tag(&K1);
+        assert_eq!(res3.tags().unwrap(), &xeh_map![K2 => V2]);        
     }
 
     #[test]
-    fn test_get_tagged() {
-        let a = Cell::from("1").with_tag(Cell::from("a"));
-        assert_eq!(a.get_tagged(&Cell::from("a")), None);
-        let b = Cell::from("2").with_tag(Cell::from(rpds::vector![
-                Cell::from("c"),
-                a.clone()
-            ]));
-        assert_eq!(Some(&a), b.get_tagged(&Cell::from("a")));
-        assert_eq!(None, b.get_tagged(&Cell::from("c")));
+    fn test_vec_macro() {
+        let v = xeh_vec![1, "s", 3.0];
+        assert_eq!(&Cell::Int(1), v.get(0).unwrap());
+        assert_eq!(&Cell::from("s"), v.get(1).unwrap());
+        assert_eq!(&Cell::Real(3.0), v.get(2).unwrap());
     }
 
     #[test]
-    fn test_insert_tagged() {
-        let x = Cell::from("x");
-        let k1 = Cell::from("k1");
-        let v1 = Cell::from("v1");
-        let k2 = Cell::from("k2");
-        let v2 = Cell::from("v2");
-        let x = x.set_tagged(k1.clone(), v1.clone()).unwrap();
-        let tv = x.tag().unwrap().to_vec().unwrap();
-        assert_eq!(tv[0].tag(), Some(&k1));
-        assert_eq!(tv[0].value(), &v1);
-        let x = x.set_tagged(k2.clone(), v2.clone()).unwrap();
-        let tv = x.tag().unwrap().to_vec().unwrap();
-        assert_eq!(tv[1].tag(), Some(&k2));
-        assert_eq!(tv[1].value(), &v2);
-        let x = x.set_tagged(k1.clone(), v2.clone()).unwrap();
-        let tv = x.tag().unwrap().to_vec().unwrap();
-        assert_eq!(tv[0].tag(), Some(&k1));
-        assert_eq!(tv[0].value(), &v2);
+    fn test_map_macro() {
+        let m = xeh_map!["a" => 1, "b" => 2.0];
+        assert_eq!(Some(&Cell::from(1)), m.get(&Cell::from("a")));
+        assert_eq!(Some(&Cell::from(2.0)), m.get(&Cell::from("b")));
     }
 
 }
