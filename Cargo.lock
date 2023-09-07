@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "archery"
-version = "0.4.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a8da9bc4c4053ee067669762bcaeea6e241841295a2b6c948312dad6ef4cc02"
+checksum = "ab7d8a6d00b222909638a01ddcc8c533219e9d5bfada1613afae43481f2fc699"
 dependencies = [
  "static_assertions",
 ]
@@ -300,9 +300,9 @@ dependencies = [
 
 [[package]]
 name = "rpds"
-version = "0.12.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66262ea963eff99163e6b741fbc3417a52cc13074728c1047e9911789df9b000"
+checksum = "0e475a12283dfa5e31bd0b0a1a10b5486c0965a34eaf8a695d6df4b47810250d"
 dependencies = [
  "archery",
 ]
