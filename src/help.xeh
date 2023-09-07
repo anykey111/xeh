@@ -539,12 +539,12 @@ Deffer word resolution to runtime."
     " doc-example
 ] "str-split-at" doc!
 
-"Slice string till index."
-.[ doc-for-core "str int -- str" stack-comment 
-    "\"abc\" 1 str-slice # result \"a\"
+"Slice string from the 'start' till the 'end'."
+.[ doc-for-core "str start end -- str" stack-comment
+    "\"abc\" 0 1 slice # result \"a\"
     \"abc\" -1 str-slice # result \"ab\"
     \"abc\" 3 . 2 str-slice # result \"c\"" doc-example
-] "str-slice" doc!
+] "slice" doc!
 
 "Bit-shift left."
 .[ doc-for-bitwise

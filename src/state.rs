@@ -619,7 +619,6 @@ impl State {
     pub fn boot() -> Xresult1<State> {
         let mut xs = Self::core()?;
         crate::istype::load(&mut xs)?;
-        crate::range::load(&mut xs)?;
         crate::bitstr_ext::load(&mut xs)?;
         crate::base_ext::load(&mut xs)?;
         Ok(xs)
@@ -786,8 +785,7 @@ impl State {
         self.defword("print", core_word_print)?;
         self.defword("newline", core_word_newline)?;
         self.defword("str>number", core_word_str_to_num)?;
-        self.defword("str-split-at", core_word_str_split_at)?;
-        self.defword("str-slice", core_word_str_slice)?;
+        self.defword("slice", core_word_slice)?;
         self.def_immediate("include", core_word_include)?;
         self.def_immediate("require", core_word_require)?;
         self.defword("tags", core_word_tags)?;
@@ -2619,38 +2617,34 @@ fn slicing_index(idx: isize, len: usize) -> usize {
    }
 }
 
-fn slice_str(s: &Xstr, range: Range<isize>) -> String {
+fn slice_str(s: &Xstr, start: isize, end: isize) -> String {
     let slen = s.chars().count();
-    let e = slicing_index(range.end, slen);
-    let mut i = slicing_index(range.start, slen);
-    let mut acc = String::new();
-    let mut it = s.chars().skip(i);
-    while i < e {
-        if let Some(c) = it.next() {
-            acc.push(c);
-        } else {
-            break;
-        }
-        i += 1;
+    let start = slicing_index(start, slen);
+    let end = slicing_index(end, slen);
+    s.chars().skip(start).take(end - start.min(end)).collect() 
+}
+
+fn slice_vec(v: &Xvec, start: isize, end: isize) -> Xvec {
+    let len = v.len();
+    let start = slicing_index(start, len);
+    let end = slicing_index(end, len);
+    let mut acc = Xvec::new();
+    for x in v.iter().skip(start).take(end - start.min(end)) {
+        acc.push_back_mut(x.clone());
     }
     acc
 }
 
-fn core_word_str_slice(xs: &mut State) -> Xresult {
-    let doto = xs.pop_data()?;
-    let range = crate::range::parse_do_to(doto)?.range();
-    let xstr = xs.pop_data()?.to_xstr()?;
-    let slice = slice_str(&xstr, range);
-    xs.push_data(Cell::from(slice))
-}
-
-fn core_word_str_split_at(xs: &mut State) -> Xresult {
-    let at = xs.pop_data()?.to_isize()?;
-    let s = xs.pop_data()?.to_xstr()?;
-    let head = slice_str(&s, 0..at);
-    let tail = slice_str(&s, at..isize::MAX);
-    xs.push_data(Cell::from(tail))?;
-    xs.push_data(Cell::from(head))
+fn core_word_slice(xs: &mut State) -> Xresult {
+    let end = xs.pop_data()?.to_isize()?;
+    let start = xs.pop_data()?.to_isize()?;
+    let indexed = xs.pop_data()?;
+    let slice = match indexed.value() {
+        Cell::Vector(v) => Cell::from(slice_vec(v, start, end)),
+        Cell::Str(s) => Cell::from(slice_str(s, start, end)),
+        _ => return Err(Xerr::type_not_supported(indexed)),
+    };
+    xs.push_data(slice)
 }
 
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
@@ -3110,13 +3104,13 @@ mod tests {
     fn test_map() {
         let mut xs = State::boot().unwrap();
         xs.eval("
-            { 1 \"a\" 3 \"c\" }  2 \"b\" conj
+            { 1 \"a\" 3 \"c\" }  2 \"b\" insert
             { 1 \"a\" 2 \"b\" 3 \"c\" } assert-eq
 
-            { 1 \"a\" 2 \"b\" 3 \"c\" } \"c\" disj
+            { 1 \"a\" 2 \"b\" 3 \"c\" } \"c\" remove
             { 1 \"a\" 2 \"b\" } assert-eq
 
-            { 1 \"a\" 2 \"b\" } \"c\" disj
+            { 1 \"a\" 2 \"b\" } \"c\" remove
             { 1 \"a\" 2 \"b\" } assert-eq
             ").unwrap();
         assert_ne!(OK, xs.eval("{ 1 \"a\" 3  }"));
@@ -3128,30 +3122,30 @@ mod tests {
     fn test_str_slice() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "
-            \"asf\" 0  str-slice \"\" assert-eq
-            \"asf\" 1  str-slice \"a\" assert-eq
-            \"asf\" 2  str-slice \"as\" assert-eq
-            \"asf\" 3  str-slice \"asf\" assert-eq
-            \"asf\" 4  str-slice \"asf\" assert-eq
-            \"asf\" -1 str-slice \"as\" assert-eq
-            \"asf\" -2 str-slice \"a\" assert-eq
-            \"asf\" -3 str-slice \"\" assert-eq
-            \"asf\" -4 str-slice \"\" assert-eq
+            \"ABCD\" 1 3 slice \"BC\" assert-eq
+            \"ABCD\" 0 10 slice \"ABCD\" assert-eq
+            \"ABCD\" 10 4 slice \"\" assert-eq
+            \"ABCD\" -4 -2 slice \"AB\" assert-eq
+            \"ABCD\" -2 -4 slice \"\" assert-eq
+            \"ABCD\" -2 4 slice \"CD\" assert-eq
+            \"ABCD\" 0 -1 slice \"ABC\" assert-eq
+            \"ABCD\" 0 4 slice \"ABCD\" assert-eq
         ");
     }
 
     #[test]
-    fn test_str_slice_range() {
+    fn test_vec_slice() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs,"
-            \"asf\"  2  1 ^start str-slice \"s\" assert-eq
-            \"asf\" -1 -2 ^start str-slice \"s\" assert-eq
-            \"asf\" -2 -1 ^start str-slice \"\" assert-eq
-            \"asf\"  0 str-slice \"asf\" assert-eq
-            \"asf\" -1 str-slice \"f\" assert-eq
-            \"asf\" -2 str-slice \"sf\" assert-eq
-            \"asf\" -3 str-slice \"asf\" assert-eq
-            \"asf\" -4 str-slice \"asf\" assert-eq
+        eval_ok!(xs, "
+            [ 0 1 2 3 ]
+            [ 0 1 2 3 ] 1 3 slice [ 1 2 ] assert-eq
+            [ 0 1 2 3 ] 0 10 slice [ 0 1 2 3 ] assert-eq
+            [ 0 1 2 3 ] 10 4 slice [ ] assert-eq
+            [ 0 1 2 3 ] -4 -2 slice [ 0 1 ] assert-eq
+            [ 0 1 2 3 ] -2 -4 slice [ ] assert-eq
+            [ 0 1 2 3 ] -2 4 slice [ 2 3 ] assert-eq
+            [ 0 1 2 3 ] 0 -1 slice [ 0 1 2 ] assert-eq
+            [ 0 1 2 3 ] 0 4 slice [ 0 1 2 3 ] assert-eq
         ");
     }
 

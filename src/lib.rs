@@ -48,7 +48,6 @@ macro_rules! xeh_lit {
 }
 
 mod arith;
-mod range;
 mod istype;
 pub mod bitstr;
 pub mod bitstr_ext;
