@@ -318,7 +318,7 @@ impl Cell {
         self.with_tags(new_tags)
     }
 
-    pub fn lookup_tag(&self, key: &Cell) -> Option<&Cell> {
+    pub fn get_tag(&self, key: &Cell) -> Option<&Cell> {
         self.tags().and_then(|tags| tags.get(key))
     }
 

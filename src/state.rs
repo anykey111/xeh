@@ -793,7 +793,6 @@ impl State {
         self.defword("insert-tag", core_word_insert_tag)?;
         self.defword("remove-tag", core_word_remove_tag)?;
         self.defword("get-tag", core_word_get_tag)?;
-        self.defword(".", core_word_get_tag)?;
         self.defword("^", core_word_insert_tag)?;
         self.def_immediate("^{", core_word_tags_map)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;

@@ -324,7 +324,7 @@ fn word_open_bitstr(xs: &mut Xstate) -> Xresult {
 fn word_close_bitstr(xs: &mut Xstate) -> Xresult {
     let stash = xs.get_var(xs.bitstr_mod.stash)?.vec()?;
     let last = stash.last().ok_or_else(|| Xerr::out_of_bounds(0, stash.len()))?;
-    let offset = last.lookup_tag(&OFFSET_LIT).unwrap_or_else(|| &ZERO);
+    let offset = last.get_tag(&OFFSET_LIT).unwrap_or_else(|| &ZERO);
     let input = last.value().clone();
     let stash = stash.drop_last().unwrap();
     xs.set_var(xs.bitstr_mod.offset, offset.clone())?;

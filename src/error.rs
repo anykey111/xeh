@@ -72,7 +72,7 @@ pub enum Xerr {
 pub(crate) const ASSERT_MSG: Cell = xeh_str_lit!("assert.msg");
 
 fn assert_get_msg(a: &Cell) -> Option<&str> {
-    a.lookup_tag(&ASSERT_MSG)?.str().ok()
+    a.get_tag(&ASSERT_MSG)?.str().ok()
 }
 
 impl fmt::Display for Xerr {
