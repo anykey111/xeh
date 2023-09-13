@@ -103,16 +103,6 @@ impl Lex {
             let ws = self.buf.substr(start..self.pos);
             return Ok(Tok::Whitespace(ws));
         }
-        if let Some('#') = self.peek_char() {
-            while let Some(c) = self.peek_char() {
-                if c == '\n' {
-                    break;
-                }
-                self.take_char();
-            }
-            let s = self.buf.substr(start..self.pos);
-            return Ok(Tok::Comment(s));
-        }
         match self.take_char() {
             None => Ok(Tok::EndOfInput),
             Some('"') | Some('“') => {
@@ -240,6 +230,16 @@ impl Lex {
                 }
                 let substr = self.buf.substr(start..self.pos);
                 if !num_prefix {
+                    if substr.as_str() == "//" {
+                        while let Some(c) = self.peek_char() {
+                            if c == '\n' {
+                                break;
+                            }
+                            self.take_char();
+                        }
+                        let s = self.buf.substr(start..self.pos);
+                        return Ok(Tok::Comment(s));
+                    }
                     return Ok(Tok::Word(substr));
                 }
                 let val = if has_dot && radix == 10 {
@@ -383,15 +383,15 @@ mod tests {
         let res = tokenize_input("\n\t \r    \n ").unwrap();
         assert_eq!(res, vec![]);
 
-        let mut lex = Lex::new(Xstr::from("\n\t# 567\n#"));
+        let mut lex = Lex::new(Xstr::from("\n\t// 567\n//"));
         assert_eq!(Ok(Tok::Whitespace("\n\t".into())), lex.next());
-        assert_eq!(Ok(Tok::Comment("# 567".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("// 567".into())), lex.next());
         assert_eq!(Ok(Tok::Whitespace("\n".into())), lex.next());
-        assert_eq!(Ok(Tok::Comment("#".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("//".into())), lex.next());
         assert_eq!(Ok(Tok::EndOfInput), lex.next());
 
-        let res = tokenize_input("a#b").unwrap();
-        assert_eq!(res, vec![word("a#b")]);
+        let res = tokenize_input("a//b").unwrap();
+        assert_eq!(res, vec![word("a//b")]);
 
         let res = tokenize_input(" abcde \n123").unwrap();
         assert_eq!(res, vec![word("abcde"), int(123)]);
