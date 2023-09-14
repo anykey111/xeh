@@ -150,12 +150,12 @@ fn print_pretty_error(xs: &Xstate, e: &Xerr) {
     eprintln!("{}", s);
 }
 
-const CMD_NEXT: Xstr = xstr_literal!("/next");
-const CMD_RNEXT: Xstr = xstr_literal!("/rnext");
-const CMD_TRIAL: Xstr = xstr_literal!("/trial");
-const CMD_REPL: Xstr = xstr_literal!("/repl");
-const CMD_SNAPSHOT: Xstr = xstr_literal!("/snapshot");
-const CMD_ROLLBACK: Xstr = xstr_literal!("/rollback");
+const CMD_NEXT: Xstr = xeh_xstr!("/next");
+const CMD_RNEXT: Xstr = xeh_xstr!("/rnext");
+const CMD_TRIAL: Xstr = xeh_xstr!("/trial");
+const CMD_REPL: Xstr = xeh_xstr!("/repl");
+const CMD_SNAPSHOT: Xstr = xeh_xstr!("/snapshot");
+const CMD_ROLLBACK: Xstr = xeh_xstr!("/rollback");
 const REPL_CMD_HINTS: &[Xstr] = &[
     CMD_NEXT,
     CMD_RNEXT,
@@ -327,10 +327,10 @@ pub fn run_with_args() -> Xresult {
         eprintln!("startup error: {}", e);
         e
     })?;
-    if let Err(e) = xs.eval(include_str!("help.xeh")) {
-        print_pretty_error(&xs, &e);
-        return Err(e);
-    }
+    // if let Err(e) = xs.eval(include_str!("help.xeh")) {
+    //     print_pretty_error(&xs, &e);
+    //     return Err(e);
+    // }
     if args.reverse_debug {
         xs.set_recording_enabled(true);
     }

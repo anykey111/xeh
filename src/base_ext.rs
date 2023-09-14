@@ -33,7 +33,7 @@ pub fn base32hex_encode(xs: &mut Xstate) -> Xresult {
 pub fn base32_decode2(xs: &mut Xstate, alphabet: base32::Alphabet) -> Xresult1<Xbitstr> {
     let s = xs.pop_data()?.to_xstr()?;
     let res = base32::decode(alphabet, &s)
-        .ok_or_else(|| Xerr::ErrorMsg(xstr_literal!("base32 decode error")))?;
+        .ok_or_else(|| Xerr::ErrorMsg(xeh_xstr!("base32 decode error")))?;
    Ok(Xbitstr::from(res))
 }
 
@@ -67,7 +67,7 @@ pub fn base64_decode2(xs: &mut Xstate) -> Xresult1<Xbitstr> {
     use base64::{Engine as _, engine::general_purpose};
     let s = xs.pop_data()?.to_xstr()?;
     let res = general_purpose::STANDARD.decode(&s)
-        .map_err(|_| Xerr::ErrorMsg(xstr_literal!("base64 decode error")))?;
+        .map_err(|_| Xerr::ErrorMsg(xeh_xstr!("base64 decode error")))?;
     Ok(Xbitstr::from(res))
 }
 
@@ -91,7 +91,7 @@ pub fn zero85_encode(xs: &mut Xstate) -> Xresult {
 pub fn zero85_decode_res(xs: &mut Xstate) -> Xresult1<Xbitstr> {
     let s = xs.pop_data()?.to_xstr()?;
     let res = z85::decode(&s)
-        .map_err(|_| Xerr::ErrorMsg(xstr_literal!("zero85 decode error")))?;
+        .map_err(|_| Xerr::ErrorMsg(xeh_xstr!("zero85 decode error")))?;
     Ok(Xbitstr::from(res))
 }
 

@@ -373,7 +373,7 @@ fn hex_to_bitstr(xs: &mut Xstate) -> Xresult {
     match Bitstr::from_hex_str(&s) {
         Ok(bs) => xs.push_data(Cell::from(bs)),
         Err(pos) => Err(Xerr::ParseError {
-            msg: xstr_literal!("hex string parse error"),
+            msg: xeh_xstr!("hex string parse error"),
             substr: s.substr(pos..),
         }),
     }
@@ -397,7 +397,7 @@ fn decode_utf8_str(bytes: Vec<u8>) -> Xresult1<String> {
             let pos = e.utf8_error().valid_up_to();
             let bytes = e.into_bytes();
             Err(Xerr::StrDecodeError {
-                msg: xstr_literal!("utf8 bytes parse error"),
+                msg: xeh_xstr!("utf8 bytes parse error"),
                 bytes,
                 pos,
             })
@@ -658,7 +658,7 @@ fn word_scratch(xs: &mut Xstate) -> Xresult {
             }
             other => Err(Xerr::TypeErrorMsg {
                 val: other.clone(),
-                msg: xstr_literal!("scratchpad vec"),
+                msg: xeh_xstr!("scratchpad vec"),
             })
         }
     })

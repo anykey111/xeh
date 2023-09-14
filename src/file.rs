@@ -11,7 +11,7 @@ pub fn write_to_stdout(buf: &[u8]) -> Xresult {
     let stdout = std::io::stdout();
     let mut h = stdout.lock();
     h.write_all(buf).map_err(|e| Xerr::IOError {
-        filename: xstr_literal!("stdout"),
+        filename: xeh_xstr!("stdout"),
         reason: e.to_string().into(),
     })
 } 

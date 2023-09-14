@@ -42,13 +42,13 @@ pub struct Lex {
     start_pos: usize,
 }
 
-pub(crate) const PARSE_INT_ERRMSG: Xstr = xstr_literal!("parse int error");
-pub(crate) const PARSE_FLOAT_ERRMSG: Xstr = xstr_literal!("parse float error");
-const PARSE_BITSTR_ERRMSG: Xstr = xstr_literal!("parse bitstr error");
-const UNTERMINATED_STR_ERRMSG: Xstr = xstr_literal!("unterminated string");
-const UNTERMINATED_BITSTR_ERRMSG: Xstr = xstr_literal!("unterminated bit-string");
-const ESCAPE_SEQ_ERRMSG: Xstr = xstr_literal!("unknown string escape sequence");
-const EXPECT_WS_ERRMSG: Xstr = xstr_literal!("expect whitespace word separator");
+pub(crate) const PARSE_INT_ERRMSG: Xstr = xeh_xstr!("parse int error");
+pub(crate) const PARSE_FLOAT_ERRMSG: Xstr = xeh_xstr!("parse float error");
+const PARSE_BITSTR_ERRMSG: Xstr = xeh_xstr!("parse bitstr error");
+const UNTERMINATED_STR_ERRMSG: Xstr = xeh_xstr!("unterminated string");
+const UNTERMINATED_BITSTR_ERRMSG: Xstr = xeh_xstr!("unterminated bit-string");
+const ESCAPE_SEQ_ERRMSG: Xstr = xeh_xstr!("unknown string escape sequence");
+const EXPECT_WS_ERRMSG: Xstr = xeh_xstr!("expect whitespace word separator");
 
 impl Lex {
     pub fn new(buf: Xstr) -> Lex {

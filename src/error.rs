@@ -167,7 +167,7 @@ impl fmt::Display for Xerr {
 impl Xerr {
     pub(crate) fn control_flow_error(flow: Option<&Flow>) -> Xresult {
         let flow = flow.ok_or_else(|| {
-            let msg = xstr_literal!("unbalanced control flow");
+            let msg = xeh_xstr!("unbalanced control flow");
             Xerr::ControlFlowError { msg }
         })?;
         Err(Xerr::unbalanced_flow(&flow))
@@ -193,114 +193,114 @@ impl Xerr {
     }
 
     pub(crate) fn conditional_var_definition() -> Xerr {
-        let msg = xstr_literal!("variable definition must be unconditional");
+        let msg = xeh_xstr!("variable definition must be unconditional");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn expect_fn_context() -> Xerr {
-        let msg = xstr_literal!("has no effect outside of the function control flow");
+        let msg = xeh_xstr!("has no effect outside of the function control flow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_let_in() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!("balance `let` with closing `in`"))
+        Xerr::ErrorMsg(xeh_xstr!("balance `let` with closing `in`"))
     }
 
     pub(crate) fn let_name_or_lit() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!("expecting name or literal"))
+        Xerr::ErrorMsg(xeh_xstr!("expecting name or literal"))
     }
 
     pub(crate) fn unbalanced_fn_builder() -> Xerr {
-        let msg = xstr_literal!("balance ; with preceding :");
+        let msg = xeh_xstr!("balance ; with preceding :");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_vec_builder() -> Xerr {
-        let msg = xstr_literal!("unbalanced vector builder");
+        let msg = xeh_xstr!("unbalanced vector builder");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_map_builder() -> Xerr {
-        let msg = xstr_literal!("unbalanced map builder");
+        let msg = xeh_xstr!("unbalanced map builder");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_tag_map_builder() -> Xerr {
-        let msg = xstr_literal!("unbalanced tag vector builder");
+        let msg = xeh_xstr!("unbalanced tag vector builder");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn vec_stack_underflow() -> Xerr {
-        let msg = xstr_literal!("vector stack underflow");
+        let msg = xeh_xstr!("vector stack underflow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn map_stack_underflow() -> Xerr {
-        let msg = xstr_literal!("map stack underflow");
+        let msg = xeh_xstr!("map stack underflow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn map_missing_key() -> Xerr {
-        let msg = xstr_literal!("missing key element");
+        let msg = xeh_xstr!("missing key element");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_leave() -> Xerr {
-        let msg = xstr_literal!("leave used outside of the loop control flow");
+        let msg = xeh_xstr!("leave used outside of the loop control flow");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_do() -> Xerr {
-        let msg = xstr_literal!("balance do with closing loop");
+        let msg = xeh_xstr!("balance do with closing loop");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_loop() -> Xerr {
-        let msg = xstr_literal!("balance loop with preceding do");
+        let msg = xeh_xstr!("balance loop with preceding do");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_repeat() -> Xerr {
-        let msg = xstr_literal!("balance repeat with preceding begin/while");
+        let msg = xeh_xstr!("balance repeat with preceding begin/while");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_while() -> Xerr {
-        let msg = xstr_literal!("balance while with preceding begin");
+        let msg = xeh_xstr!("balance while with preceding begin");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_until() -> Xerr {
-        let msg = xstr_literal!("balance util with preceding begin");
+        let msg = xeh_xstr!("balance util with preceding begin");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_else() -> Xerr {
-        let msg = xstr_literal!("balance else with preceding if");
+        let msg = xeh_xstr!("balance else with preceding if");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endif() -> Xerr {
-        let msg = xstr_literal!("balance endif with preceding if/else");
+        let msg = xeh_xstr!("balance endif with preceding if/else");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endcase() -> Xerr {
-        let msg = xstr_literal!("balance endcase with preceding case");
+        let msg = xeh_xstr!("balance endcase with preceding case");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_endof() -> Xerr {
-        let msg = xstr_literal!("balance endof with preceding of");
+        let msg = xeh_xstr!("balance endof with preceding of");
         Xerr::ControlFlowError { msg }
     }
 
     pub(crate) fn unbalanced_context() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!("unbalanced context"))
+        Xerr::ErrorMsg(xeh_xstr!("unbalanced context"))
     }
 
     pub(crate) fn const_context() -> Xerr {
-        Xerr::ErrorMsg(xstr_literal!(
+        Xerr::ErrorMsg(xeh_xstr!(
             "the meta-eval context can operate only with constants"
         ))
     }
@@ -359,7 +359,7 @@ mod tests {
     
     #[test]
     fn test_assert_eq() {
-        let msg = Xstr::from(xstr_literal!("test1"));
+        let msg = Xstr::from(xeh_xstr!("test1"));
         let a = ONE.insert_tag(ASSERT_MSG, Cell::Str(msg));
         let err = Xerr::AssertEqFailed { a , b: ZERO};
         assert_eq!("assertion failed: test1\n1\n0", format!("{}", err));

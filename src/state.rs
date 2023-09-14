@@ -685,8 +685,8 @@ impl State {
     }
 
     fn load_core(&mut self) -> Xresult {
-        self.dict_insert(xstr_literal!("true"), Entry::Constant(TRUE))?;
-        self.dict_insert(xstr_literal!("false"), Entry::Constant(FALSE))?;
+        self.dict_insert(xeh_xstr!("true"), Entry::Constant(TRUE))?;
+        self.dict_insert(xeh_xstr!("false"), Entry::Constant(FALSE))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -952,7 +952,7 @@ impl State {
         { OK }
         #[cfg(not(feature = "calc_limit"))]
         {
-            let msg = xstr_literal!("calc_limit feature disabled, check your project settings");
+            let msg = xeh_xstr!("calc_limit feature disabled, check your project settings");
             Err(Xerr::ErrorMsg(e));
         }
     }
@@ -1920,7 +1920,7 @@ fn build_let_match(xs: &mut State, lf: &mut LetFlow, val: Cell) -> Xresult {
 
 fn build_let_match_vec_len(xs: &mut State, lf: &mut LetFlow, len: usize) -> Xresult {
     xs.code_emit(Opcode::NativeCall(XfnPtr(let_item_len)))?;
-    let msg = xstr_literal!("vector length mismatch");
+    let msg = xeh_xstr!("vector length mismatch");
     let tagged_len = Cell::from(len).insert_tag(ASSERT_MSG, Cell::from(msg));
     xs.code_emit_value(tagged_len)?;
     lf.matches.push(xs.code_origin());
@@ -1950,7 +1950,7 @@ fn let_take_rest(xs: &mut State) -> Xresult {
 fn build_let_consume(xs: &mut State, lf: &mut LetFlow) -> Xresult {
     if let Some(idx) = lf.vec_pos.last_mut() {
         if *idx == usize::MAX {
-            let msg = xstr_literal!("`&` already consumed all remaining items");
+            let msg = xeh_xstr!("`&` already consumed all remaining items");
             return Err(Xerr::ErrorMsg(msg));
         }
         xs.code_emit_value(Cell::from(*idx))?;
@@ -2011,7 +2011,7 @@ fn build_let_item(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>,
                 xs.code_emit(Opcode::NativeCall(XfnPtr(let_take_rest)))?;
                 build_let_bind(xs, lf, item)
             } else {
-                Err(Xerr::ErrorMsg(xstr_literal!("rest operation without a vector")))
+                Err(Xerr::ErrorMsg(xeh_xstr!("rest operation without a vector")))
             }
         }
         None => {
@@ -2151,7 +2151,7 @@ fn core_word_setvar(xs: &mut State) -> Xresult {
             xs.code_emit(Opcode::Store(a))
         }
         _ => {
-            const ERRMSG: Xstr = xstr_literal!("word is readonly");
+            const ERRMSG: Xstr = xeh_xstr!("word is readonly");
             Err(Xerr::ErrorMsg(ERRMSG))
         }
     }
@@ -2189,7 +2189,7 @@ fn core_word_nested_inject(xs: &mut State) -> Xresult {
     } else {
         debug_assert!(xs.loops.len() == xs.ctx.ls_len);
         let v = vec_collect_till_ptr(xs, xs.ctx.ds_len)?;
-        let s = join_str_vec(xs, &v, &Some(xstr_literal!(" ")))?;
+        let s = join_str_vec(xs, &v, &Some(xeh_xstr!(" ")))?;
         xs.context_close()?;
         xs.intern_source(Xstr::from(s), None)
     }
@@ -2198,7 +2198,7 @@ fn core_word_nested_inject(xs: &mut State) -> Xresult {
 fn core_word_const(xs: &mut State) -> Xresult {
     let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
-        let s = xstr_literal!("const word used out of the meta-eval context");
+        let s = xeh_xstr!("const word used out of the meta-eval context");
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
@@ -2613,7 +2613,7 @@ fn filename_literal(xs: &mut State) -> Xresult1<Xstr> {
         } else {
             Err(Xerr::TypeErrorMsg {
                 val,
-                msg: xstr_literal!("string"),
+                msg: xeh_xstr!("string"),
             })
         }
     } else {

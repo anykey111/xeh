@@ -253,17 +253,17 @@ impl Ord for Cell {
 }
 impl Eq for Cell {}
 
-const NIL_TYPE_NAME: Xstr = xstr_literal!("nil");
-const FLAG_TYPE_NAME: Xstr = xstr_literal!("flag");
-const INT_TYPE_NAME: Xstr = xstr_literal!("int");
-const REAL_TYPE_NAME: Xstr = xstr_literal!("real");
-const STR_TYPE_NAME: Xstr = xstr_literal!("str");
-const VEC_TYPE_NAME: Xstr = xstr_literal!("vec");
-const MAP_TYPE_NAME: Xstr = xstr_literal!("map");
-const FUN_TYPE_NAME: Xstr = xstr_literal!("fun");
-const BITSTR_TYPE_NAME: Xstr = xstr_literal!("bitstr");
-const ANY_TYPE_NAME: Xstr = xstr_literal!("any");
-const TAG_TYPE_NAME: Xstr = xstr_literal!("tag");
+const NIL_TYPE_NAME: Xstr = xeh_xstr!("nil");
+const FLAG_TYPE_NAME: Xstr = xeh_xstr!("flag");
+const INT_TYPE_NAME: Xstr = xeh_xstr!("int");
+const REAL_TYPE_NAME: Xstr = xeh_xstr!("real");
+const STR_TYPE_NAME: Xstr = xeh_xstr!("str");
+const VEC_TYPE_NAME: Xstr = xeh_xstr!("vec");
+const MAP_TYPE_NAME: Xstr = xeh_xstr!("map");
+const FUN_TYPE_NAME: Xstr = xeh_xstr!("fun");
+const BITSTR_TYPE_NAME: Xstr = xeh_xstr!("bitstr");
+const ANY_TYPE_NAME: Xstr = xeh_xstr!("any");
+const TAG_TYPE_NAME: Xstr = xeh_xstr!("tag");
 
 fn cell_type_error(msg: Xstr, val: Cell) -> Xerr {
     Xerr::TypeErrorMsg { msg, val }
@@ -412,7 +412,7 @@ impl Cell {
     pub fn to_usize(&self) -> Xresult1<usize> {
         match self.value() {
             Cell::Int(i) if *i < 0 =>
-                Err(cell_type_error(xstr_literal!("positive integer"), self.clone())),
+                Err(cell_type_error(xeh_xstr!("positive integer"), self.clone())),
             Cell::Int(i) => Ok(*i as usize),
             val => Err(cell_type_error(INT_TYPE_NAME, val.clone())),
         }

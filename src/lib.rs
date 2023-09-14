@@ -1,4 +1,4 @@
-macro_rules! xstr_literal {
+macro_rules! xeh_xstr {
     ($msg:literal) => {{
         const MSG: Xstr = arcstr::literal!($msg);
         MSG
@@ -9,7 +9,7 @@ macro_rules! xstr_literal {
 macro_rules! xeh_str_lit {
     ($s:literal) => {{
         const S: Xstr = arcstr::literal!($s);
-        Cell::Str(S)
+        $crate::cell::Cell::Str(S)
     }};
 }
 
