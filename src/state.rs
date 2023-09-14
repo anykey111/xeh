@@ -9,6 +9,8 @@ use crate::opcodes::*;
 use std::iter::FromIterator;
 use std::ops::Range;
 
+const IMMEDIATE_TAG: Cell = xeh_str_lit!("#immediate");
+
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     Constant(Cell),
@@ -24,12 +26,10 @@ enum Entry {
 struct DictEntry {
     name: Xstr,
     entry: Entry,
-    help: CellRef,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FunctionFlow {
-    dict_idx: usize,
     start: usize,
     locals: Vec<Xsubstr>,
 }
@@ -444,63 +444,29 @@ impl State {
         }
     }
 
-    fn unknown_word_handler(&mut self, name: Xsubstr) -> Xresult {
-        let old_name = name.as_str();
-        let f = self.dict_entry("unknown-word-handler").and_then(|e| {
-            match e {
-                Entry::Function{xf, len: Some(_), ..} => Some(xf.clone()),
-                _ => None,
-            }
-        }).ok_or_else(|| Xerr::UnknownWord(Xstr::from(old_name)))?;
-        let old_name_xstr = Xstr::from(old_name);
-        self.context_open(ContextMode::MetaEval)?;
-        self.push_data(Cell::Str(old_name_xstr.clone()))?;
-        self.run_immediate(f)?;
-        let res = self.pop_data()?;
-        if res == NIL {
-            self.code_emit(Opcode::Resolve(old_name_xstr.clone()))?;
-            return Err(Xerr::UnknownWord(old_name_xstr));
-        } else {
-            self.code_emit_value(res)?
-        }
-        self.context_close()
-        
-    }
-
     fn build_word(&mut self, name: Xsubstr) -> Xresult {
-        match self.dict_entry(name.as_str()) {
-            None => {
-                self.unknown_word_handler(name)
-            },
-            Some(Entry::Constant(c)) => {
+        let e = self.dict_entry(name.as_str()).ok_or_else(|| {
+            let name = Xstr::from(name.as_str());
+            Xerr::UnknownWord(name)
+        })?;
+        match e {
+            Entry::Constant(c) => {
                 let op = self.load_value_opcode(c.clone());
                 self.code_emit(op)
             }
-            Some(Entry::Variable(a)) => {
+            Entry::Variable(a) => {
                 let a = *a;
                 self.code_emit(Opcode::Load(a))
             }
-            Some(Entry::Function {
-                immediate: true,
-                xf,
-                ..
-            }) => {
+            Entry::Function { immediate: true, xf, .. } => {
                 let xf = xf.clone();
                 self.run_immediate(xf)
             }
-            Some(Entry::Function {
-                immediate: false,
-                xf: Xfn::Interp(x),
-                ..
-            }) => {
+            Entry::Function { immediate: false, xf: Xfn::Interp(x), .. } => {
                 let x = *x;
                 self.code_emit(Opcode::Call(x))
             }
-            Some(Entry::Function {
-                immediate: false,
-                xf: Xfn::Native(x),
-                ..
-            }) => {
+            Entry::Function { immediate: false, xf: Xfn::Native(x), .. } => {
                 let x = *x;
                 self.code_emit(Opcode::NativeCall(x))
             }
@@ -610,7 +576,7 @@ impl State {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
         xs.intercept_stdout(true);
-        xs.fmt_flags = xs.alloc_env(FmtFlags::default().build())?;
+        xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::arith::load(&mut xs)?;
         Ok(xs)
@@ -624,16 +590,10 @@ impl State {
         Ok(xs)
     }
 
-    pub fn defenv(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
-        let cref = self.alloc_env(val)?;
-        self.dict_insert(name, Entry::Variable(cref))?;
-        Ok(cref)
-    }
-
     pub fn defvar(&mut self, name: &str, val: Cell) -> Xresult1<CellRef> {
         // shadow previous definition
         let cref = self.alloc_heap(val)?;
-        self.dict_insert(name, Entry::Variable(cref))?;
+        self.dict_insert(name.into(), Entry::Variable(cref))?;
         Ok(cref)
     }
 
@@ -679,6 +639,14 @@ impl State {
         OK
     }
 
+    pub fn defn(&mut self, name: Xstr, x: Cell) -> Xresult {
+        let xf = x.to_fn()?;
+        let immediate = x.get_tag(&IMMEDIATE_TAG).is_some();
+        let entry = Entry::Function { immediate, xf, len: None };
+        self.dict_insert(name, entry)?;
+        OK
+    }
+
     pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult {
         self.dict_add_word(name, f, false)?;
         OK
@@ -711,13 +679,14 @@ impl State {
     }
 
     pub fn help_str(&self, name: &str) -> Option<&Cell> {
-        let cref = self.dict_key(name)?.help;
-        self.get_var(cref).ok()
+        //self.dict_key(name)?.get_tag(DOC_STR)
+        //todo:
+        None
     }
 
     fn load_core(&mut self) -> Xresult {
-        self.dict_insert(xstr_literal!("true").as_str(), Entry::Constant(TRUE))?;
-        self.dict_insert(xstr_literal!("false").as_str(), Entry::Constant(FALSE))?;
+        self.dict_insert(xstr_literal!("true"), Entry::Constant(TRUE))?;
+        self.dict_insert(xstr_literal!("false"), Entry::Constant(FALSE))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
         self.def_immediate("endif", core_word_endif)?;
@@ -739,7 +708,7 @@ impl State {
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
         self.def_immediate("defer", core_word_defer)?;
-        self.def_immediate("immediate", core_word_immediate)?;
+        self.def_immediate("#immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
         self.def_immediate("!", core_word_setvar)?;
@@ -755,8 +724,6 @@ impl State {
         self.def_immediate("in", core_word_in)?;
         self.defword("equal?", core_word_equal)?;
         self.defword("nil?", core_word_is_nil)?;
-        self.defword("doc!", core_word_doc)?;
-        self.defword("help", core_word_help)?;
         self.defword("help-str", core_word_help_str)?;
         self.defword("I", core_word_counter_i)?;
         self.defword("J", core_word_counter_j)?;
@@ -810,13 +777,9 @@ impl State {
         OK
     }
 
-    fn dict_insert(&mut self, name: &str, entry: Entry) -> Xresult1<usize> {
+    fn dict_insert(&mut self, name: Xstr, entry: Entry) -> Xresult1<usize> {
         let wa = self.dict.len();
-        self.dict.push(DictEntry {
-            name: Xstr::from(name),
-            entry,
-            help: CellRef::default(),
-        });
+        self.dict.push(DictEntry { name, entry });
         Ok(wa)
     }
 
@@ -826,10 +789,6 @@ impl State {
 
     fn dict_key(&self, name: &str) -> Option<&DictEntry> {
         self.dict.iter().rfind(|x| x.name == name)
-    }
-
-    fn dict_mut(&mut self, name: &str) -> Option<&mut DictEntry> {
-        self.dict.iter_mut().rfind(|x| x.name == name)
     }
 
     fn code_origin(&self) -> usize {
@@ -1874,19 +1833,7 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     // jump over function body
     let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
-    let name = xs.next_name()?;
-    // function starts right after jump
-    let xf = Xfn::Interp(xs.code_origin());
-    let dict_idx = xs.dict_insert(
-        &name,
-        Entry::Function {
-            immediate: false,
-            xf,
-            len: None,
-        },
-    )?;
     xs.push_flow(Flow::Fun(FunctionFlow {
-        dict_idx,
         start,
         locals: Default::default(),
     }))
@@ -1894,23 +1841,9 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
 
 fn core_word_def_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
-        Some(Flow::Fun(FunctionFlow {
-            start, dict_idx, ..
-        })) => {
+        Some(Flow::Fun(FunctionFlow {start, ..})) => {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
-            let fun_len = xs.code_origin() - start - 1; // skip jump over instruction
-            match xs
-                .dict
-                .get_mut(dict_idx)
-                .ok_or_else(|| Xerr::word_out_of_bounds(dict_idx))?
-            {
-                DictEntry {
-                    entry: Entry::Function { ref mut len, .. },
-                    ..
-                } => *len = Some(fun_len),
-                _ => panic!("entry type"),
-            }
             xs.backpatch_jump(start, offs)
         }
         None => Err(Xerr::unbalanced_fn_builder()),
@@ -1930,7 +1863,7 @@ fn core_word_defer(xs: &mut State) -> Xresult {
     let relative = jump_offset(jump_over_org, word_end_org);
     xs.backpatch_jump(jump_over_org, relative)?;
     xs.dict_insert(
-        &name,
+        Xstr::from(name.as_str()),
         Entry::Function {
             immediate: false,
             xf,
@@ -1941,22 +1874,8 @@ fn core_word_defer(xs: &mut State) -> Xresult {
 }
 
 fn core_word_immediate(xs: &mut State) -> Xresult {
-    let dict_idx = xs
-        .top_function_flow()
-        .map(|f| f.dict_idx)
-        .ok_or_else(|| Xerr::expect_fn_context())?;
-    match xs.dict.get_mut(dict_idx) {
-        Some(DictEntry {
-            entry: Entry::Function {
-                ref mut immediate, ..
-            },
-            ..
-        }) => {
-            *immediate = true;
-            OK
-        }
-        _ => Err(Xerr::expect_fn_context()),
-    }
+    let x = xs.pop_data()?.insert_tag(IMMEDIATE_TAG, TRUE);
+    xs.push_data(x)
 }
 
 #[derive(Debug, PartialEq)]
@@ -2211,7 +2130,7 @@ fn core_word_def_local(xs: &mut State) -> Xresult {
 fn build_global_variable(xs: &mut State, name: Xsubstr) -> Xresult {
     if xs.flow_stack.is_empty() {
         let a = xs.alloc_heap(Cell::Nil)?;
-        xs.dict_insert(&name, Entry::Variable(a))?;
+        xs.dict_insert(Xstr::from(name.as_str()), Entry::Variable(a))?;
         xs.code_emit(Opcode::Store(a))
     } else {
         Err(Xerr::conditional_var_definition())
@@ -2283,7 +2202,8 @@ fn core_word_const(xs: &mut State) -> Xresult {
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
-        xs.dict_insert(&name, Entry::Constant(val))?;
+        let name = Xstr::from(name.as_str());
+        xs.dict_insert(name, Entry::Constant(val))?;
         OK
     }
 }
@@ -2333,34 +2253,6 @@ fn core_word_help_str(xs: &mut State) -> Xresult {
         .ok_or_else(|| Xerr::UnknownWord(name))?
         .clone();
     xs.push_data(help)
-}
-
-fn core_word_help(xs: &mut State) -> Xresult {
-    let name = xs.pop_data()?.to_xstr()?;
-    let help = xs.help_str(&name).ok_or_else(|| Xerr::UnknownWord(name))?;
-    if let Ok(s) = help.to_xstr() {
-        xs.print(&s)?;
-        xs.print("\n")?;
-    }
-    OK
-}
-
-fn core_word_doc(xs: &mut State) -> Xresult {
-    let name = xs.pop_data()?;
-    let help = xs.pop_data()?;
-    let _testtype = help.str()?;
-    let name = name.to_xstr()?;
-    let mut cref = xs
-        .dict_key(&name)
-        .ok_or_else(|| Xerr::UnknownWord(name.clone()))?
-        .help;
-    if cref.is_initialized() {
-        xs.set_var(cref, help)
-    } else {
-        cref = xs.defvar_anonymous(help)?;
-        xs.dict_mut(&name).unwrap().help = cref;
-        OK
-    }
 }
 
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
@@ -2674,36 +2566,33 @@ fn core_word_see(xs: &mut State) -> Xresult {
         Entry::Function { immediate, xf: Xfn::Native(p), .. } => {
             write!(buf, "word, native {:?}", p).unwrap();
             if *immediate {
-                buf.push_str(", immediate\n");
+                buf.push_str(" #immediate\n");
             } else {
                 buf.push_str("\n");
             }
         }
-        Entry::Function { immediate, xf: Xfn::Interp(p), len } => {
-            let n = len.ok_or_else(|| Xerr::ControlFlowError {
-                msg: xstr_literal!("word compilation yet not finished")
-            })?;
-            write!(buf, "{:05X}: # {} operations", p, n).unwrap();
+        Entry::Function { immediate, xf: Xfn::Interp(p), .. } => {
+            write!(buf, "{:05X}", p).unwrap();
             if *immediate {
-                buf.push_str(", immediate\n");
+                buf.push_str(" #immediate\n");
             } else {
                 buf.push_str("\n");
             }
-            let end = p + n;
-            if end > xs.code.len() {
-                return Err(Xerr::out_of_bounds(end, xs.code.len()));
-            }
-            for i in *p..end {
-                writeln!(buf, "{:05X}: {}", i, &xs.fmt_opcode(i, &xs.code[i])).unwrap();
-            }
+            // let end = p + n;
+            // if end > xs.code.len() {
+            //     return Err(Xerr::out_of_bounds(end, xs.code.len()));
+            // }
+            // for i in *p..end {
+            //     writeln!(buf, "{:05X}: {}", i, &xs.fmt_opcode(i, &xs.code[i])).unwrap();
+            // }
        } 
-        Entry::Constant(_) => buf.push_str("constant\n"),
+        Entry::Constant(_) => buf.push_str("#const\n"),
         Entry::Variable(cref) => {
             match cref.index() {
                 CellIdx::Env(idx) =>
-                    writeln!(buf, "variable, index {}\n", idx).unwrap(),
+                    writeln!(buf, "{} #var\n", idx).unwrap(),
                     CellIdx::Heap(idx) =>
-                    writeln!(buf, "env variable, index {}\n", idx).unwrap(),
+                    writeln!(buf, "{} #env\n", idx).unwrap(),
                 CellIdx::Uninit => 
                     buf.push_str("variable, not initialized\n"),
             }
@@ -3324,21 +3213,6 @@ mod tests {
             ( 3 const WW ) 
             QQ 3 assert-eq
             ");
-    }
-
-    #[test]
-    fn test_unknown_word_handler() {
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, ": unknown-word-handler \"aa\" assert-eq 1 ;  aa 1 assert-eq");
-        // test incomplete definition
-        let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::UnknownWord("sss".into())), xs.eval(": unknown-word-handler sss ; eee"));
-        let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::UnknownWord("fff".into())), xs.eval(": unknown-word-handler nil ; : hhh fff ; "));
-        // test empty handler
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, ": unknown-word-handler ; ggg");
-        assert_eq!(Cell::from("ggg"), xs.pop_data().unwrap());
     }
 
     #[test]

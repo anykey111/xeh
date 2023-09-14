@@ -5,6 +5,7 @@ macro_rules! xstr_literal {
     }};
 }
 
+#[macro_export]
 macro_rules! xeh_str_lit {
     ($s:literal) => {{
         const S: Xstr = arcstr::literal!($s);

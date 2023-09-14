@@ -432,6 +432,13 @@ impl Cell {
         }
     }
 
+    pub fn to_fn(&self) -> Xresult1<Xfn> {
+        match self.value() {
+            Cell::Fun(f) => Ok(f.clone()),
+            val => Err(cell_type_error(FUN_TYPE_NAME, val.clone())),
+        }
+    }
+
     pub fn from_any<T>(val: T) -> Self
     where
         T: 'static,
