@@ -109,7 +109,7 @@ fn clear_all(xs: &mut Xstate) -> Xresult {
 
 pub fn load(xs: &mut Xstate) -> Xresult {
     let d2 = Xcell::from_any(D2Context::default());
-    let a = xs.defvar("d2-context", d2)?;
+    let a = xs.defvar(xeh_xstr!("d2-context"), d2)?;
     xs.d2 = a;
     xs.defword("d2-clear", clear_all)?;
     xs.defword("d2-resize", resize)?;

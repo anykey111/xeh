@@ -38,10 +38,11 @@ macro_rules! def_data_word_real {
 pub fn load(xs: &mut Xstate) -> Xresult {
     let mut m = BitstrState::default();
     let empty = Cell::from(Xbitstr::new());
-    m.big_endian = xs.defvar("big?", ZERO)?;
-    m.input = xs.defvar("input", empty)?;
-    m.offset = xs.defvar("offset", ZERO)?;
+    m.big_endian = xs.defvar(xeh_xstr!("big?"), ZERO)?;
+    m.input = xs.defvar(xeh_xstr!("input"), empty)?;
+    m.offset = xs.defvar(xeh_xstr!("offset"), ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
+    m.output = xs.defvar(xeh_xstr!("output"), NIL)?;
     m.output_len = xs.defvar(xeh_xstr!("output-length"), ZERO)?;
     xs.bitstr_mod = m;
     xs.defword("open-bitstr", word_open_bitstr)?;

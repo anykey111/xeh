@@ -324,18 +324,8 @@ impl Xerr {
     }
 
     pub(crate) fn cell_out_of_bounds(cref: CellRef) -> Xerr {
-        match cref.index() {
-            CellIdx::Env(idx) => 
-                Xerr::ErrorMsg(Xstr::from(format!("env address {:#x} out of bounds", idx))),
-            CellIdx::Heap(idx) => 
-                Xerr::ErrorMsg(Xstr::from(format!("heap address {:#x} out of bounds", idx))),
-            CellIdx::Uninit =>
-            Xerr::ErrorMsg(Xstr::from("uninitialized reference")),
-        }
-    }
-
-    pub(crate) fn word_out_of_bounds(idx: usize) -> Xerr {
-        Xerr::ErrorMsg(Xstr::from(format!("word index {:#x} out of bounds", idx)))
+        let idx = cref.index();
+        Xerr::ErrorMsg(Xstr::from(format!("heap address {:#x} out of bounds", idx)))
     }
 
     pub(crate) fn local_out_of_bounds(idx: usize) -> Xerr {
