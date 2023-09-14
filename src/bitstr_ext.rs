@@ -7,7 +7,6 @@ use std::fmt::Write;
 
 const BIG_LIT: Cell = xeh_str_lit!("big");
 const LEN_LIT: Cell = xeh_str_lit!("len");
-const COMMENT_LIT: Cell = xeh_str_lit!("comment");
 const OFFSET_LIT: Cell = xeh_str_lit!("offset");
 
 #[derive(Default, Clone)]
@@ -18,7 +17,6 @@ pub struct BitstrState {
     stash: CellRef,
     output: CellRef,
     output_len: CellRef,
-    scratchpad: CellRef,
 }
 
 macro_rules! def_data_word {
@@ -44,9 +42,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     m.input = xs.defvar("input", empty)?;
     m.offset = xs.defvar("offset", ZERO)?;
     m.stash = xs.defvar_anonymous(Cell::from(Xvec::new()))?;
-    m.output = xs.defvar("output", NIL)?;
-    m.output_len = xs.defvar("output-length", ZERO)?;
-    m.scratchpad = xs.defvar("scratchpad", NIL)?;
+    m.output_len = xs.defvar(xeh_xstr!("output-length"), ZERO)?;
     xs.bitstr_mod = m;
     xs.defword("open-bitstr", word_open_bitstr)?;
     xs.defword("close-bitstr", word_close_bitstr)?;
@@ -76,8 +72,6 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("emit", word_emit)?;
     xs.defword("write-all", word_write)?;
     xs.defword("read-all", word_read_all)?;
-    xs.defword("scratch", word_scratch)?;
-    xs.defword("^comment", word_add_comment)?;
     xs.defword("random-bits", random_bits)?;
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -644,32 +638,6 @@ fn word_read_all(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(bs))
 }
 
-fn word_scratch(xs: &mut Xstate) -> Xresult {
-    let val = xs.pop_data()?;
-    xs.update_var(xs.bitstr_mod.scratchpad, |old| {
-        match old {
-            Cell::Nil => {
-                let mut v = Xvec::new();
-                v.push_back_mut(val);
-                Ok(Cell::from(v))
-            }
-            Cell::Vector(v) => {
-                Ok(Cell::from(v.push_back(val)))
-            }
-            other => Err(Xerr::TypeErrorMsg {
-                val: other.clone(),
-                msg: xeh_xstr!("scratchpad vec"),
-            })
-        }
-    })
-}
-
-fn word_add_comment(xs: &mut Xstate) -> Xresult {
-    let comment = xs.pop_data()?;
-    let val = xs.pop_data()?;
-    let tagged = val.insert_tag(COMMENT_LIT, comment);
-    xs.push_data(tagged)
-}
 
 fn random_bits(xs: &mut Xstate) -> Xresult {
     let n = xs.pop_data()?.to_usize()?;
@@ -1019,20 +987,6 @@ mod tests {
         output-length 8 assert-eq
         0xf 4 uint! emit output |33f| assert-eq
         output-length 12 assert-eq
-        ").unwrap();
-    }
-
-    #[test]
-    fn test_scratchpad() {
-        let mut xs = Xstate::boot().unwrap();
-        xs.eval("
-            1 scratch
-            2 \"text1\" .comment scratch
-            depth 0 assert-eq
-            scratchpad [ 1 2 ] assert-eq
-            scratchpad 1 get
-            dup tag-of [ \"text1\" . \"comment\" ] assert-eq
-            tag-of 0 get tag-of \"comment\" assert-eq
         ").unwrap();
     }
 
