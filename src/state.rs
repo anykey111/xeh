@@ -30,6 +30,7 @@ struct DictEntry {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FunctionFlow {
+    dict_idx: usize,
     start: usize,
     locals: Vec<Xsubstr>,
 }
@@ -1795,7 +1796,19 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
     // jump over function body
     let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
+    let name = xs.next_name()?;
+    // function starts right after jump
+    let xf = Xfn::Interp(xs.code_origin());
+    let dict_idx = xs.dict_insert(
+        Xstr::from(name.as_str()),
+        Entry::Function {
+            immediate: false,
+            xf,
+            len: None,
+        },
+    )?;
     xs.push_flow(Flow::Fun(FunctionFlow {
+        dict_idx,
         start,
         locals: Default::default(),
     }))
@@ -1803,9 +1816,21 @@ fn core_word_def_begin(xs: &mut State) -> Xresult {
 
 fn core_word_def_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
-        Some(Flow::Fun(FunctionFlow {start, ..})) => {
+        Some(Flow::Fun(FunctionFlow {start, dict_idx, ..})) => {
             xs.code_emit(Opcode::Ret)?;
             let offs = jump_offset(start, xs.code_origin());
+            let fun_len = xs.code_origin() - start - 1; // skip jump over instruction
+            match xs
+                .dict
+                .get_mut(dict_idx)
+                .ok_or_else(|| Xerr::InternalError)?
+            {
+                DictEntry {
+                    entry: Entry::Function { ref mut len, .. },
+                    ..
+                } => *len = Some(fun_len),
+                _ => panic!("entry type"),
+            }
             xs.backpatch_jump(start, offs)
         }
         None => Err(Xerr::unbalanced_fn_builder()),
@@ -3173,14 +3198,14 @@ mod tests {
     #[test]
     fn test_defvar() {
         let mut xs = State::boot().unwrap();
-        let x = xs.defvar("X", Cell::Int(1)).unwrap();
+        let x = xs.defvar("X".into(), Cell::Int(1)).unwrap();
         assert_eq!(Ok(&Cell::Int(1)), xs.get_var(x));
-        let x2 = xs.defvar("X", Cell::Int(2)).unwrap();
+        let x2 = xs.defvar("X".into(), Cell::Int(2)).unwrap();
         assert_eq!(Ok(&Cell::Int(2)), xs.get_var(x2));
         xs.eval(": Y 3 ;").unwrap();
-        xs.defvar("Y", Cell::Nil).unwrap();
+        xs.defvar("Y".into(), Cell::Nil).unwrap();
         xs.eval("4 var Z").unwrap();
-        let z = xs.defvar("Z", Cell::Nil).unwrap();
+        let z = xs.defvar("Z".into(), Cell::Nil).unwrap();
         xs.eval("10 ! Z").unwrap();
         assert_eq!(Ok(&Cell::Int(10)), xs.get_var(z));
     }
