@@ -9,8 +9,6 @@ use crate::opcodes::*;
 use std::iter::FromIterator;
 use std::ops::Range;
 
-const IMMEDIATE_TAG: Cell = xeh_str_lit!("#immediate");
-
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     Constant(Cell),
@@ -703,7 +701,7 @@ impl State {
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
         self.def_immediate("defer", core_word_defer)?;
-        self.def_immediate("#immediate", core_word_immediate)?;
+        self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
         self.def_immediate("!", core_word_setvar)?;
@@ -1861,8 +1859,22 @@ fn core_word_defer(xs: &mut State) -> Xresult {
 }
 
 fn core_word_immediate(xs: &mut State) -> Xresult {
-    let x = xs.pop_data()?.insert_tag(IMMEDIATE_TAG, TRUE);
-    xs.push_data(x)
+    let dict_idx = xs
+        .top_function_flow()
+        .map(|f| f.dict_idx)
+        .ok_or_else(|| Xerr::expect_fn_context())?;
+    match xs.dict.get_mut(dict_idx) {
+        Some(DictEntry {
+            entry: Entry::Function {
+                ref mut immediate, ..
+            },
+            ..
+        }) => {
+            *immediate = true;
+            OK
+        }
+        _ => Err(Xerr::expect_fn_context()),
+    }
 }
 
 #[derive(Debug, PartialEq)]
