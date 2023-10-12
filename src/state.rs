@@ -632,15 +632,7 @@ impl State {
         OK
     }
 
-    pub fn defn(&mut self, name: Xstr, x: Cell) -> Xresult {
-        let xf = x.to_fn()?;
-        let immediate = x.get_tag(&IMMEDIATE_TAG).is_some();
-        let entry = Entry::Function { immediate, xf, len: None };
-        self.dict_insert(name, entry)?;
-        OK
-    }
-
-    pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult {
+     pub fn defword(&mut self, name: &str, f: XfnType) -> Xresult {
         self.dict_add_word(name, f, false)?;
         OK
     }
@@ -669,12 +661,6 @@ impl State {
         let offs = jump_offset(start, self.code_origin());
         self.backpatch_jump(start, offs)?;
         OK
-    }
-
-    pub fn help_str(&self, name: &str) -> Option<&Cell> {
-        //self.dict_key(name)?.get_tag(DOC_STR)
-        //todo:
-        None
     }
 
     fn load_core(&mut self) -> Xresult {
@@ -717,7 +703,6 @@ impl State {
         self.def_immediate("in", core_word_in)?;
         self.defword("equal?", core_word_equal)?;
         self.defword("nil?", core_word_is_nil)?;
-        self.defword("help-str", core_word_help_str)?;
         self.defword("I", core_word_counter_i)?;
         self.defword("J", core_word_counter_j)?;
         self.defword("K", core_word_counter_k)?;
@@ -2245,15 +2230,6 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_help_str(xs: &mut State) -> Xresult {
-    let name = xs.pop_data()?.to_xstr()?;
-    let help = xs
-        .help_str(&name)
-        .ok_or_else(|| Xerr::UnknownWord(name))?
-        .clone();
-    xs.push_data(help)
-}
-
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
     let l = xs.loops[xs.ctx.ls_len..]
         .iter()
@@ -3552,28 +3528,6 @@ mod tests {
     }
 
     #[test]
-    fn test_doc_help() {
-        let mut xs = State::boot().unwrap();
-        xs.intercept_stdout(true);
-        xs.eval(": ff ;  \"test-help\" \"ff\" doc! ").unwrap();
-        xs.eval("\"ff\" help").unwrap();
-        assert_eq!(xs.read_stdout(), Some("test-help\n".to_string()));
-    }
-
-    // #[test]
-    // fn test_help_str() {
-    //     let mut xs = State::boot().unwrap();
-    //     assert_eq!(
-    //         OK,
-    //         xs.eval(": ee ;  \"123\" 3 with-tag \"ee\" doc! \"ee\" help-str")
-    //     );
-    //     let help = xs.help_str("ee").unwrap();
-    //     assert_eq!(Some(&Cell::Int(3)), help.tag());
-    //     assert_eq!(&Cell::from("123"), help.value());
-    //     assert_eq!(Ok(Cell::from("123")), xs.pop_data());
-    // }
-
-    #[test]
     fn test_nil() {
         let mut xs = State::boot().unwrap();
         assert_ne!(OK, xs.eval("1 nil? assert"));
@@ -3600,13 +3554,6 @@ mod tests {
             assert!(xs.alloc_heap(ONE).is_ok());
         }
         assert!(xs.alloc_heap(ONE).is_err());
-    }
-
-    #[test]
-    fn test_builtin_help() {
-        let mut xs = State::boot().unwrap();
-        crate::d2_plugin::load(&mut xs).unwrap();
-        eval_ok!(xs, "include \"src/help.xeh\"");
     }
 
     #[test]
