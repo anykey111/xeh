@@ -33,13 +33,6 @@ pub(crate) struct FunctionFlow {
     locals: Vec<Xsubstr>,
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
-pub(crate) struct LetFlow {
-    else_start: Option<usize>,
-    matches: Vec<usize>,
-    vec_pos: Vec<usize>,
-    has_items: bool,
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Flow {
@@ -56,7 +49,6 @@ pub(crate) enum Flow {
     Tags,
     Fun(FunctionFlow),
     Do { for_org: usize, body_org: usize },
-    Let(LetFlow),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -700,7 +692,6 @@ impl State {
         self.def_immediate("loop", core_word_loop)?;
         self.def_immediate("defined", core_word_defined)?;
         self.def_immediate("let", core_word_let)?;
-        self.def_immediate("in", core_word_in)?;
         self.defword("equal?", core_word_equal)?;
         self.defword("nil?", core_word_is_nil)?;
         self.defword("I", core_word_counter_i)?;
@@ -1862,239 +1853,130 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum LetItem {
-    Skip,
-    Name(Xsubstr),
-    Value(Cell),
+fn build_let_tagmap(_xs: &mut State) -> Xresult {
+    todo!("tagmap");
 }
 
-#[derive(Debug)]
-enum LetTag {
-    TagOf,
-    Rest,
-}
-
-
-fn let_save_depth(xs: &mut State) -> Xresult {
-    let p = xs.data_stack.len();
-    let ls = Special::VecStackStart(p);
-    xs.push_special(ls)
-}
-
-fn let_reset_depth(xs: &mut State) -> Xresult {
-    match xs.pop_special() {
-        Some(Special::VecStackStart(p)) => {
-            // clear all temporary values including user initial value
-            while xs.data_stack.len() >= p {
-                xs.pop_data()?;
-            }
-            OK
-        }
-        _ => Xerr::control_flow_error(None)
-    }
-}
-
-fn build_let_match(xs: &mut State, lf: &mut LetFlow, val: Cell) -> Xresult {
+fn build_let_match(xs: &mut State, val: Cell) -> Xresult {
     xs.code_emit_value(val)?;
-    lf.matches.push(xs.code_origin());
-    xs.code_emit(Opcode::Nop)?;
     xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
 }
 
-fn build_let_match_vec_len(xs: &mut State, lf: &mut LetFlow, len: usize) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(let_item_len)))?;
-    let msg = xeh_xstr!("vector length mismatch");
-    let tagged_len = Cell::from(len).insert_tag(ASSERT_MSG, Cell::from(msg));
-    xs.code_emit_value(tagged_len)?;
-    lf.matches.push(xs.code_origin());
-    xs.code_emit(Opcode::Nop)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
-}
-
-fn let_item_len(xs: &mut State) -> Xresult {
+fn let_vec_len(xs: &mut State) -> Xresult {
     let n = xs.pop_data()?.vec()?.len();
     xs.push_data(Cell::from(n))
 }
 
-fn let_item_at(xs: &mut State) -> Xresult {
+fn let_vec_any_len(xs: &mut State) -> Xresult {
+    xs.pop_data()?.vec()?;
+    OK
+}
+
+fn let_vec_at(xs: &mut State) -> Xresult {
     let index = xs.pop_data()?.to_isize()?;
     let v = xs.top_data()?.vec()?;
     let x = vector_get(v, index)?.clone();
     xs.push_data(x)
 }
 
-fn let_take_rest(xs: &mut State) -> Xresult {
+fn let_vec_rest(xs: &mut State) -> Xresult {
     let n = xs.pop_data()?.to_usize()?;
-        let v = xs.top_data()?.vec()?;
+    let v = xs.top_data()?.to_vec()?;
     let new_vec: Xvec = v.iter().skip(n).cloned().collect();
     xs.push_data(Cell::from(new_vec))
 }
 
-fn build_let_consume(xs: &mut State, lf: &mut LetFlow) -> Xresult {
-    if let Some(idx) = lf.vec_pos.last_mut() {
-        if *idx == usize::MAX {
-            let msg = xeh_xstr!("`&` already consumed all remaining items");
-            return Err(Xerr::ErrorMsg(msg));
-        }
-        xs.code_emit_value(Cell::from(*idx))?;
-        xs.code_emit(Opcode::NativeCall(XfnPtr(let_item_at)))?;
-        *idx += 1;
+fn build_let_vec_next(xs: &mut State, idx: &mut usize) -> Xresult {
+    if *idx == usize::MAX {
+        let msg = xeh_xstr!("`&` already consumed all remaining items");
+        return Err(Xerr::ErrorMsg(msg));
     }
+    xs.code_emit_value(Cell::from(*idx))?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_at)))?;
+    *idx += 1;
     OK
 }
 
-fn build_let_bind(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>) -> Xresult {
-    match item {
-        None => Err(Xerr::let_name_or_lit()),
-        Some(LetItem::Skip) => OK,
-        Some(LetItem::Name(name)) => {
-            lf.has_items = true;
-            let is_local = xs.top_function_flow().is_some();
-            if is_local {
-                build_local_variable(xs, name)
-            } else {
-                build_global_variable(xs, name)
-            }
-        }
-        Some(LetItem::Value(val)) => {
-            lf.has_items = true;
-            build_let_match(xs, lf, val)
-        }
-    }
-}
-
-fn build_let_in_done(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>, tagged: Option<LetTag>) -> Xresult {
-    if tagged.is_some() {
-        return Err(Xerr::let_name_or_lit());
-    }
-    if !lf.vec_pos.is_empty() {
-        return Err(Xerr::unbalanced_vec_builder());
-    }
-    build_let_bind(xs, lf, item)?;
-    if !lf.has_items {
-        Err(Xerr::let_name_or_lit())
+fn build_let_named(xs: &mut State, name: Xsubstr) -> Xresult {
+    let is_local = xs.top_function_flow().is_some();
+    if is_local {
+        build_local_variable(xs, name)
     } else {
-        xs.code_emit(Opcode::NativeCall(XfnPtr(let_reset_depth)))
+        build_global_variable(xs, name)
     }
 }
 
-fn build_let_item(xs: &mut State, lf: &mut LetFlow, item: Option<LetItem>,
-                    tagged: Option<LetTag>) -> Xresult
-{
-    match tagged {
-        Some(LetTag::TagOf) => {
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-            build_let_bind(xs, lf, item)?;
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_get_tag)))
-        }
-        Some(LetTag::Rest) => {
-            if let Some(idx) = lf.vec_pos.last_mut() {
-                xs.code_emit_value(Cell::from(*idx))?;
-                *idx = usize::MAX;
-                xs.code_emit(Opcode::NativeCall(XfnPtr(let_take_rest)))?;
-                build_let_bind(xs, lf, item)
-            } else {
-                Err(Xerr::ErrorMsg(xeh_xstr!("rest operation without a vector")))
-            }
-        }
-        None => {
-            build_let_bind(xs, lf, item)?;
-            build_let_consume(xs, lf)
-        }
-    }
-}
-
-fn build_let_in(xs: &mut State, lf: &mut LetFlow) -> Xresult {
-    let mut item = Some(LetItem::Skip);
-    let mut tagged = None;
+fn build_let_vec(xs: &mut State) -> Xresult {
+    let mut idx = 0;
     loop {
         match xs.next_token()? {
-            Tok::Whitespace(_) | Tok::Comment(_) => (),
-            Tok::Word(name) if name == "in" => {
-                break build_let_in_done(xs, lf, item.take(), tagged.take());
-            }
-            Tok::Word(name) if name == "else" => {
-                if lf.else_start.is_some() {
-                    break Err(Xerr::unbalanced_let_in());
-                }
-                build_let_in_done(xs, lf, item.take(), tagged.take())?;
-                lf.else_start = Some(xs.code_origin() + 1);
-                xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
-                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_reset_depth)));
-            }
-            Tok::Word(name) if name == "." => {
-                if tagged.is_some() || item == None || item == Some(LetItem::Skip) {
-                    break Err(Xerr::let_name_or_lit());
-                }
-                tagged = Some(LetTag::TagOf);
-            }
+            Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
             Tok::Word(name) if name == "[" => {
-                build_let_item(xs, lf, item.take(), tagged.take())?;
-                lf.vec_pos.push(0);
-                lf.has_items = true;
-                item = Some(LetItem::Skip);
+                build_let_vec_next(xs, &mut idx)?;
+                build_let_vec(xs)?;
             }
             Tok::Word(name) if name == "]" => {
-                if tagged.is_some() {
-                    break Err(Xerr::let_name_or_lit());
+                if idx == usize::MAX {
+                    break xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_any_len)));
                 }
-                build_let_bind(xs, lf, item.take())?;
-                let len = lf.vec_pos.pop().ok_or_else(|| Xerr::unbalanced_vec_builder())?;
-                if len < usize::MAX {
-                    build_let_match_vec_len(xs, lf, len)?;
-                }
-                item = Some(LetItem::Skip);
+                xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_len)))?;
+                let msg = xeh_xstr!("vector length mismatch");
+                let tagged_len = Cell::from(idx).insert_tag(ASSERT_MSG, Cell::from(msg));
+                xs.code_emit_value(tagged_len)?;
+                break xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)));
             }
             Tok::Word(name) if name == "&" => {
-                if tagged.is_some() {
-                    break Err(Xerr::let_name_or_lit());
-                }
-                build_let_bind(xs, lf, item.take())?;
-                tagged = Some(LetTag::Rest);
-                item = Some(LetItem::Skip);
+                xs.code_emit_value(Cell::from(idx))?;
+                xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_rest)))?;
+                build_let_in(xs)?;
+                idx = usize::MAX;
             }
             Tok::Word(name) => {
-                build_let_item(xs, lf, item.take(), tagged.take())?;
-                item = Some(LetItem::Name(name));
+                build_let_vec_next(xs, &mut idx)?;
+                build_let_named(xs, name)?;
             }
             Tok::Literal(val) => {
-                build_let_item(xs, lf, item.take(), tagged.take())?;
-                item = Some(LetItem::Value(val));
+                build_let_vec_next(xs, &mut idx)?;
+                build_let_match(xs, val)?;
             }
-            Tok::EndOfInput => break Err(Xerr::unbalanced_let_in()),
+            Tok::EndOfInput => {
+                break Err(Xerr::let_name_or_lit());
+            }
         }
     }
 }
 
-fn core_word_in(xs: &mut State) -> Xresult {
-    match xs.pop_flow() {
-        Some(Flow::Let(lf)) => {
-            if let Some(else_start) = lf.else_start {
-                let at = else_start - 1;
-                let dest = xs.code_origin();
-                xs.backpatch_jump(at, jump_offset(at, dest))?;
-            }
-            OK
+fn build_let_in(xs: &mut State) -> Xresult {
+    match xs.next_token()? {
+        Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
+        Tok::Word(name) if name == "#{" => {
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_get_tag)))?;
+            build_let_tagmap(xs)
         }
-        _ => Err(Xerr::unbalanced_let_in()),
+        Tok::Word(name) if name == "[" => {
+            build_let_vec(xs)
+        }
+        Tok::Word(name) if name == "]" => {
+            Err(Xerr::unbalanced_vec_builder())
+        }
+        Tok::Word(name) if name == "&" => {
+            Err(Xerr::let_name_or_lit())
+        }
+        Tok::Word(name) => {
+            build_let_named(xs, name)
+        }
+        Tok::Literal(val) => {
+            build_let_match(xs, val)
+        }
+        Tok::EndOfInput => {
+            Err(Xerr::let_name_or_lit())
+        }
     }
 }
 
 fn core_word_let(xs: &mut State) -> Xresult {
-    let mut lf = LetFlow::default();
-    xs.code_emit(Opcode::NativeCall(XfnPtr(let_save_depth)))?;
-    build_let_in(xs, &mut lf)?;
-    if let Some(else_start) = lf.else_start {
-        for i in lf.matches.iter() {
-            xs.backpatch(*i, Opcode::NativeCall(XfnPtr(core_word_equal)))?;
-            let jmp = Opcode::JumpIfNot(jump_offset(*i + 1, else_start));
-            xs.backpatch(*i + 1, jmp)?;
-        }
-        xs.push_flow(Flow::Let(lf))
-    } else {
-        OK
-    }
+    build_let_in(xs)
 }
 
 fn build_local_variable(xs: &mut State, name: Xsubstr) -> Xresult {
@@ -3567,18 +3449,13 @@ mod tests {
     #[test]
     fn test_let_in() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "1 let a in a 1 assert-eq
-            a let 1 in");
-        assert_ne!(OK, xs.eval("a let 2 in"));
-        assert_eq!(Err(Xerr::StackUnderflow), eval_boot!("1 let a b in"));
-        eval_boot!("1 2 let a b in b 1 assert-eq a 2").unwrap();
-        let res = eval_boot!("3 let in");
+        eval_ok!(xs, "1 let a
+            a 1 assert-eq
+            a let 1");
+        assert_ne!(OK, xs.eval("a let 2"));
+        assert_eq!(Err(Xerr::StackUnderflow), eval_boot!(" let a"));
+        let res = eval_boot!("3 let");
         assert_eq!(Err(Xerr::let_name_or_lit()), res);
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "1 let 2 else 3 in
-        depth 1 assert-eq
-        3 assert-eq");
-        assert_eq!(Err(Xerr::unbalanced_let_in()), xs.eval("1 let 2 else"));
     }
 
     #[test]
@@ -3604,57 +3481,45 @@ mod tests {
     #[test]
     fn test_let_vec() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, " [ ] let [ ] in depth 0 assert-eq");
-        eval_ok!(xs, " [ 10 20 ] let [ a b ] in
+        eval_ok!(xs, " [ ] let [ ] depth 0 assert-eq");
+        eval_ok!(xs, " [ 10 20 ] let [ a b ]
             depth 0 assert-eq
             a 10 assert-eq
             b 20 assert-eq");
-        eval_ok!(xs, " [ [ 10 ] [ 20 ] ] let [ [ a ] b ] in 
+        eval_ok!(xs, " [ [ 10 ] [ 20 ] ] let [ [ a ] b ]
             depth 0 assert-eq
             a 10 assert-eq
             b [ 20 ] assert-eq");
-        eval_ok!(xs, " [ [ 10 . 20 30 . 40 ] ] let [ [ 10 . b c . 40 ] ] in
-            depth 0 assert-eq
-            b 20 assert-eq
-            c 30 assert-eq");
-        eval_ok!(xs, " 10 .[ 20 30 ] let  a . [ b 30 ]  in
-            depth 0 assert-eq
-            a 10 assert-eq
-            b 20 assert-eq");
-    }
-
-    #[test]
-    fn test_let_rest() {
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, " [ 11 22 33 44 ] let [ x & xs ] in
+        eval_ok!(xs, " [ 11 22 33 44 ] let [ x & xs ]
         x 11 assert-eq
         xs [ 22 33 44 ] assert-eq
         depth 0 assert-eq");
-        eval_ok!(xs, " [ ] let [ & ss ] in
+        eval_ok!(xs, " [ ] let [ & ss ]
         ss [ ] assert-eq
         depth 0 assert-eq");
-        eval_ok!(xs, " [ 11 22 ] let [ c e  & es ] in
+        eval_ok!(xs, " [ 11 22 ] let [ c e  & es ]
         c 11 assert-eq
         e 22 assert-eq
         es [ ] assert-eq
         depth 0 assert-eq");
+        eval_ok!(xs, " [ 11 22 ] let [ c e  & es ]
+        c 11 assert-eq
+        e 22 assert-eq
+        es [ ] assert-eq
+        depth 0 assert-eq");
+        eval_ok!(xs, " [ 11 22 ] let [ e & [ 22 ] ]
+        e 11 assert-eq
+        depth 0 assert-eq");
         let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval(" [ ] let [ & xs ys ] in"));
+        assert_ne!(OK, xs.eval(" [ ] let [ & xs ys ]"));
         let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval(" [ ] let [ & & xs ] in"));
+        assert_ne!(OK, xs.eval(" [ ] let [ & & xs ]"));
         let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval(" [ ] let  & xs in"));
+        assert_ne!(OK, xs.eval(" [ ] let  & xs"));
         let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval(" [ ] let  & in"));
+        assert_ne!(OK, xs.eval(" [ ] let  &"));
     }
 
-    #[test]
-    fn test_let_else() {
-        eval_boot!("1 let 2 else depth 0 assert-eq in ").unwrap();
-        assert_eq!(Err(Xerr::StackUnderflow), eval_boot!(" let 2 else depth 0 assert-eq in "));
-        eval_boot!(" [ [ 1 2 ] ] let [ [ 2 ] ] else depth 0 assert-eq in").unwrap();
-        eval_boot!("222 [ [ 1 2 ] ] let [ [ 2 ] ] else depth 1 assert-eq 222 assert-eq in").unwrap();
-    }
 
     #[test]
     fn test_require() {
