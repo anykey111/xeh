@@ -708,7 +708,7 @@ impl State {
         self.defword("collect", core_word_collect)?;
         self.defword("unbox", core_word_unbox)?;
         self.defword("dup", core_word_dup)?;
-        self.defword("drop", |xs| xs.drop_data())?;
+        self.defword("drop", core_word_drop)?;
         self.defword("swap", core_word_swap)?;
         self.defword("rot", |xs| xs.rot_data())?;
         self.defword("over", |xs| xs.over_data())?;
@@ -1857,6 +1857,46 @@ fn build_let_tagmap(_xs: &mut State) -> Xresult {
     todo!("tagmap");
 }
 
+fn let_map_check(xs: &mut State) -> Xresult {
+    xs.pop_data()?.as_map()?;
+    OK
+}
+
+fn let_map_lookup(xs: &mut State) -> Xresult {
+    let key = xs.pop_data()?;
+    let m = xs.top_data()?.as_map()?;
+    if let Some(val) = m.get(&key) {
+        xs.push_data(val.clone())
+    } else {
+        Err(Xerr::map_missing_key())
+    }
+}
+
+fn build_let_map(xs: &mut State) -> Xresult {
+    loop {
+        match xs.next_token()? {
+            Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
+            Tok::Word(name) if name == "}" => {
+                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_check)));
+            }
+            Tok::Word(name) if name == "]" => {
+                break Err(Xerr::unbalanced_vec_builder());
+            }
+            Tok::Word(name) if name == "&" => {
+                break Err(Xerr::let_expect_key_lit());
+            }
+            Tok::Literal(key) => {
+                xs.code_emit_value(key)?;
+                xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_lookup)))?;
+                build_let_in(xs)?;
+            }
+            _ => {
+                break Err(Xerr::let_expect_key_lit());
+            }
+        }
+    }
+}
+
 fn build_let_match(xs: &mut State, val: Cell) -> Xresult {
     xs.code_emit_value(val)?;
     xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
@@ -1931,6 +1971,13 @@ fn build_let_vec(xs: &mut State) -> Xresult {
                 build_let_in(xs)?;
                 idx = usize::MAX;
             }
+            Tok::Word(name) if name == "{" => {
+                build_let_vec_next(xs, &mut idx)?;
+                build_let_map(xs)?;
+            }
+            Tok::Word(name) if name == "}" => {
+                break Err(Xerr::unbalanced_map_builder());
+            }
             Tok::Word(name) => {
                 build_let_vec_next(xs, &mut idx)?;
                 build_let_named(xs, name)?;
@@ -1959,6 +2006,12 @@ fn build_let_in(xs: &mut State) -> Xresult {
         }
         Tok::Word(name) if name == "]" => {
             Err(Xerr::unbalanced_vec_builder())
+        }
+        Tok::Word(name) if name == "{" => {
+            build_let_map(xs)
+        }
+        Tok::Word(name) if name == "}" => {
+            Err(Xerr::unbalanced_map_builder())
         }
         Tok::Word(name) if name == "&" => {
             Err(Xerr::let_name_or_lit())
@@ -2274,6 +2327,11 @@ fn core_word_swap(xs: &mut State) -> Xresult {
 
 fn core_word_dup(xs: &mut State) -> Xresult {
     xs.dup_data()
+}
+
+fn core_word_drop(xs: &mut State) -> Xresult {
+    xs.pop_data()?;
+    OK
 }
 
 fn core_word_depth(xs: &mut State) -> Xresult {
@@ -3520,6 +3578,17 @@ mod tests {
         assert_ne!(OK, xs.eval(" [ ] let  &"));
     }
 
+    #[test]
+    fn test_let_map() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, " { } let { } depth 0 assert-eq");
+        eval_ok!(xs, " { 10 20 } let { 20 v }
+            depth 0 assert-eq
+            v 10 assert-eq");
+            eval_ok!(xs, " { [ { 30 20 } ] 10 } let { 10 [ { 20 v } ] }
+            depth 0 assert-eq
+            v 30 assert-eq");
+    }
 
     #[test]
     fn test_require() {

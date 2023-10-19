@@ -201,6 +201,10 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
+    pub(crate) fn let_expect_key_lit() -> Xerr {
+        Xerr::ExpectingLiteral
+    }
+
     pub(crate) fn let_name_or_lit() -> Xerr {
         Xerr::ErrorMsg(xeh_xstr!("expecting name or literal"))
     }
