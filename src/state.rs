@@ -729,8 +729,7 @@ impl State {
         self.defword("insert-tag", core_word_insert_tag)?;
         self.defword("remove-tag", core_word_remove_tag)?;
         self.defword("get-tag", core_word_get_tag)?;
-        self.defword("^", core_word_insert_tag)?;
-        self.def_immediate("^{", core_word_tags_map)?;
+        self.def_immediate("#{", core_word_tags_map)?;
         self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
         self.defword("DEC", |xs| set_fmt_base(xs, 10))?;
         self.defword("OCT", |xs| set_fmt_base(xs, 8))?;
@@ -1853,11 +1852,38 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
     }
 }
 
-fn build_let_tagmap(_xs: &mut State) -> Xresult {
-    todo!("tagmap");
+
+fn build_let_tags(xs: &mut State) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tags)))?;
+    match xs.next_token()? {
+        Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
+        Tok::Word(name) if name == "{" => {
+            build_let_map(xs)
+        }
+        Tok::Word(name) if name == "}" => {
+            Err(Xerr::unbalanced_map_builder())
+        }
+        Tok::Word(name) if name == "]" => {
+            Err(Xerr::unbalanced_vec_builder())
+        }
+        Tok::Word(name) if name == "&" => {
+            Err(Xerr::let_expect_key_lit())
+        }
+        Tok::Word(name) => {
+            build_let_named(xs, name)
+        }
+        Tok::Literal(_) | Tok::EndOfInput => {
+            Err(Xerr::ExpectingName)
+        }
+    }
 }
 
-fn let_map_check(xs: &mut State) -> Xresult {
+fn let_map_begin(xs: &mut State) -> Xresult {
+    xs.top_data()?.as_map()?;
+    OK
+}
+
+fn let_map_end(xs: &mut State) -> Xresult {
     xs.pop_data()?.as_map()?;
     OK
 }
@@ -1873,11 +1899,12 @@ fn let_map_lookup(xs: &mut State) -> Xresult {
 }
 
 fn build_let_map(xs: &mut State) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_begin)))?;
     loop {
         match xs.next_token()? {
             Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
             Tok::Word(name) if name == "}" => {
-                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_check)));
+                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_end)));
             }
             Tok::Word(name) if name == "]" => {
                 break Err(Xerr::unbalanced_vec_builder());
@@ -1978,6 +2005,11 @@ fn build_let_vec(xs: &mut State) -> Xresult {
             Tok::Word(name) if name == "}" => {
                 break Err(Xerr::unbalanced_map_builder());
             }
+            Tok::Word(name) if name == "#" => {
+                build_let_vec_next(xs, &mut idx)?;
+                idx -= 1;
+                build_let_tags(xs)?;
+            }
             Tok::Word(name) => {
                 build_let_vec_next(xs, &mut idx)?;
                 build_let_named(xs, name)?;
@@ -1996,10 +2028,10 @@ fn build_let_vec(xs: &mut State) -> Xresult {
 fn build_let_in(xs: &mut State) -> Xresult {
     match xs.next_token()? {
         Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
-        Tok::Word(name) if name == "#{" => {
+        Tok::Word(name) if name == "#" => {
             xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_get_tag)))?;
-            build_let_tagmap(xs)
+            build_let_tags(xs)?;
+            build_let_in(xs)
         }
         Tok::Word(name) if name == "[" => {
             build_let_vec(xs)
@@ -3350,8 +3382,8 @@ mod tests {
 
     #[test]
     fn test_incomplete_tag_map() {
-        assert_eq!(eval_boot!("^{ 1 2 }"), Err(Xerr::StackUnderflow));
-        assert_eq!(eval_boot!("^{ 1 "), Err(Xerr::unbalanced_tag_map_builder()));
+        assert_eq!(eval_boot!("#{ 1 2 }"), Err(Xerr::StackUnderflow));
+        assert_eq!(eval_boot!("#{ 1 "), Err(Xerr::unbalanced_tag_map_builder()));
     }
 
     #[test]
@@ -3519,21 +3551,15 @@ mod tests {
     #[test]
     fn test_let_tag() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "1 \"b\" with-tag let a . b in 
-            a 1 assert-eq b \"b\" assert-eq");
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "1 \"b\" with-tag let 1 . b in");
-        let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "1 \"b\" with-tag let 2 . b else 3 in
-        3 assert-eq");
-        let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval("5 with-tag 1 . in"));
-        let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval("5 with-tag . in"));
-        let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval("5 with-tag a . else 2 in"));
-        let mut xs = State::boot().unwrap();
-        assert_ne!(OK, xs.eval("5 with-tag a . . in"));
+        eval_ok!(xs, "[ \"a\" #{ 3 #{ 0xe \"e\" } \"b\" } ] let [ # { 3 # t b } a ]
+            a \"a\" assert-eq
+            b 3  assert-eq
+            t { 0xe \"e\" } assert-eq
+            ");
+        eval_ok!(xs, "100 #{ 5 0 } let # { 0 five } x
+            five 5 assert-eq
+            x 100 assert-eq
+            ");
     }
 
     #[test]

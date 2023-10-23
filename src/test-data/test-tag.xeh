@@ -2,9 +2,9 @@
 10 { 1 "a" 2 "b" 3 "c" } with-tags
 tags { 1 "a" 2 "b" 3 "c" } assert-eq
 
-true ^{ 5 7 } 7 get-tag
+true #{ 5 7 } 7 get-tag
 5 assert-eq
 
-true ^{ 11 ^{ 13 "bb" } "aa" } "aa" get-tag "bb" get-tag 13 assert-eq
+true #{ 11 #{ 13 "bb" } "aa" } "aa" get-tag "bb" get-tag 13 assert-eq
 
 depth 0 assert-eq
