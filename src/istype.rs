@@ -4,7 +4,7 @@ use crate::cell::*;
 
 pub fn load(xs: &mut State) -> Xresult {
     xs.defword("nil?", is_nil_xf)?;
-    xs.defword("bool?", is_flag_xf)?;
+    xs.defword("bool?", is_bool_xf)?;
     xs.defword("int?", is_int_xf)?;
     xs.defword("real?", is_real_xf)?;
     xs.defword("str?", is_str_xf)?;
@@ -18,8 +18,8 @@ fn is_nil_xf(xs: &mut State) -> Xresult {
     xs.push_data(Cell::from(yes))
 }
 
-fn is_flag_xf(xs: &mut State) -> Xresult {
-    let yes = xs.pop_data()?.flag().is_ok();
+fn is_bool_xf(xs: &mut State) -> Xresult {
+    let yes = xs.pop_data()?.to_bool().is_ok();
     xs.push_data(Cell::from(yes))
 }
 

@@ -259,28 +259,28 @@ fn core_word_is_negative(xs: &mut State) -> Xresult {
 }
 
 fn logical_not(xs: &mut State) -> Xresult {
-    let f = xs.pop_data()?.flag()?;
+    let f = xs.pop_data()?.to_bool()?;
     xs.push_data(Cell::from(!f))
 }
 
 fn logical_and(xs: &mut State) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    let c = a.flag()? & b.flag()?;
+    let c = a.to_bool()? & b.to_bool()?;
     xs.push_data(Cell::from(c))
 }
 
 fn logical_or(xs: &mut State) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    let c = a.flag()? | b.flag()?;
+    let c = a.to_bool()? | b.to_bool()?;
     xs.push_data(Cell::from(c))
 }
 
 fn logical_xor(xs: &mut State) -> Xresult {
     let b = xs.pop_data()?;
     let a = xs.pop_data()?;
-    let c = a.flag()? ^ b.flag()?;
+    let c = a.to_bool()? ^ b.to_bool()?;
     xs.push_data(Cell::from(c))
 }
 

@@ -260,7 +260,7 @@ impl Cell {
         }
     }
 
-    pub fn flag(&self) -> Xresult1<bool> {
+    pub fn to_bool(&self) -> Xresult1<bool> {
         match self.value() {
             Cell::Flag(x) => Ok(*x),
             _ => Err(cell_type_error(FLAG_TYPE_NAME, self.clone())),
@@ -270,7 +270,7 @@ impl Cell {
     pub fn cond_true(&self) -> Xresult1<bool> {
         match self.value() {
             Cell::Nil => Ok(false),
-            _ => self.flag(),
+            _ => self.to_bool(),
         }
     }
 
@@ -527,9 +527,9 @@ mod tests {
 
     #[test]
     fn cell_is_true() {
-        assert_ne!(Ok(true), ZERO.flag());
-        assert_ne!(Ok(true), NIL.flag());
-        assert_eq!(Ok(true), TRUE.flag());
+        assert_ne!(Ok(true), ZERO.to_bool());
+        assert_ne!(Ok(true), NIL.to_bool());
+        assert_eq!(Ok(true), TRUE.to_bool());
         assert_eq!(Ok(true), TRUE.cond_true());
         assert_eq!(Ok(false), FALSE.cond_true());
         assert_eq!(Ok(false), NIL.cond_true());
