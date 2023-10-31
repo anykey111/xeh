@@ -22,16 +22,28 @@ pub struct BitstrState {
 macro_rules! def_data_word {
     ($xs:ident, $n:expr) => {
         $xs.defword(concat!("u", $n), |xs| read_unsigned_n(xs, $n))?;
+        $xs.defword(concat!("u", $n, "le"), |xs| read_unsigned(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("u", $n, "be"), |xs| read_unsigned(xs, $n, Byteorder::Big))?;
         $xs.defword(concat!("i", $n), |xs| read_signed_n(xs, $n))?;
+        $xs.defword(concat!("i", $n, "le"), |xs| read_signed(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("i", $n, "be"), |xs| read_signed(xs, $n, Byteorder::Big))?;
         $xs.defword(concat!("u", $n, "!"), |xs| pack_int(xs, $n))?;
+        $xs.defword(concat!("u", $n, "le!"), |xs| pack_int_bo(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("u", $n, "be!"), |xs| pack_int_bo(xs, $n, Byteorder::Big))?;
         $xs.defword(concat!("i", $n, "!"), |xs| pack_int(xs, $n))?;
+        $xs.defword(concat!("i", $n, "le!"), |xs| pack_int_bo(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("i", $n, "be!"), |xs| pack_int_bo(xs, $n, Byteorder::Big))?;
     };
 }
 
 macro_rules! def_data_word_real {
     ($xs:ident, $n:expr) => {
         $xs.defword(concat!("f", $n), |xs| read_float_n(xs, $n))?;
+        $xs.defword(concat!("f", $n, "le"), |xs| read_float(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("f", $n, "be"), |xs| read_float(xs, $n, Byteorder::Big))?;
         $xs.defword(concat!("f", $n, "!"), |xs| pack_float(xs, $n))?;
+        $xs.defword(concat!("f", $n, "le!"), |xs| pack_float_bo(xs, $n, Byteorder::Little))?;
+        $xs.defword(concat!("f", $n, "be!"), |xs| pack_float_bo(xs, $n, Byteorder::Big))?;
     };
 }
 
