@@ -149,30 +149,31 @@ pub struct State {
     last_token: Option<Xsubstr>,
     pub(crate) about_to_stop: bool,
     pub(crate) bitstr_mod: BitstrState,
-    // formatter flags
-    fmt_flags: CellRef,
     // d2 canvas
     pub(crate) d2: CellRef,
 }
 
-impl State {
-    pub fn get_fmt_flags(&self) -> Xresult1<FmtFlags> {
-        self
-            .get_var(self.fmt_flags)
-            .and_then(|val| FmtFlags::parse(val))
-    }
+const FMT_TAG_NAME: Cell = xeh_str_lit!("#fmt");
 
-    pub fn set_fmt_flags(&mut self, new_flags: FmtFlags) -> Xresult {
-        self.set_var(self.fmt_flags, new_flags.build())
+impl State {
+
+    fn parse_fmt_flags(&self, val: &Cell) -> Option<FmtFlags> {
+        let tags = val.tags()?;
+        let fmt = tags.get(&FMT_TAG_NAME)?;
+        let raw = fmt.to_usize().ok()?;
+        Some(FmtFlags::from_raw(raw))
     }
 
     pub fn format_cell(&self, val: &Cell) -> Xresult1<String> {
-        let flags = self.get_fmt_flags()?;
+        let flags = self.parse_fmt_flags(val).unwrap_or_default();
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
-    pub fn fmt_cell_safe(&self, val: &Cell) -> Xresult1<String> {
-        let flags = self.get_fmt_flags()?.set_fitscreen(true);
+    pub fn format_cell_safe(&self, val: &Cell) -> Xresult1<String> {
+        let flags = self
+            .parse_fmt_flags(val)
+            .unwrap_or_default()
+            .set_fitscreen(true);
         Ok(format!("{:1$?}", val, flags.into_raw()))
     }
 
@@ -561,7 +562,6 @@ impl State {
         let mut xs = State::default();
         #[cfg(not(feature = "stdio"))]
         xs.intercept_stdout(true);
-        xs.fmt_flags = xs.defvar_anonymous(FmtFlags::default().build())?;
         xs.load_core()?;
         crate::arith::load(&mut xs)?;
         Ok(xs)
@@ -730,16 +730,13 @@ impl State {
         self.defword("remove-tag", core_word_remove_tag)?;
         self.defword("get-tag", core_word_get_tag)?;
         self.def_immediate("#{", core_word_tags_map)?;
-        self.defword("HEX", |xs| set_fmt_base(xs, 16))?;
-        self.defword("DEC", |xs| set_fmt_base(xs, 10))?;
-        self.defword("OCT", |xs| set_fmt_base(xs, 8))?;
-        self.defword("BIN", |xs| set_fmt_base(xs, 2))?;
-        self.defword("PREFIX", |xs| set_fmt_prefix(xs, true))?;
-        self.defword("NO-PREFIX", |xs| set_fmt_prefix(xs, false))?;
-        self.defword("TAGS", |xs| set_fmt_tags(xs, true))?;
-        self.defword("NO-TAGS", |xs| set_fmt_tags(xs, false))?;
-        self.defword("UPCASE", |xs| set_fmt_upcase(xs, true))?;
-        self.defword("LOCASE", |xs| set_fmt_upcase(xs, false))?;
+        self.def_immediate("fmt/hex", |xs| set_fmt_base(xs, 16))?;
+        self.def_immediate("fmt/dec", |xs| set_fmt_base(xs, 10))?;
+        self.def_immediate("fmt/oct", |xs| set_fmt_base(xs, 8))?;
+        self.def_immediate("fmt/bin", |xs| set_fmt_base(xs, 2))?;
+        self.def_immediate("fmt/prefix", set_fmt_prefix)?;
+        self.def_immediate("fmt/tags", set_fmt_tags)?;
+        self.def_immediate("fmt/upcase", set_fmt_upcase)?;
         self.def_immediate("see", core_word_see)?;
         self.defword("error", core_word_error)?;
         OK
@@ -2286,8 +2283,9 @@ fn join_str_vec(xs: &mut State, v: &Xvec, sep: &Option<Xstr>) -> Xresult1<String
             Cell::Str(xstr) => {
                 s.push_str(xstr);
             }
-            val => {
-                let tmp = xs.format_cell(val)?;
+            _val => {
+                // format cell with tags
+                let tmp = xs.format_cell(x)?;
                 s.push_str(&tmp);
             }
         }
@@ -2427,8 +2425,8 @@ fn core_word_newline(xs: &mut State) -> Xresult {
 }
 
 fn core_word_str_to_num(xs: &mut State) -> Xresult {
-    let base = xs.get_fmt_flags()?.base() as u32;
     let val = xs.pop_data()?;
+    let base = xs.parse_fmt_flags(&val).unwrap_or_default().base() as u32;
     let s = val.to_xstr()?;
     if s.find('.').is_some() {
         let r: Xreal = s.parse().map_err(|_| Xerr::ParseError {
@@ -2485,24 +2483,66 @@ fn core_word_slice(xs: &mut State) -> Xresult {
     xs.push_data(slice)
 }
 
+fn update_fmt_flags(xs: &mut State, flags: FmtFlags) -> Xresult {
+    let newval = xs.pop_data()?.insert_tag(FMT_TAG_NAME, flags.build());
+    xs.push_data(newval)
+}
+
+fn update_fmt_base(xs: &mut State) -> Xresult {
+    let n = xs.pop_data()?.to_usize()?;
+    let flags = xs.parse_fmt_flags(xs.top_data()?).unwrap_or_default();
+    if flags.base() != n {
+        update_fmt_flags(xs, flags.set_base(n))
+    } else {
+        OK
+    }
+}
+
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
-    let flags = xs.get_fmt_flags()?.set_base(n);
-    xs.set_fmt_flags(flags)
+    xs.code_emit_value(Cell::from(n))?;
+    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_base)))
 }
 
-fn set_fmt_prefix(xs: &mut State, show: bool) -> Xresult {
-    let flags = xs.get_fmt_flags()?.set_show_prefix(show);
-    xs.set_fmt_flags(flags)
+fn update_fmt_prefix(xs: &mut State) -> Xresult {
+    let t = xs.pop_data()?.to_bool()?;
+    let flags = xs.parse_fmt_flags(xs.top_data()?).unwrap_or_default();
+    if flags.show_prefix() != t {
+        update_fmt_flags(xs, flags.set_show_prefix(t))
+    } else {
+        OK
+    }
 }
 
-fn set_fmt_tags(xs: &mut State, show: bool) -> Xresult {
-    let flags = xs.get_fmt_flags()?.set_show_tags(show);
-    xs.set_fmt_flags(flags)
+fn set_fmt_prefix(xs: &mut State) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_prefix)))
 }
 
-fn set_fmt_upcase(xs: &mut State, show: bool) -> Xresult {
-    let flags = xs.get_fmt_flags()?.set_upcase(show);
-    xs.set_fmt_flags(flags)
+fn update_fmt_tags(xs: &mut State) -> Xresult {
+    let t = xs.pop_data()?.to_bool()?;
+    let flags = xs.parse_fmt_flags(xs.top_data()?).unwrap_or_default();
+    if flags.show_tags() != t {
+        update_fmt_flags(xs, flags.set_show_tags(t))
+    } else {
+        OK
+    }
+}
+
+fn set_fmt_tags(xs: &mut State) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_tags)))
+}
+
+fn update_fmt_upcase(xs: &mut State) -> Xresult {
+    let t = xs.pop_data()?.to_bool()?;
+    let flags = xs.parse_fmt_flags(xs.top_data()?).unwrap_or_default();
+    if flags.upcase() != t {
+        update_fmt_flags(xs, flags.set_upcase(t))
+    } else {
+        OK
+    }
+}
+
+fn set_fmt_upcase(xs: &mut State) -> Xresult {
+    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_upcase)))
 }
 
 fn core_word_see(xs: &mut State) -> Xresult {
@@ -2818,6 +2858,8 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "[ 1 \"ss\" [ 15 ] ] concat");
         assert_eq!("1ss15".to_string(), xs.pop_data().unwrap().str().unwrap());
+        eval_ok!(xs, "[ 1 \"ss\" [ 15 fmt/hex ] ] concat");
+        assert_eq!("1ss0xf".to_string(), xs.pop_data().unwrap().str().unwrap());
     }
 
     #[test]
@@ -2981,7 +3023,7 @@ mod tests {
     fn test_str_to_num() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "\"255\" str>number 255 assert-eq");
-        eval_ok!(xs, "HEX \"ff\" str>number 255 assert-eq");
+        eval_ok!(xs, "\"ff\" fmt/hex str>number 255 assert-eq");
         eval_ok!(xs, "\"0.0\" str>number 0.0 assert-eq");
         assert_ne!(OK, xs.eval("\"10X\" str>number"));
     }
@@ -3001,13 +3043,13 @@ mod tests {
     fn test_fmt_base() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("HEX 255 print").unwrap();
+        xs.eval("255 fmt/hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("DEC 13 print").unwrap();
+        xs.eval("13 fmt/dec print").unwrap();
         assert_eq!(Some("13".to_string()), xs.read_stdout());
-        xs.eval("OCT 10 print").unwrap();
+        xs.eval("10 fmt/oct print").unwrap();
         assert_eq!(Some("0o12".to_string()), xs.read_stdout());
-        xs.eval("BIN 3 print").unwrap();
+        xs.eval("3 fmt/bin print").unwrap();
         assert_eq!(Some("0b11".to_string()), xs.read_stdout());
     }
 
@@ -3015,11 +3057,9 @@ mod tests {
     fn test_fmt_upcase() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("HEX 255 print").unwrap();
-        assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("HEX UPCASE 255 print").unwrap();
+        xs.eval(" 255 true fmt/upcase fmt/hex  print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.read_stdout());
-        xs.eval("HEX LOCASE 10 print").unwrap();
+        xs.eval("10 fmt/hex false fmt/upcase print").unwrap();
         assert_eq!(Some("0xa".to_string()), xs.read_stdout());
     }
 
@@ -3027,9 +3067,9 @@ mod tests {
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("255 HEX print").unwrap();
+        xs.eval("255 fmt/hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("255 NO-PREFIX HEX print").unwrap();
+        xs.eval("255 false fmt/prefix fmt/hex print").unwrap();
         assert_eq!(Some("ff".to_string()), xs.read_stdout());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());

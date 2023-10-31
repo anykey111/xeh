@@ -124,7 +124,7 @@ impl rl::hint::Hinter for XsHelper {
                         break;
                     }
                     let c = st.xs.get_data(i).unwrap_or(&NIL);
-                    let valstr = st.xs.fmt_cell_safe(c).unwrap_or_default();
+                    let valstr = st.xs.format_cell_safe(c).unwrap_or_default();
                     text.push('\n');
                     text.push_str(&valstr);
                 }

@@ -15,9 +15,6 @@ impl Default for FmtFlags {
 }
 
 impl FmtFlags {
-    pub fn parse(c: &Cell) -> Xresult1<Self> {
-        c.to_usize().map(|n| FmtFlags(n))
-    }
 
     pub fn set_base(self, n: usize) -> Self {
         FmtFlags((self.0 & !FMT_BASE_MASK) | (n & FMT_BASE_MASK))
