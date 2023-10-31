@@ -40,7 +40,7 @@ pub(crate) enum Flow {
     Else(usize),
     Begin(usize),
     While(usize),
-    Leave(usize),
+    Break(usize),
     Case,
     CaseOf(usize),
     CaseEndOf(usize),
@@ -668,7 +668,7 @@ impl State {
         self.def_immediate("begin", core_word_begin)?;
         self.def_immediate("while", core_word_while)?;
         self.def_immediate("until", core_word_until)?;
-        self.def_immediate("leave", core_word_leave)?;
+        self.def_immediate("break", core_word_break)?;
         self.def_immediate("repeat", core_word_repeat)?;
         self.def_immediate("[", core_word_vec_begin)?;
         self.def_immediate("]", core_word_vec_end)?;
@@ -1498,7 +1498,7 @@ fn take_first_cond_flow(xs: &mut State) -> Option<Flow> {
             Flow::Case => true,
             Flow::CaseOf(_) => true,
             Flow::CaseEndOf(_) => true,
-            Flow::Leave(_) => continue,
+            Flow::Break(_) => continue,
             _ => break,
         };
         if t {
@@ -1596,7 +1596,7 @@ fn core_word_while(xs: &mut State) -> Xresult {
 fn core_word_repeat(xs: &mut State) -> Xresult {
     loop {
         match xs.pop_flow() {
-            Some(Flow::Leave(org)) => {
+            Some(Flow::Break(org)) => {
                 let offs = jump_offset(org, xs.code_origin() + 1);
                 xs.backpatch_jump(org, offs)?;
             }
@@ -1618,7 +1618,7 @@ fn core_word_repeat(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_leave(xs: &mut State) -> Xresult {
+fn core_word_break(xs: &mut State) -> Xresult {
     let has_loops = xs.flow_stack[xs.ctx.fs_len..]
             .iter()
             .rev()
@@ -1629,11 +1629,11 @@ fn core_word_leave(xs: &mut State) -> Xresult {
         }
     );
     if !has_loops {
-        return Err(Xerr::unbalanced_leave());
+        return Err(Xerr::unbalanced_break());
     }
     let org = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
-    xs.push_flow(Flow::Leave(org))
+    xs.push_flow(Flow::Break(org))
 }
 
 fn jump_offset(origin: usize, dest: usize) -> RelativeJump {
@@ -2179,7 +2179,7 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     let stop_org = xs.code_origin();
     loop {
         match xs.pop_flow() {
-            Some(Flow::Leave(org)) => {
+            Some(Flow::Break(org)) => {
                 let stop_rel = jump_offset(org, stop_org);
                 xs.backpatch(org, Opcode::Break(stop_rel))?;
             }
@@ -2814,7 +2814,7 @@ mod tests {
         xs.eval("0 begin dup 5 < while 1 + repeat").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        xs.eval("begin leave repeat").unwrap();
+        xs.eval("begin break repeat").unwrap();
         let mut it = xs.code.iter();
         assert_eq!(&Opcode::Jump(RelativeJump::from_i32(2)), it.next().unwrap());
         assert_eq!(
@@ -2844,8 +2844,8 @@ mod tests {
             xs.eval("begin until repeat")
         );
         assert_eq!(
-            Err(Xerr::unbalanced_leave()),
-            xs.eval(": f leave ; ")
+            Err(Xerr::unbalanced_break()),
+            xs.eval(": f break ; ")
         );
         assert_eq!(
             xs.eval(": f2 ; ;"),
@@ -2888,15 +2888,15 @@ mod tests {
     #[test]
     fn test_loop_break() {
         let mut xs = State::boot().unwrap();
-        xs.eval("begin 1 leave repeat").unwrap();
+        xs.eval("begin 1 break repeat").unwrap();
         let x = xs.pop_data().unwrap();
         assert_eq!(x.to_xint(), Ok(1));
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("begin 1 repeat leave");
-        assert_eq!(Err(Xerr::unbalanced_leave()), res);
+        let res = xs.eval("begin 1 repeat break");
+        assert_eq!(Err(Xerr::unbalanced_break()), res);
         let mut xs = State::boot().unwrap();
-        xs.eval("begin true if leave else leave endif repeat")
+        xs.eval("begin true if break else break endif repeat")
             .unwrap();
     }
 
@@ -3235,7 +3235,7 @@ mod tests {
         xs.eval("5 case 1 of 100 endof 2 of 200 endof 0 endcase")
             .unwrap();
         assert_eq!(Ok(ZERO), xs.pop_data());
-        xs.eval("10 0 do I I case 5 of leave endof drop endcase loop")
+        xs.eval("10 0 do I I case 5 of break endof drop endcase loop")
             .unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
     }

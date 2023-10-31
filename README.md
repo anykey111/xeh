@@ -177,8 +177,8 @@ Local variable is read-only.
     # endless loop
     begin
         day-of-week "friday" = if
-            # leave is used to break loop execution
-            leave
+            # break loop execution
+            break
         endif 
     repeat
 ```

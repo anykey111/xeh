@@ -179,7 +179,7 @@ impl Xerr {
             Flow::Else { .. } => Self::unbalanced_endif(),
             Flow::Begin { .. } => Self::unbalanced_repeat(),
             Flow::While { .. } => Self::unbalanced_repeat(),
-            Flow::Leave { .. } => Self::unbalanced_leave(),
+            Flow::Break { .. } => Self::unbalanced_break(),
             Flow::Case { .. } => Self::unbalanced_endcase(),
             Flow::CaseOf { .. } => Self::unbalanced_endof(),
             Flow::CaseEndOf { .. } => Self::unbalanced_endcase(),
@@ -244,8 +244,8 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
-    pub(crate) fn unbalanced_leave() -> Xerr {
-        let msg = xeh_xstr!("leave used outside of the loop control flow");
+    pub(crate) fn unbalanced_break() -> Xerr {
+        let msg = xeh_xstr!("`break` used outside of the loop control flow");
         Xerr::ControlFlowError { msg }
     }
 
