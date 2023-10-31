@@ -8,7 +8,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("-", core_word_sub)?;
     xs.defword("*", core_word_mul)?;
     xs.defword("/", core_word_div)?;
-    xs.defword("negate", core_word_negate)?;
+    xs.defword("neg", core_word_neg)?;
     xs.defword("abs", core_word_abs)?;
     xs.defword("<", |xs| {
         let t = compare_cells(xs)?.is_lt();
@@ -39,12 +39,12 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("or", logical_or)?;
     xs.defword("xor", logical_xor)?;
     xs.defword("not", logical_not)?;
-    xs.defword("bit-and", core_word_bitand)?;
-    xs.defword("bit-or", core_word_bitor)?;
-    xs.defword("bit-xor", core_word_bitxor)?;
-    xs.defword("bit-not", core_word_bitnot)?;
-    xs.defword("bit-shl", core_word_bitshl)?;
-    xs.defword("bit-shr", core_word_bitshr)?;
+    xs.defword("band", core_word_bitand)?;
+    xs.defword("bor", core_word_bitor)?;
+    xs.defword("bxor", core_word_bitxor)?;
+    xs.defword("bnot", core_word_bitnot)?;
+    xs.defword("bsl", core_word_bitshl)?;
+    xs.defword("bsr", core_word_bitshr)?;
     xs.defword("round", core_word_round)?;
     xs.defword("random", core_word_random)?;
     xs.defword("min", core_word_min)?;
@@ -138,7 +138,7 @@ fn core_word_div(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_negate(xs: &mut State) -> Xresult {
+fn core_word_neg(xs: &mut State) -> Xresult {
     let a = xs.pop_data()?;
     match a.value() {
         Cell::Int(a) => {
@@ -363,21 +363,21 @@ mod tests {
             Err(Xerr::TypeErrorMsg { .. }) => (),
             other => panic!("result {:?}", other),
         }
-        xs.eval("1 1 bit-and").unwrap();
+        xs.eval("1 1 band").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
-        xs.eval("1 2 bit-or").unwrap();
+        xs.eval("1 2 bor").unwrap();
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
-        xs.eval("1 3 bit-xor").unwrap();
+        xs.eval("1 3 bxor").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.eval("0 bit-not").unwrap();
+        xs.eval("0 bnot").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.eval("1 3 bit-shl").unwrap();
+        xs.eval("1 3 bsl").unwrap();
         assert_eq!(Ok(Cell::Int(8)), xs.pop_data());
-        xs.eval("16 3 bit-shr").unwrap();
+        xs.eval("16 3 bsr").unwrap();
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
-        xs.eval("1 negate").unwrap();
+        xs.eval("1 neg").unwrap();
         assert_eq!(Ok(Cell::Int(-1)), xs.pop_data());
-        xs.eval("-1 negate").unwrap();
+        xs.eval("-1 neg").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
     }
 
@@ -462,15 +462,15 @@ mod tests {
     #[test]
     fn test_neg() {
         let mut xs = State::boot().unwrap();
-        assert_eq!(OK, xs.eval(&format!("{} negate", Xint::MAX)));
-        assert_ne!(OK, xs.eval(&format!("{} negate", Xint::MIN)));
+        assert_eq!(OK, xs.eval(&format!("{} neg", Xint::MAX)));
+        assert_ne!(OK, xs.eval(&format!("{} neg", Xint::MIN)));
         assert_eq!(
             OK,
-            xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MAX)))
+            xs.eval(&format!("{}. neg", Xreal::to_string(&Xreal::MAX)))
         );
         assert_eq!(
             OK,
-            xs.eval(&format!("{}. negate", Xreal::to_string(&Xreal::MIN)))
+            xs.eval(&format!("{}. neg", Xreal::to_string(&Xreal::MIN)))
         );
     }
 
