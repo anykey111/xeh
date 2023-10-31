@@ -678,7 +678,7 @@ impl State {
         self.defword("remove", core_word_remove)?;
         self.def_immediate(":", core_word_def_begin)?;
         self.def_immediate(";", core_word_def_end)?;
-        self.def_immediate("defer", core_word_defer)?;
+        self.def_immediate("late", core_word_late)?;
         self.def_immediate("immediate", core_word_immediate)?;
         self.def_immediate("local", core_word_def_local)?;
         self.def_immediate("var", core_word_variable)?;
@@ -1808,7 +1808,7 @@ fn core_word_def_end(xs: &mut State) -> Xresult {
     }
 }
 
-fn core_word_defer(xs: &mut State) -> Xresult {
+fn core_word_late(xs: &mut State) -> Xresult {
     let jump_over_org = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
     let name = xs.next_name()?;
@@ -3174,21 +3174,21 @@ mod tests {
     }
 
     #[test]
-    fn test_defer() {
+    fn test_late() {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::UnknownWord("BB".into())), xs.eval(": AA BB ;"));
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "
-            defer CC
+            late CC
             : EE CC ;
             EE nil assert-eq
             1 var CC
             EE 1 assert-eq
-            defer GG
+            late GG
             : FF GG ;
             FF 2 assert-eq
             : GG 2 ; 
-            defer WW
+            late WW
             : QQ WW ;
             ( 3 const WW ) 
             QQ 3 assert-eq
