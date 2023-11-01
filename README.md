@@ -36,60 +36,75 @@ Video: [Youtube](https://www.youtube.com/@xeh-lang)
 
 ## Comments
 
-Single line comment starts with the `#` character and skip everyting till the end of line.
-At least one whitespace or the beginnig of the line should precede the comment.
+Single line comment starts with the `//`.
+At least one whitespace or new line should surround the comment word.
+
+Good:
+```
+// ok
+"hello" println // ok
+```
+
+Wrong:
+```
+"world" println// wrong
+```
+ERROR: unknown word `println//``
 
 ```
-# this is a comment
-"hello" println         #this is a comment
-"world" println# error: unknown word `println#`
+"hello" println //wrong
 ```
+ERROR: unknown word `//wrong`
+
 
 ## Literals
 
 ```
-    # decimal
+    // decimal
     7 -99 1_000
     
-    # hex
+    // hex
     0xff 0x11_EE
     
-    # binary
+    // binary
     0b11111 0b1111_1111
     
-    # real 
+    // real 
     2.78 -1.2e-5
     
-    # string
+    // string
     "escapes \\ \" \r \n \t"          
 
-    # boolean flag
+    // boolean flag
     true false
     
-    # vector
+    // vector
     [ 1 2 3.0 "abc" ]
 
-    # no value
+    // map
+    { "value" "key" 10 "key2" }
+
+    // no value
     nil
 
-    # bit-string consist of arbitrary number of bits
-    # hex digits "0".."9", and "A..F" represent 4 bit chunk of data
-    |F0|    # 11110000
+    // bit-string consist of arbitrary number of bits
+    // hex digits "0".."9", and "A..F" represent 4 bit chunk of data
+    |F0|    // 11110000
 
-    # letters "x" and "." represent single bit of value 1 or 0
-    |x..x|  # 1001
-    |F0x|   # 111100001
+    // letters "x" and "." represent single bit of value 1 or 0
+    |x..x|  // 1001
+    |F0x|   // 111100001
 ```
 
-## Words, Variables and Locals
+## Words
 
-By the analogy to the mainstream programming languages, "word" is just a function.
+By the analogy to the mainstream programming languages, "word" is just a function or variable name.
 
-1. Word name consist of any symbols, but can't start with digit or double quote.
-2. Words are separated by whitespaces.
+1. Words are separated by whitespaces.
+2. Word name consist of any symbols, but can't start with digit or double quote.
 
 ```
-    # valid words
+    // valid words
     abc
     my-name
     +[]
@@ -97,42 +112,49 @@ By the analogy to the mainstream programming languages, "word" is just a functio
     a0000-/-)(22)
     .99
 
-    # invalid words
+    // invalid words
     0waa
     9sss
     "abc
 ```
 
+## Functions
+
 New word definition starts with ":" then word name and body follow, definition ends with ";".
 
 ```
-    # define a new word
+    // define a new word
     : hello "Hello!" println ; 
-    # invoke
+    // invoke
     hello
 ```
 
-Variable is just a word that return a single value from the memory cell.
+## Variable 
+
 Variable definition starts with "var" word then name follow, initial value is taken from the stack.
-Special word "!" sets the new value of variable.
 
 ```
-    # define a new global variable 
+    // define a new global variable 
     0 var counter
-    # set a new value 
+    // set a new value 
     10 ! counter
+```
 
-    # define a new word that increment counter value
+Special word "!" sets the new value of variable.
+```
+    // define a new word that increment counter value
     : increment-counter
         counter 1 + ! counter
     ;
 ```
 
-Local variable is a variable that available only inside the word definition, initial value is taken from the stack.
-Local variable is read-only.
+## Locals
+
+Local is a read-only binding visible only inside the word body.
+Initial value is taken from the stack.
 
 ```
-    # locals
+    // locals
     : print2
         local b 
         local a
@@ -148,17 +170,17 @@ Local variable is read-only.
 ```
     true if "yes" else "no" endif println
 
-    # select one case of the multiple different choices
+    // select one case of the multiple different choices
     false case
         true of 1 endof
         false of 0 endof
     endcase
 
-    # case with fallback
+    // case with fallback
     3 case
         0 of "a" endof
         1 of "b" endof
-        # fallback, drop unmatched value 2 from the stack
+        // fallback, drop unmatched value 2 from the stack
         drop "c"
     endcase
 ```
@@ -166,18 +188,18 @@ Local variable is read-only.
 ## Basic loops
 
 ```
-    # loop with pre-codnition, test condition before every iteration
+    // loop with pre-codnition, test condition before every iteration
     begin remain 5 > while
         read-more
     repeat
 
-    # post condition, restart loop if condition is false
+    // post condition, restart loop if condition is false
     begin read-byte zero? until
 
-    # endless loop
+    // endless loop
     begin
         day-of-week "friday" = if
-            # break loop execution
+            // break loop execution
             break
         endif 
     repeat
@@ -186,12 +208,12 @@ Local variable is read-only.
 ## Counted loops
 
 ```
-    # count from 0 to 10, current loop index is accessed with "I"
+    // count from 0 to 10, current loop index is accessed with "I"
     10 0 do I print loop
 
-    # outer loop index is accessed with J
-    10 5 do # J
-        5 0 do # I
+    // outer loop index is accessed with J
+    10 5 do // J
+        5 0 do // I
             "J=" print J print
             "I=" print I print
         loop
@@ -201,27 +223,19 @@ Local variable is read-only.
 
 ## Tags
 
-Tag is a special hidden property sticked to the value but not directly accessed.
+Tags is a custom property map sticked to the value but not directly accessible.
 Tags have no impact on using value and dissapear after value modification.
 
 ```
-    # stick "abc" string to the integer 10
-    10 "abc" with-tag
-    var X
-    # get tag of X
-    X tag-of println
-    
-    # addition produce new value without any tags
-    # in that case tag-of return nil
-    2 . "number" 2 + tag-of println
+    // stick "abc" string to the integer 10
+    10 #{ "ten" "name" "red" "color" } var X
+    // get "color" property
+    X "color" get-tag println
 
-    # shorthand syntax for literal tags
-    10 . "ten"
-    10 "ten" with-tag
+    // show all tags 
+    X tags  println
 
-    # stick vector
-    "text" .[ 14 . "size" "red" . "color" ]
-    "text" [ 14 "size" with-tag "red" "color" with-tag ] with-tag
+    X 1 + println
 ```
 
 ## Meta evaluation and compilation
@@ -233,7 +247,7 @@ Source code execution operate in three modes:
     * Meta evaluation - using the result of the source code execution as input for compilation
 
 User is free to switch forth and back between the modes.
-When compiler see the round bracket it switch to the meta mode, then execute code till the closing bracket.
+When compiler see the round bracket `(` it switch to the meta mode, then execute code till the closing bracket `)`.
 All values on the stack are passed to the parent mode.
 
 ```
@@ -244,7 +258,7 @@ All values on the stack are passed to the parent mode.
         endif
     ;
 
-    # compute Fibonacci number at compile-time
+    // compute Fibonacci number at compile-time
     ( 20 fib ) var fib-of-20
 ```
 
@@ -260,36 +274,43 @@ Initial value is taken from the stack and must be defined inside of the meta mod
 
 ## Destructuring
 
-    let PATTERN in
+    let PATTERN
 
 Ensure that each name in the PATTERN have corresponding value.
 Using literal instead of the name test that value is exactly match, otherwise error is raised.
 
-    # bind 1 to a
-    1 let a in
-    # test, a = 1
-    a let 1 in 
-    # error, a <> 2
-    a let 2 in
-    # bind multiple values from the vec
-    [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ] in
-    # slice first two items of the vector and bind remaining to the xs
+```
+    // bind 1 to a
+    1 let a
+    
+    // test that a is 1
+    a let 1
+    
+    // raise error, when a not equal to 2
+    a let 2
+    
+    // bind vector elements
+    [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ]
+
+    // slice first two elements of the vector and bind remaining to the xs
     [ 1 2 3 5 7  ] let [ x1 x2 & xs ]
-    # bind tag of the value
-    \"x\" 10 with-tag let val . tag in
 
-_There is another unstable form._
+    // find map keys
+    { 1 "key1" [ 2 3 ] "key2" } let { "key1" x "key2" [ 2 y ] }
+    
+    // bind tags of the value
+    "text" #{ "red" "color" } let # all-tags val
 
-    let PATTERN else CODE in
-
-Jump to the CODE when PATTERN didn't match. In such case rest of the scope may contains partialy initialized bindings.
+    // find tag property
+    "text" #{ "red" "color" } let # { "color" color } val
+```
 
 ## Source code injection
 
 Meta evaluation result might serve as input for compilation. When compiler see immediate word `~)` instead of the closing bracket, first compiler join result into a string and then treat that string as a part of the source code.
 
 ```
-    # assign number for each name starting from 0
+    // assign number for each name starting from 0
     : my-enum
         local names
         names length 0 do
@@ -297,7 +318,7 @@ Meta evaluation result might serve as input for compilation. When compiler see i
         loop
     ;
     
-    # define variables from list
+    // define variables from list
     ( [ "aa" "bb" "cc" ] my-enum ~)
 
     bb println 
