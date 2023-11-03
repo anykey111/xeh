@@ -639,7 +639,7 @@ impl State {
         let fn_addr = self.code_origin();
         self.code_emit_value(slf)?;
 
-        self.code_emit(Opcode::NativeCall(XfnPtr(x)))?;
+        self.code_emit_call_native(x)?;
         self.code_emit(Opcode::Ret)?;
         let len = self.code_origin() - start;
         self.dict_insert(
@@ -774,6 +774,10 @@ impl State {
     fn code_emit_value(&mut self, val: Cell) -> Xresult {
         let op = self.load_value_opcode(val);
         self.code_emit(op)
+    }
+
+    fn code_emit_call_native(&mut self, f: XfnType) -> Xresult {
+        self.code_emit(Opcode::NativeCall(XfnPtr(f)))
     }
 
     fn code_emit(&mut self, op: Opcode) -> Xresult {
@@ -1642,7 +1646,7 @@ fn jump_offset(origin: usize, dest: usize) -> RelativeJump {
 
 fn core_word_tags_map(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Tags)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_begin)))
+    xs.code_emit_call_native(vec_builder_begin)
 }
 
 fn collect_tag_map(xs: &mut State) -> Xresult {
@@ -1652,12 +1656,12 @@ fn collect_tag_map(xs: &mut State) -> Xresult {
 
 fn core_word_vec_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Vec)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_begin)))
+    xs.code_emit_call_native(vec_builder_begin)
 }
 
 fn core_word_vec_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
-        Some(Flow::Vec) => xs.code_emit(Opcode::NativeCall(XfnPtr(vec_builder_end))),
+        Some(Flow::Vec) => xs.code_emit_call_native(vec_builder_end),
         _ => Err(Xerr::unbalanced_vec_builder()),
     }
 }
@@ -1728,13 +1732,13 @@ fn map_builder_end(xs: &mut State) -> Xresult {
 
 fn core_word_map_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Map)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_begin)))
+    xs.code_emit_call_native(map_builder_begin)
 }
 
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
-        Some(Flow::Map) => xs.code_emit(Opcode::NativeCall(XfnPtr(map_builder_end))),
-        Some(Flow::Tags) => xs.code_emit(Opcode::NativeCall(XfnPtr(collect_tag_map))),
+        Some(Flow::Map) => xs.code_emit_call_native(map_builder_end),
+        Some(Flow::Tags) => xs.code_emit_call_native(collect_tag_map),
         _ => Err(Xerr::unbalanced_map_builder()),
     }
 }
@@ -1851,7 +1855,7 @@ fn core_word_immediate(xs: &mut State) -> Xresult {
 
 
 fn build_let_tags(xs: &mut State) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_tags)))?;
+    xs.code_emit_call_native(core_word_tags)?;
     match xs.next_token()? {
         Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
         Tok::Word(name) if name == "{" => {
@@ -1896,12 +1900,12 @@ fn let_map_lookup(xs: &mut State) -> Xresult {
 }
 
 fn build_let_map(xs: &mut State) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_begin)))?;
+    xs.code_emit_call_native(let_map_begin)?;
     loop {
         match xs.next_token()? {
             Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
             Tok::Word(name) if name == "}" => {
-                break xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_end)));
+                break xs.code_emit_call_native(let_map_end);
             }
             Tok::Word(name) if name == "]" => {
                 break Err(Xerr::unbalanced_vec_builder());
@@ -1911,7 +1915,7 @@ fn build_let_map(xs: &mut State) -> Xresult {
             }
             Tok::Literal(key) => {
                 xs.code_emit_value(key)?;
-                xs.code_emit(Opcode::NativeCall(XfnPtr(let_map_lookup)))?;
+                xs.code_emit_call_native(let_map_lookup)?;
                 build_let_in(xs)?;
             }
             _ => {
@@ -1923,7 +1927,7 @@ fn build_let_map(xs: &mut State) -> Xresult {
 
 fn build_let_match(xs: &mut State, val: Cell) -> Xresult {
     xs.code_emit_value(val)?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)))
+    xs.code_emit_call_native(core_word_assert_eq)
 }
 
 fn let_vec_len(xs: &mut State) -> Xresult {
@@ -1956,7 +1960,7 @@ fn build_let_vec_next(xs: &mut State, idx: &mut usize) -> Xresult {
         return Err(Xerr::ErrorMsg(msg));
     }
     xs.code_emit_value(Cell::from(*idx))?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_at)))?;
+    xs.code_emit_call_native(let_vec_at)?;
     *idx += 1;
     OK
 }
@@ -1981,17 +1985,17 @@ fn build_let_vec(xs: &mut State) -> Xresult {
             }
             Tok::Word(name) if name == "]" => {
                 if idx == usize::MAX {
-                    break xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_any_len)));
+                    break xs.code_emit_call_native(let_vec_any_len);
                 }
-                xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_len)))?;
+                xs.code_emit_call_native(let_vec_len)?;
                 let msg = xeh_xstr!("vector length mismatch");
                 let tagged_len = Cell::from(idx).insert_tag(ASSERT_MSG, Cell::from(msg));
                 xs.code_emit_value(tagged_len)?;
-                break xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_assert_eq)));
+                break xs.code_emit_call_native(core_word_assert_eq);
             }
             Tok::Word(name) if name == "&" => {
                 xs.code_emit_value(Cell::from(idx))?;
-                xs.code_emit(Opcode::NativeCall(XfnPtr(let_vec_rest)))?;
+                xs.code_emit_call_native(let_vec_rest)?;
                 build_let_in(xs)?;
                 idx = usize::MAX;
             }
@@ -2026,7 +2030,7 @@ fn build_let_in(xs: &mut State) -> Xresult {
     match xs.next_token()? {
         Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
         Tok::Word(name) if name == "#" => {
-            xs.code_emit(Opcode::NativeCall(XfnPtr(core_word_dup)))?;
+            xs.code_emit_call_native(core_word_dup)?;
             build_let_tags(xs)?;
             build_let_in(xs)
         }
@@ -2500,7 +2504,7 @@ fn update_fmt_base(xs: &mut State) -> Xresult {
 
 fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
     xs.code_emit_value(Cell::from(n))?;
-    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_base)))
+    xs.code_emit_call_native(update_fmt_base)
 }
 
 fn update_fmt_prefix(xs: &mut State) -> Xresult {
@@ -2514,7 +2518,7 @@ fn update_fmt_prefix(xs: &mut State) -> Xresult {
 }
 
 fn set_fmt_prefix(xs: &mut State) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_prefix)))
+    xs.code_emit_call_native(update_fmt_prefix)
 }
 
 fn update_fmt_tags(xs: &mut State) -> Xresult {
@@ -2528,7 +2532,7 @@ fn update_fmt_tags(xs: &mut State) -> Xresult {
 }
 
 fn set_fmt_tags(xs: &mut State) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_tags)))
+    xs.code_emit_call_native(update_fmt_tags)
 }
 
 fn update_fmt_upcase(xs: &mut State) -> Xresult {
@@ -2542,7 +2546,7 @@ fn update_fmt_upcase(xs: &mut State) -> Xresult {
 }
 
 fn set_fmt_upcase(xs: &mut State) -> Xresult {
-    xs.code_emit(Opcode::NativeCall(XfnPtr(update_fmt_upcase)))
+    xs.code_emit_call_native(update_fmt_upcase)
 }
 
 fn core_word_see(xs: &mut State) -> Xresult {
