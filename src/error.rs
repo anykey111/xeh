@@ -188,6 +188,7 @@ impl Xerr {
             Flow::Tags { .. } => Self::unbalanced_tag_map_builder(),
             Flow::Fun { .. } => Self::unbalanced_fn_builder(),
             Flow::Do { .. } => Self::unbalanced_do(),
+            Flow::Enum { .. } => Self::unbalanced_enum_builder(),
         }
     }
 
@@ -256,6 +257,11 @@ impl Xerr {
 
     pub(crate) fn unbalanced_loop() -> Xerr {
         let msg = xeh_xstr!("balance loop with preceding do");
+        Xerr::ControlFlowError { msg }
+    }
+
+    pub(crate) fn unbalanced_enum_builder() -> Xerr {
+        let msg = xeh_xstr!("balance `endenum` with preceding `enum`");
         Xerr::ControlFlowError { msg }
     }
 

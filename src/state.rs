@@ -35,6 +35,12 @@ pub(crate) struct FunctionFlow {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) struct EnumFlow {
+    name: Xsubstr,
+    fields: Vec<(Xsubstr, Xint)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Flow {
     If(usize),
     Else(usize),
@@ -49,6 +55,7 @@ pub(crate) enum Flow {
     Tags,
     Fun(FunctionFlow),
     Do { for_org: usize, body_org: usize },
+    Enum(EnumFlow),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -555,7 +562,8 @@ impl State {
     }
 
     fn has_pending_flow(&self) -> bool {
-        (self.flow_stack.len() - self.ctx.fs_len) > 0
+        assert!(self.ctx.fs_len <= self.flow_stack.len());
+        self.flow_stack.len() > self.ctx.fs_len
     }
 
     pub fn core() -> Xresult1<State> {
@@ -739,6 +747,8 @@ impl State {
         self.def_immediate("fmt/upcase", set_fmt_upcase)?;
         self.def_immediate("see", core_word_see)?;
         self.defword("error", core_word_error)?;
+        self.def_immediate("enum", core_word_enum)?;
+        self.def_immediate("endenum", core_word_endenum)?;
         OK
     }
 
@@ -1767,10 +1777,14 @@ fn core_word_remove(xs: &mut State) -> Xresult {
 }
 
 fn core_word_def_begin(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    core_word_def_begin_named(xs, name)
+}
+
+fn core_word_def_begin_named(xs: &mut State, name: Xsubstr) -> Xresult {
     // jump over function body
     let start = xs.code_origin();
     xs.code_emit(Opcode::Jump(RelativeJump::uninit()))?;
-    let name = xs.next_name()?;
     // function starts right after jump
     let xf = Xfn::Interp(xs.code_origin());
     let dict_idx = xs.dict_insert(
@@ -2148,7 +2162,7 @@ fn core_word_nested_inject(xs: &mut State) -> Xresult {
 }
 
 fn core_word_const(xs: &mut State) -> Xresult {
-    let name = xs.next_name()?;
+let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
         let s = xeh_xstr!("const word used out of the meta-eval context");
         Err(Xerr::ErrorMsg(s))
@@ -2670,6 +2684,65 @@ fn core_word_get_tag(xs: &mut State) -> Xresult {
     xs.push_data(result.unwrap_or_else(|| NIL))
 }
 
+fn enum_flow_error(flow: Option<&Flow>) -> Xresult {
+   if flow.is_none() {
+        Err(Xerr::unbalanced_enum_builder())
+    } else {
+        Xerr::control_flow_error(flow)
+    }
+}
+
+fn enum_field_default(xs: &mut State) -> Xresult {
+    core_word_nested_end(xs)?;
+    let shortname = xs.next_name()?;
+    let e = match xs.flow_stack.last_mut() {
+        Some(Flow::Enum(e)) => e,
+        other => return enum_flow_error(other.map(|x| &*x)),
+    };
+    let val = if let Some((_, prev)) = e.fields.last() {
+        let next = prev + 1;
+        e.fields.push((shortname.clone(), next));
+        next
+    } else {
+        e.fields.push((shortname.clone(), 0));
+        0
+    };
+    xs.dict_insert(Xstr::from(shortname.as_str()), Entry::Constant(Cell::from(val)))?;
+    core_word_nested_begin(xs)
+}
+
+fn enum_field_set_value(xs: &mut State) -> Xresult {
+    core_word_nested_end(xs)?;
+    let val = xs.pop_data()?.to_xint()?;
+    let shortname = xs.next_name()?;
+    let e = match xs.flow_stack.last_mut() {
+        Some(Flow::Enum(e)) => e,
+        other => return enum_flow_error(other.map(|x| &*x)),
+    };
+    e.fields.push((shortname.clone(), val));
+    xs.dict_insert(Xstr::from(shortname.as_str()), Entry::Constant(Cell::from(val)))?;
+    core_word_nested_begin(xs)
+}
+
+fn core_word_enum(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    core_word_nested_begin(xs)?;
+    xs.def_immediate(":", enum_field_default)?;
+    xs.def_immediate("=", enum_field_set_value)?;
+    xs.push_flow(Flow::Enum(EnumFlow { name: name.substr(..), fields: Vec::new() }))?;
+    core_word_nested_begin(xs)
+}
+
+fn core_word_endenum(xs: &mut State) -> Xresult {
+    core_word_nested_end(xs)?;
+    if xs.data_depth() > 0 {
+        return Err(Xerr::ErrorMsg(xeh_xstr!("enum data stack contains unused elements")));
+    }
+    match xs.pop_flow() {
+        Some(Flow::Enum(_)) => core_word_nested_end(xs),
+        other => enum_flow_error(other.as_ref()),
+    }   
+}
 
 #[cfg(test)]
 mod tests {
@@ -3693,6 +3766,31 @@ mod tests {
             ( true const CC )
             defined CC assert
             ");
+    }
+
+    #[test]
+    fn test_enum1() {
+        let mut xs = State::boot().unwrap();
+        eval_ok!(xs, "
+        enum Test
+            : A
+            1 = B
+            A B + = C
+            : D
+        endenum
+        A 0 assert-eq
+        B 1 assert-eq
+        C 1 assert-eq
+        D 2 assert-eq
+        ");
+    }
+
+    #[test]
+    fn test_enum2() {
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("enum Test 1 : A  endenum"));
+        let mut xs = State::boot().unwrap();
+        assert_ne!(OK, xs.eval("enum Test 2 3 = B  endenum"));
     }
 
     #[test]
