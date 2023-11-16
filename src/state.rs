@@ -3397,7 +3397,7 @@ mod tests {
             local to
             local from
             local n
-            n 1 = if
+            n 1 == if
                 [ n from to ]
             else
                 n 1 - from aux to tower-of-hanoi

@@ -26,7 +26,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
         let t = compare_cells(xs)?.is_ge();
         xs.push_data(Cell::from(t))
     })?;
-    xs.defword("=", |xs| {
+    xs.defword("==", |xs| {
         let t = compare_cells(xs)?.is_eq();
         xs.push_data(Cell::from(t))
     })?;
@@ -538,8 +538,8 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Ok(TRUE), xs.eval("-1 0 <").and_then(|_| xs.pop_data()));
         assert_eq!(Ok(FALSE), xs.eval("10 5 <").and_then(|_| xs.pop_data()));
-        assert_eq!(Ok(FALSE), xs.eval("2 3 =").and_then(|_| xs.pop_data()));
-        assert_eq!(Ok(TRUE), xs.eval("4 4 =").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(FALSE), xs.eval("2 3 ==").and_then(|_| xs.pop_data()));
+        assert_eq!(Ok(TRUE), xs.eval("4 4 ==").and_then(|_| xs.pop_data()));
         assert_eq!(Ok(TRUE), xs.eval("2 1 >").and_then(|_| xs.pop_data()));
         assert_eq!(Ok(TRUE), xs.eval("2 2 >=").and_then(|_| xs.pop_data()));
         assert_eq!(Ok(FALSE), xs.eval("1 2 >").and_then(|_| xs.pop_data()));
