@@ -527,14 +527,14 @@ fn word_bytes(xs: &mut Xstate) -> Xresult {
 }
 
 fn rest_bits(xs: &mut Xstate) -> Xresult1<Xbitstr> {
-    let rest = xs.get_var(xs.bitstr_mod.input)?.bitstr()?.clone();
-    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
+    let rest = current_input(xs)?;
+    let start = current_offset(xs)?;
     rest.seek(start).ok_or_else(|| Xerr::out_of_range(start, rest.bits_range()))
 }
 
 fn peek_bits(xs: &mut Xstate, n: usize) -> Xresult1<Xbitstr> {
-    let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
-    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
+    let s = current_input(xs)?;
+    let start = current_offset(xs)?;
     let end = start + n;
     if let Some(ss) = s.substr(start, end) {
         Ok(ss)
@@ -603,21 +603,21 @@ fn bitstr_num_tags(bs: Bitstr, bo: Byteorder) -> Xmap {
 }
 
 fn nulbytestr_read(xs: &mut Xstate) -> Xresult1<Bitstr> {
-    let s = xs.get_var(xs.bitstr_mod.input)?.bitstr()?;
-    let start = xs.get_var(xs.bitstr_mod.offset)?.to_usize()?;
-    let ss = s.seek(start).ok_or_else(|| Xerr::out_of_range(start, s.bits_range()))?;
-    if !ss.is_bytestr() {
-        return Err(Xerr::ToBytestrError(ss));
+    let mut s = rest_bits(xs)?;
+    if !s.is_bytestr() {
+        return Err(Xerr::ToBytestrError(s));
     }
+    let start = s.start();
     let mut len = 0;
-    for (x, n) in ss.iter8() {
+    for (x, n) in s.iter8() {
         len += n as usize;
         if x == 0 {
             break;
         }
     }
-    let end = start + len;
-    s.substr(start, end).ok_or_else(|| Xerr::out_of_range(end, ss.bits_range()))
+    let ss = s.read(len).unwrap();
+    move_offset_checked(xs, start + len)?;
+    Ok(ss)
 }
 
 fn nulbytestr_word(xs: &mut Xstate) -> Xresult {
@@ -915,7 +915,7 @@ mod tests {
     fn test_nulbytestr() {
         let mut xs = Xstate::boot().unwrap();
         xs.set_binary_input(Bitstr::from(vec![0x33,0x34,0])).unwrap();
-        xs.eval(" nulbytestr |33 34 00| assert-eq").unwrap();
+        xs.eval(" nulbytestr |33 34 00| assert-eq offset 24 assert-eq").unwrap();
         xs.set_binary_input(Bitstr::from_hex_str("03500").unwrap()).unwrap();
         xs.eval(" 4 uint drop nulbytestr |35 00| assert-eq").unwrap();
         xs.set_binary_input(Bitstr::from_hex_str("360").unwrap()).unwrap();
