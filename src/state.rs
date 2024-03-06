@@ -738,10 +738,10 @@ impl State {
         self.defword("remove-tag", core_word_remove_tag)?;
         self.defword("get-tag", core_word_get_tag)?;
         self.def_immediate("#{", core_word_tags_map)?;
-        self.def_immediate("fmt/hex", |xs| set_fmt_base(xs, 16))?;
-        self.def_immediate("fmt/dec", |xs| set_fmt_base(xs, 10))?;
-        self.def_immediate("fmt/oct", |xs| set_fmt_base(xs, 8))?;
-        self.def_immediate("fmt/bin", |xs| set_fmt_base(xs, 2))?;
+        self.def_immediate("#hex", |xs| set_fmt_base(xs, 16))?;
+        self.def_immediate("#dec", |xs| set_fmt_base(xs, 10))?;
+        self.def_immediate("#oct", |xs| set_fmt_base(xs, 8))?;
+        self.def_immediate("#bin", |xs| set_fmt_base(xs, 2))?;
         self.def_immediate("fmt/prefix", set_fmt_prefix)?;
         self.def_immediate("fmt/tags", set_fmt_tags)?;
         self.def_immediate("fmt/upcase", set_fmt_upcase)?;
@@ -2935,7 +2935,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "[ 1 \"ss\" [ 15 ] ] concat");
         assert_eq!("1ss15".to_string(), xs.pop_data().unwrap().str().unwrap());
-        eval_ok!(xs, "[ 1 \"ss\" [ 15 fmt/hex ] ] concat");
+        eval_ok!(xs, "[ 1 \"ss\" [ 15 #hex ] ] concat");
         assert_eq!("1ss0xf".to_string(), xs.pop_data().unwrap().str().unwrap());
     }
 
@@ -3100,7 +3100,7 @@ mod tests {
     fn test_str_to_num() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "\"255\" str>number 255 assert-eq");
-        eval_ok!(xs, "\"ff\" fmt/hex str>number 255 assert-eq");
+        eval_ok!(xs, "\"ff\" #hex str>number 255 assert-eq");
         eval_ok!(xs, "\"0.0\" str>number 0.0 assert-eq");
         assert_ne!(OK, xs.eval("\"10X\" str>number"));
     }
@@ -3120,13 +3120,13 @@ mod tests {
     fn test_fmt_base() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("255 fmt/hex print").unwrap();
+        xs.eval("255 #hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("13 fmt/dec print").unwrap();
+        xs.eval("13 #dec print").unwrap();
         assert_eq!(Some("13".to_string()), xs.read_stdout());
-        xs.eval("10 fmt/oct print").unwrap();
+        xs.eval("10 #oct print").unwrap();
         assert_eq!(Some("0o12".to_string()), xs.read_stdout());
-        xs.eval("3 fmt/bin print").unwrap();
+        xs.eval("3 #bin print").unwrap();
         assert_eq!(Some("0b11".to_string()), xs.read_stdout());
     }
 
@@ -3134,9 +3134,9 @@ mod tests {
     fn test_fmt_upcase() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval(" 255 true fmt/upcase fmt/hex  print").unwrap();
+        xs.eval(" 255 true fmt/upcase #hex  print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.read_stdout());
-        xs.eval("10 fmt/hex false fmt/upcase print").unwrap();
+        xs.eval("10 #hex false fmt/upcase print").unwrap();
         assert_eq!(Some("0xa".to_string()), xs.read_stdout());
     }
 
@@ -3144,9 +3144,9 @@ mod tests {
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("255 fmt/hex print").unwrap();
+        xs.eval("255 #hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("255 false fmt/prefix fmt/hex print").unwrap();
+        xs.eval("255 false fmt/prefix #hex print").unwrap();
         assert_eq!(Some("ff".to_string()), xs.read_stdout());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
