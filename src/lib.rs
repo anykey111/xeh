@@ -76,7 +76,7 @@ pub mod prelude {
 }
 
 pub mod c_api {
-    use std::ptr::null_mut;
+    use std::ptr::{null, null_mut};
 
     use crate::prelude::{Xcell, Xstate};
 
@@ -109,72 +109,93 @@ pub mod c_api {
     #[no_mangle]
     pub unsafe extern "C" fn xeh_top_len(xs: *mut Xstate) -> usize {
         let xs = Box::from_raw(xs);
-        let n = 1;
+        let n = xs.data_depth();
         Box::into_raw(xs);
         n
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_nil(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_nil(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Nil => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_int(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_int(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Int(_) => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_real(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_real(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Real(_) => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_string(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_string(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Str(_) => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_vector(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_vector(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Vector(_) => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_is_bitstr(x: *const Xcell) -> bool {
-        match *x {
+    pub unsafe extern "C" fn xeh_is_bitstr(val: *const Xcell) -> bool {
+        match *val {
             Xcell::Bitstr(_) => true,
             _ => false,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_vector_len(x: *const Xcell) -> usize {
-        match &*x {
+    pub unsafe extern "C" fn xeh_bitstr_bytes(val: *const Xcell) -> *const u8 {
+        match &*val {
+            Xcell::Bitstr(s) => 
+                if let Some(bytes) = s.bytestr() {
+                    bytes.as_ptr()
+                } else {
+                    null()
+                },
+            _ => null(),
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_bitstr_len(val: *const Xcell) -> usize {
+        match &*val {
+            Xcell::Bitstr(s) => s.len(),
+            _ => 0,
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_vector_len(val: *const Xcell) -> usize {
+        match &*val {
             Xcell::Vector(v) => v.len(),
             _ => 0,
         }
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_vector_at(x: *const Xcell, i: usize) -> *mut Xcell {
-        match &*x {
+    pub unsafe extern "C" fn xeh_vector_at(val: *const Xcell, idx: usize) -> *mut Xcell {
+        match &*val {
             Xcell::Vector(v) => {
-                if let Some(c) = v.get(i) {
+                if let Some(c) = v.get(idx) {
                     Box::into_raw(Box::new(c.clone()))
                 } else {
                     null_mut()
@@ -185,9 +206,29 @@ pub mod c_api {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn xeh_release(x: *mut Xcell) {
-        if x != null_mut() {
-            drop(Box::from_raw(x));
+    pub unsafe extern "C" fn xeh_release(val: *mut Xcell) {
+        if val != null_mut() {
+            drop(Box::from_raw(val));
         }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_pop(xs: *mut Xstate) -> *mut Xcell {
+        let mut xs = Box::from_raw(xs);
+        let result = if let Ok(val) = xs.pop_data() {
+            Box::into_raw(Box::new(val))
+        } else {
+            null_mut()
+        };
+        Box::into_raw(xs);
+        result
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn xeh_push(xs: *mut Xstate, val: *mut Xcell) {
+        let mut xs = Box::from_raw(xs);
+        let val = Box::from_raw(val);
+        xs.push_data(*val).unwrap();
+        Box::into_raw(xs);
     }
 }
