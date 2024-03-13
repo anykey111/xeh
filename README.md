@@ -272,6 +272,20 @@ Initial value is taken from the stack and must be defined inside of the meta mod
     ( 1.0 60.0 / const FRAME-TIME )
 ```
 
+## Enums
+
+Create enumerated list of constants.
+
+```
+enum MyEnum
+    // By default enumeration starts with zero.
+    : A
+    : B
+    // Use `=` to assign custom value to the field
+    B 2 + = C
+endenum
+```
+
 ## Destructuring
 
     let PATTERN
