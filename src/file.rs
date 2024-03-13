@@ -24,18 +24,34 @@ pub mod fs_overlay {
     use std::fs::OpenOptions;
     use std::io::*;
 
-    fn ioerror_with_path(filename: Xstr, e: &std::io::Error) -> Xerr {
+    fn ioerror_with_path(filename: &str, e: &std::io::Error) -> Xerr {
         Xerr::IOError {
-            filename,
+            filename: Xstr::from(filename),
             reason: Xstr::from(e.to_string()),
         }
     }
 
+    pub fn exec_piped(path: &str, buf: &[u8]) -> Xresult1<Vec<u8>>
+    {
+        use std::process::{Command, Stdio};
+        let mut cat = Command::new(path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|e| ioerror_with_path(path, &e))?;
+        {
+            let mut sin = cat.stdin.take().unwrap();
+            sin.write_all(buf).map_err(|e| ioerror_with_path(path, &e))?;
+        }
+        let output = cat.wait_with_output().map_err(|e| ioerror_with_path(path, &e))?;
+        Ok(output.stdout)
+    }
+
     pub fn read_all(path: &str) -> Xresult1<Vec<u8>> {
-        let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+        let mut file = std::fs::File::open(path).map_err(|e| ioerror_with_path(path, &e))?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)
-            .map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+            .map_err(|e| ioerror_with_path(path, &e))?;
         Ok(buf)
     }
 
@@ -47,15 +63,15 @@ pub mod fs_overlay {
 
     #[cfg(feature = "mmap")]
     pub fn load_binary(xs: &mut Xstate, path: &str) -> Xresult {
-        let file = std::fs::File::open(&path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
-        let meta = file.metadata().map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+        let file = std::fs::File::open(&path).map_err(|e| ioerror_with_path(path, &e))?;
+        let meta = file.metadata().map_err(|e| ioerror_with_path(path, &e))?;
         if meta.len() < (4 * 1024 * 1024) {
             // load small files without mmap
             let buf = read_all(path)?;
             return xs.set_binary_input(Xbitstr::from(buf));
         }
         let (mm, slice) = unsafe {
-            let mm = Mmap::map(&file).map_err(|e| ioerror_with_path(Xstr::from(path), &e))?;
+            let mm = Mmap::map(&file).map_err(|e| ioerror_with_path(path, &e))?;
             let ptr = mm.as_ptr();
             let slice = std::slice::from_raw_parts(ptr, mm.len());
             (mm, slice)
@@ -65,7 +81,7 @@ pub mod fs_overlay {
     }
 
     pub fn read_source_file(path: &str) -> Xresult1<String> {
-        std::fs::read_to_string(path).map_err(|e| ioerror_with_path(Xstr::from(path), &e))
+        std::fs::read_to_string(path).map_err(|e| ioerror_with_path(path, &e))
     }
     
     pub fn write_all(path: &Xstr, s: &Xbitstr) -> Xresult {
@@ -76,15 +92,15 @@ pub mod fs_overlay {
                 .truncate(true)
                 .open(path.as_str())
         };
-        let mut file = open().map_err(|e| ioerror_with_path(path.clone(), &e))?;
+        let mut file = open().map_err(|e| ioerror_with_path(path.as_str(), &e))?;
         if let Some(data) = s.slice() {
             file.write_all(data)
-                .map_err(|e| ioerror_with_path(path.clone(), &e))?;
+                .map_err(|e| ioerror_with_path(path.as_str(), &e))?;
         } else {
             let mut buf = BufWriter::new(file);
             for x in s.iter8() {
                 buf.write_all(&[x.0])
-                    .map_err(|e| ioerror_with_path(path.clone(), &e))?;
+                    .map_err(|e| ioerror_with_path(path.as_str(), &e))?;
             }
         }
         OK
@@ -103,6 +119,10 @@ pub mod fs_overlay {
                 reason: "Target arch has no filesystem".into(),
             })
         };
+    }
+
+    pub fn exec_piped(path: &str, buf: &[u8]) -> Xresult1<Xcell> {
+        no_filesystem_error!(path)
     }
 
     pub fn read_all(path: &Xstr) -> Xresult1<Vec<u8>> {

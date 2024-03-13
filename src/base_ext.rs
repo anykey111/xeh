@@ -14,8 +14,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
 }
 
 pub fn base32_encode2(xs: &mut Xstate, alphabet: base32::Alphabet) -> Xresult {
-    let val = xs.pop_data()?;
-    let bs = crate::bitstr_ext::bitstr_concat(val)?;
+    let bs = crate::bitstr_ext::into_bitstr(xs)?;
     let bytes = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     let res = base32::encode(alphabet, &bytes);
     let s = Cell::from(Xstr::from(res));
@@ -55,8 +54,7 @@ pub fn base32hex_decode(xs: &mut Xstate) -> Xresult {
 
 pub fn base64_encode(xs: &mut Xstate) -> Xresult {
     use base64::{Engine as _, engine::general_purpose};
-    let val = xs.pop_data()?;
-    let bs = crate::bitstr_ext::bitstr_concat(val)?;
+    let bs = crate::bitstr_ext::into_bitstr(xs)?;
     let bytes = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     let res = general_purpose::STANDARD.encode(&bytes);
     let s = Cell::from(Xstr::from(res));
@@ -80,8 +78,7 @@ pub fn base64_decode(xs: &mut Xstate) -> Xresult {
 }
 
 pub fn zero85_encode(xs: &mut Xstate) -> Xresult {
-    let val = xs.pop_data()?;
-    let bs = crate::bitstr_ext::bitstr_concat(val)?;
+    let bs = crate::bitstr_ext::into_bitstr(xs)?;
     let bytes = bs.bytestr().ok_or_else(|| Xerr::ToBytestrError(bs.clone()))?;
     let res = z85::encode(&bytes);
     let s = Xstr::from(res);

@@ -77,7 +77,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("bitstr-xor", bitstring_xor)?;
     xs.defword("hex>bitstr", hex_to_bitstr)?;
     xs.defword("bitstr>hex", bitstr_to_hex)?;
-    xs.defword(">bitstr", into_bitstr)?;
+    xs.defword(">bitstr", word_into_bitstr)?;
     xs.defword("bitstr>utf8", bitstr_to_utf8)?;
     xs.defword("big", |xs| set_byteorder(xs, BIG))?;
     xs.defword("little", |xs| set_byteorder(xs, LITTLE))?;
@@ -85,6 +85,7 @@ pub fn load(xs: &mut Xstate) -> Xresult {
     xs.defword("emit", word_emit)?;
     xs.defword("write-all", word_write)?;
     xs.defword("read-all", word_read_all)?;
+    xs.defword("exec-piped", word_exec_piped)?;
     xs.defword("random-bits", random_bits)?;
     def_data_word!(xs, 8);
     def_data_word!(xs, 16);
@@ -391,10 +392,15 @@ fn bitstr_to_hex(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(bs.bitstr()?.to_hex_string()))
 }
 
-fn into_bitstr(xs: &mut Xstate) -> Xresult {
+fn word_into_bitstr(xs: &mut Xstate) -> Xresult {
+    let bs = into_bitstr(xs)?;
+    xs.push_data(Cell::Bitstr(bs))
+}
+
+pub fn into_bitstr(xs: &mut Xstate) -> Xresult1<Xbitstr> {
     let val = xs.pop_data()?;
     let s = bitstr_concat(val)?;
-    xs.push_data(Cell::Bitstr(s))
+    Ok(s)
 }
 
 fn decode_utf8_str(bytes: Vec<u8>) -> Xresult1<String> {
@@ -639,8 +645,8 @@ fn cstr_word(xs: &mut Xstate) -> Xresult {
 }
 
 fn word_write(xs: &mut Xstate) -> Xresult {
-    let data = xs.pop_data()?.to_bitstr()?;
     let path = xs.pop_data()?.to_xstr()?;
+    let data = xs.pop_data()?.to_bitstr()?;
     crate::file::fs_overlay::write_all(&path, &data)
 }
 
@@ -651,6 +657,13 @@ fn word_read_all(xs: &mut Xstate) -> Xresult {
     xs.push_data(Cell::from(bs))
 }
 
+fn word_exec_piped(xs: &mut Xstate) -> Xresult {
+    let path = xs.pop_data()?.to_xstr()?;
+    let data = into_bitstr(xs)?;
+    let bytes = data.bytestr().ok_or_else(|| Xerr::ToBytestrError(data.clone()))?;
+    let output = crate::file::fs_overlay::exec_piped(&path, &bytes)?;
+    xs.push_data(Cell::from(Xbitstr::from(output)))
+}
 
 fn random_bits(xs: &mut Xstate) -> Xresult {
     let n = xs.pop_data()?.to_usize()?;
