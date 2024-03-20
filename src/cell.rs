@@ -173,8 +173,14 @@ impl fmt::Debug for Cell {
             },
             Cell::WithTag(rc) if flags.show_tags() => {
                 rc.value.fmt(f)?;
-                f.write_str(" ")?;
-                rc.tags.fmt(f)
+                f.write_str(" #{")?;
+                for (key, val) in rc.tags.iter() {
+                    f.write_str(" ")?;
+                    val.fmt(f)?;
+                    f.write_str(" ")?;
+                    key.fmt(f)?;
+                }
+                f.write_str(" }")
             },
             Cell::WithTag(rc) => rc.value.fmt(f),
         }
