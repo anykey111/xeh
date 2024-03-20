@@ -544,7 +544,6 @@ impl State {
                     self.dict.swap_remove(i);
                 }
             }
-            prev.di_len = i;
             let is_building_fun = match self.flow_stack[prev.fs_len..].last() {
                 Some(Flow::Fun { .. }) => true,
                 _ => false,
@@ -3778,6 +3777,8 @@ mod tests {
             A B + = C
             : D
         endenum
+        : TESTCONTEXTCLOSE A ;
+        TESTCONTEXTCLOSE 0 assert-eq
         A 0 assert-eq
         B 1 assert-eq
         C 1 assert-eq
