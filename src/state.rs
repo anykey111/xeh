@@ -748,6 +748,7 @@ impl State {
         self.defword("error", core_word_error)?;
         self.def_immediate("enum", core_word_enum)?;
         self.def_immediate("endenum", core_word_endenum)?;
+        self.defword("<name>", core_word_name)?;
         OK
     }
 
@@ -2741,6 +2742,12 @@ fn core_word_endenum(xs: &mut State) -> Xresult {
         Some(Flow::Enum(_)) => core_word_nested_end(xs),
         other => enum_flow_error(other.as_ref()),
     }   
+}
+
+fn core_word_name(xs: &mut State) -> Xresult {
+    let name = xs.next_name()?;
+    let s = Xstr::from(name.as_str());
+    xs.push_data(Cell::from(s))
 }
 
 #[cfg(test)]
