@@ -60,6 +60,7 @@ pub(crate) enum Flow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loop {
+    items: Cell,
     range: Range<isize>,
 }
 
@@ -697,6 +698,7 @@ impl State {
         self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
         self.def_immediate("loop", core_word_loop)?;
+        self.def_immediate("foreach", core_word_foreach)?;
         self.def_immediate("defined", core_word_defined)?;
         self.def_immediate("let", core_word_let)?;
         self.defword("equal?", core_word_equal)?;
@@ -2180,6 +2182,7 @@ fn do_init(xs: &mut State) -> Xresult1<Loop> {
     let start = start.to_isize()?;
     let limit = limit.to_isize()?;
     Ok(Loop {
+        items: NIL,
         range: start..limit,
     })
 }
@@ -2212,13 +2215,56 @@ fn core_word_loop(xs: &mut State) -> Xresult {
     }
 }
 
+fn foreach_init(xs: &mut State) -> Xresult {
+    let limit = match xs.top_data()?.value() {
+        Cell::Map(x) => x.size(),
+        Cell::Vector(x) => x.len(),
+        other => return Err(Xerr::type_not_supported(other.clone())),
+    };
+    xs.push_data(Cell::from(limit))?;
+    xs.push_data(Cell::from(0))
+}
+
+fn foreach_next(xs: &mut State) -> Xresult {
+    let idx = xs.loops[xs.ctx.ls_len..]
+        .last()
+        .ok_or_else(|| Xerr::LoopStackUnderflow)?
+        .range.start;
+    if idx == 0 {
+        let items = xs.pop_data()?;
+        xs.loops.last_mut().unwrap().items = items;
+    }
+    OK
+}
+
+fn core_word_foreach(xs: &mut State) -> Xresult {
+    xs.code_emit_call_native(foreach_init)?;
+    core_word_do(xs)?;
+    xs.code_emit_call_native(foreach_next)
+}
+
 fn counter_value(xs: &mut State, n: usize) -> Xresult {
     let l = xs.loops[xs.ctx.ls_len..]
         .iter()
         .nth_back(n)
         .ok_or_else(|| Xerr::LoopStackUnderflow)?;
-    let val = l.range.start;
-    return xs.push_data(Cell::from(val));
+    let idx = l.range.start;
+    match l.items.value() {
+        Cell::Nil => xs.push_data(Cell::from(idx)),
+        Cell::Map(x) => {
+            let (k, v) = x.iter().nth(idx as usize).clone().ok_or_else(|| Xerr::InternalError)?;
+            let tmpk = k.clone();
+            let tmpv = v.clone();
+            xs.push_data(tmpk)?;
+            xs.push_data(tmpv)
+        }
+        Cell::Vector(x) => {
+            let v = x.iter().nth(idx as usize).clone().ok_or_else(|| Xerr::InternalError)?;
+            let tmpv = v.clone();
+            xs.push_data(tmpv)
+        }
+        other => Err(Xerr::type_not_supported(other.clone()))
+    }
 }
 
 fn core_word_counter_i(xs: &mut State) -> Xresult {
@@ -3019,6 +3065,18 @@ mod tests {
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         // invalid range
         assert_ne!(OK, xs.eval("0 0.5 do i loop"));
+    }
+
+    #[test]
+    fn test_foreach() {
+        {
+            let mut xs = State::boot().unwrap();
+            assert_eq!(OK, xs.eval("[ 10 20 ] foreach I 1 + loop 21 assert-eq 11 assert-eq"));
+        }
+        {
+            let mut xs = State::boot().unwrap();
+            assert_eq!(OK, xs.eval("{ 1 \"key\" } foreach I 1 assert-eq \"key\" assert-eq loop"));
+        }
     }
 
     #[test]
