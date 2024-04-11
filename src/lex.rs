@@ -182,16 +182,16 @@ impl Lex {
             }
             Some(c) => {
                 self.tmp.clear();
-                let mut radix = 10;
+                let mut radix = None;
                 let mut has_dot = false;
-                let mut num_prefix = false;
+                let mut num_prefix = None;
                 if c.is_ascii_digit() {
                     self.tmp.push(c);
-                    num_prefix = true;
+                    num_prefix = Some(c);
                 } else if c == '-' || c == '+' {
                     match self.peek_char() {
                         Some(c2) if c2.is_ascii_digit() => {
-                            num_prefix = true;
+                            num_prefix = Some(c2);
                             self.tmp.push(c);
                             self.tmp.push(c2);
                             self.take_char();
@@ -199,26 +199,26 @@ impl Lex {
                         _ => (),
                     }
                 }
-                if let Some('0') = self.tmp.chars().last() {
+                if num_prefix == Some('0') {
                     match self.peek_char() {
                         Some('b') => {
-                            radix = 2;
+                            radix = Some(2);
                             self.take_char();
                             self.tmp.pop();
                         }
                         Some('x') => {
-                            radix = 16;
+                            radix = Some(16);
                             self.take_char();
                             self.tmp.pop();
                         }
-                        _ => (),
+                        _ => ()
                     }
                 }
                 while let Some(c) = self.peek_char() {
                     if c.is_ascii_whitespace() {
                         break;
                     }
-                    if num_prefix {
+                    if num_prefix.is_some() {
                         // prepare digits for parsing
                         if c == '.' {
                             has_dot = true;
@@ -230,7 +230,7 @@ impl Lex {
                     self.take_char();
                 }
                 let substr = self.buf.substr(start..self.pos);
-                if !num_prefix {
+                if num_prefix.is_none() {
                     if substr.as_str() == "\\" {
                         while let Some(c) = self.peek_char() {
                             if c == '\n' {
@@ -267,8 +267,8 @@ impl Lex {
                     }
                     return Ok(Tok::Word(substr));
                 }
-                let val = if has_dot && radix == 10 {
-                    if radix != 10 {
+                let val = if has_dot {
+                    if radix.is_some() {
                         return Err(Xerr::ParseError {
                             msg: PARSE_FLOAT_ERRMSG,
                             substr,
@@ -280,6 +280,13 @@ impl Lex {
                     })?;
                     Cell::Real(r)
                 } else {
+                    let radix = radix.unwrap_or_else(|| 
+                        if num_prefix == Some('0') {
+                            16
+                        } else {
+                            10
+                        }
+                    );
                     let i =
                         Xint::from_str_radix(&self.tmp, radix).map_err(|_| Xerr::ParseError {
                             msg: PARSE_INT_ERRMSG,
@@ -473,11 +480,11 @@ mod tests {
         let res = tokenize_input("0x00_ff 123_0_00_ 0b_1_1 0_ 0_.1").unwrap();
         assert_eq!(res, vec![int(255), int(123000), int(3), int(0), real(0.1)]);
 
-        assert!(tokenize_input("0f").is_err());
+        let res = tokenize_input("0f 0_ff").unwrap();
+        assert_eq!(res, vec![int(15), int(255)]);
         assert!(tokenize_input("12-").is_err());
         assert!(tokenize_input("-0x").is_err());
         assert!(tokenize_input("-0b").is_err());
-        assert!(tokenize_input("0_f").is_err());
         assert!(tokenize_input("0x0.1").is_err());
 
         let res = tokenize_input("1.2 0.1_1").unwrap();
