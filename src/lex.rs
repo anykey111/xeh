@@ -49,6 +49,7 @@ const UNTERMINATED_STR_ERRMSG: Xstr = xeh_xstr!("unterminated string");
 const UNTERMINATED_BITSTR_ERRMSG: Xstr = xeh_xstr!("unterminated bit-string");
 const ESCAPE_SEQ_ERRMSG: Xstr = xeh_xstr!("unknown string escape sequence");
 const EXPECT_WS_ERRMSG: Xstr = xeh_xstr!("expect whitespace word separator");
+const UNTERMINATED_COMMENT_ERRMSG: Xstr = xeh_xstr!("unterminated multiline comment");
 
 impl Lex {
     pub fn new(buf: Xstr) -> Lex {
@@ -230,7 +231,7 @@ impl Lex {
                 }
                 let substr = self.buf.substr(start..self.pos);
                 if !num_prefix {
-                    if substr.as_str() == "//" {
+                    if substr.as_str() == "\\" {
                         while let Some(c) = self.peek_char() {
                             if c == '\n' {
                                 break;
@@ -239,6 +240,30 @@ impl Lex {
                         }
                         let s = self.buf.substr(start..self.pos);
                         return Ok(Tok::Comment(s));
+                    } else if substr.as_str() == "\\(" {
+                        while let Some(c) = self.peek_char() {
+                            self.take_char();
+                            if c.is_ascii_whitespace() {
+                                if self.peek_char() != Some('\\') {
+                                    continue;
+                                }
+                                self.take_char();
+                                if self.peek_char() != Some(')') {
+                                    continue;
+                                }
+                                self.take_char();
+                                let ws = self.peek_char().unwrap_or('\n');
+                                if ws.is_ascii_whitespace() {
+                                    self.take_char();
+                                    let s = self.buf.substr(start..self.pos);
+                                    return Ok(Tok::Comment(s));
+                                }
+                            }
+                        }
+                        return Err(Xerr::ParseError {
+                            msg: UNTERMINATED_COMMENT_ERRMSG,
+                            substr: self.buf.substr(start..self.pos),
+                        });
                     }
                     return Ok(Tok::Word(substr));
                 }
@@ -383,11 +408,11 @@ mod tests {
         let res = tokenize_input("\n\t \r    \n ").unwrap();
         assert_eq!(res, vec![]);
 
-        let mut lex = Lex::new(Xstr::from("\n\t// 567\n//"));
+        let mut lex = Lex::new(Xstr::from("\n\t\\ 567\n\\"));
         assert_eq!(Ok(Tok::Whitespace("\n\t".into())), lex.next());
-        assert_eq!(Ok(Tok::Comment("// 567".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("\\ 567".into())), lex.next());
         assert_eq!(Ok(Tok::Whitespace("\n".into())), lex.next());
-        assert_eq!(Ok(Tok::Comment("//".into())), lex.next());
+        assert_eq!(Ok(Tok::Comment("\\".into())), lex.next());
         assert_eq!(Ok(Tok::EndOfInput), lex.next());
 
         let res = tokenize_input("a//b").unwrap();
@@ -405,6 +430,24 @@ mod tests {
         assert!(tokenize_input(" \" xx\n ").is_err());
     }
 
+    #[test]
+    fn test_multiline_comment() {
+        let res = tokenize_input("\\(\\)").unwrap();
+        assert_eq!(vec![word("\\(\\)")], res);
+
+        let res = tokenize_input("\\(1 \\)").unwrap();
+        assert_eq!(vec![word("\\(1"), word("\\)")], res);
+
+        let res = tokenize_input("\\(( \n").unwrap();
+        assert_eq!(vec![word("\\((")], res);
+
+        assert_eq!(None, tokenize_input("(\\\n\\)").err());
+
+        assert_ne!(None, tokenize_input("\\( 1\\)").err());
+        assert_ne!(None, tokenize_input("\\( \\)) \n").err());
+        assert_ne!(None, tokenize_input("\\( \n \\\\)").err());
+    }
+    
     #[test]
     fn test_lex_nums() {
         let res = tokenize_input(" + -f -1 -x1 -0x1 +0").unwrap();
