@@ -175,8 +175,8 @@ impl Xerr {
 
     pub(crate) fn unbalanced_flow(flow: &Flow) -> Xerr {
         match flow {
-            Flow::If { .. } => Self::unbalanced_endif(),
-            Flow::Else { .. } => Self::unbalanced_endif(),
+            Flow::If { .. } => Self::unbalanced_then(),
+            Flow::Else { .. } => Self::unbalanced_then(),
             Flow::Begin { .. } => Self::unbalanced_repeat(),
             Flow::While { .. } => Self::unbalanced_repeat(),
             Flow::Break { .. } => Self::unbalanced_break(),
@@ -285,8 +285,8 @@ impl Xerr {
         Xerr::ControlFlowError { msg }
     }
 
-    pub(crate) fn unbalanced_endif() -> Xerr {
-        let msg = xeh_xstr!("balance endif with preceding if/else");
+    pub(crate) fn unbalanced_then() -> Xerr {
+        let msg = xeh_xstr!("balance then with preceding if/else");
         Xerr::ControlFlowError { msg }
     }
 

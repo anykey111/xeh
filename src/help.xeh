@@ -55,19 +55,19 @@
     \"size\" get-tagged # result 8" doc-example
 ] "get-tagged" doc!
 
-"Execute code if flag is true, otherwise jump to \"endif\".
-    FLAG if CODE endif"
+"Execute code if flag is true, otherwise jump to \"then\".
+    FLAG if CODE then"
 .[ doc-for-cond
 ] "if" doc!
 
 "Fallback for the \"if\" conditional branch. Executed when flag is false.
-    FLAG if CODE else FALLBACK endif"
+    FLAG if CODE else FALLBACK then"
 .[ doc-for-cond
 ] "else" doc!
 
 "End of the \"if\" conditional branch."
 .[ doc-for-cond
-] "endif" doc!
+] "then" doc!
 
 "Select one case of the multiple different choices.
     X case
@@ -446,7 +446,7 @@ Negative index access items from the tail of the vector."
         require \"debug-library.xeh\" 
     else
         require \"release-library.xeh\"
-    endif" doc-example
+    then" doc-example
 ] "defined" doc!
 
 "Create a new file or truncate existing, then write bitstr with padding."

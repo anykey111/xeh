@@ -668,7 +668,7 @@ impl State {
         self.dict_insert(xeh_xstr!("false"), Entry::Constant(FALSE))?;
         self.def_immediate("if", core_word_if)?;
         self.def_immediate("else", core_word_else)?;
-        self.def_immediate("endif", core_word_endif)?;
+        self.def_immediate("then", core_word_then)?;
         self.def_immediate("case", case_word)?;
         self.def_immediate("of", of_word)?;
         self.def_immediate("endof", endof_word)?;
@@ -1542,11 +1542,11 @@ fn core_word_else(xs: &mut State) -> Xresult {
     xs.backpatch_jump(if_org, rel)
 }
 
-fn core_word_endif(xs: &mut State) -> Xresult {
+fn core_word_then(xs: &mut State) -> Xresult {
     let if_org = match take_first_cond_flow(xs) {
         Some(Flow::If(org)) => org,
         Some(Flow::Else(org)) => org,
-        _ => return Err(Xerr::unbalanced_endif()),
+        _ => return Err(Xerr::unbalanced_then()),
     };
     let offs = jump_offset(if_org, xs.code_origin());
     xs.backpatch_jump(if_org, offs)
@@ -2874,7 +2874,7 @@ mod tests {
     #[test]
     fn test_if_flow() {
         let mut xs = State::boot().unwrap();
-        xs.eval("true if 222 endif").unwrap();
+        xs.eval("true if 222 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(
@@ -2882,7 +2882,7 @@ mod tests {
             it.next().unwrap()
         );
         let mut xs = State::boot().unwrap();
-        xs.eval("true if 222 else 333 endif").unwrap();
+        xs.eval("true if 222 else 333 then").unwrap();
         let mut it = xs.code.iter();
         it.next().unwrap();
         assert_eq!(
@@ -2894,15 +2894,15 @@ mod tests {
         // test errors
         let mut xs = State::boot().unwrap();
         assert_eq!(
-            Err(Xerr::unbalanced_endif()),
+            Err(Xerr::unbalanced_then()),
             xs.eval("true if 222 else 333")
         );
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval("true if 222 else"));
+        assert_eq!(Err(Xerr::unbalanced_then()), xs.eval("true if 222 else"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval("true if 222"));
+        assert_eq!(Err(Xerr::unbalanced_then()), xs.eval("true if 222"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_else()), xs.eval("true else 222 endif"));
+        assert_eq!(Err(Xerr::unbalanced_else()), xs.eval("true else 222 then"));
         assert_eq!(Err(Xerr::unbalanced_else()), xs.eval("else 222 if"));
     }
 
@@ -2910,7 +2910,7 @@ mod tests {
     fn test_last_err_loc() {
         // control flow
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::unbalanced_endif()), xs.eval(" if "));
+        assert_eq!(Err(Xerr::unbalanced_then()), xs.eval(" if "));
         assert_ne!(None, xs.last_err_location());
         // end of file
         let mut xs = State::boot().unwrap();
@@ -2925,7 +2925,7 @@ mod tests {
     #[test]
     fn test_if_var() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("nil if 100 var X endif 10 ! X");
+        let res = xs.eval("nil if 100 var X then 10 ! X");
         assert_eq!(Err(Xerr::conditional_var_definition()), res);
     }
 
@@ -2955,13 +2955,13 @@ mod tests {
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
         xs.eval("1 var x begin x 0 <> while 0 ! x repeat").unwrap();
         assert_eq!(
-            Err(Xerr::unbalanced_endif()),
-            xs.eval("if begin endif repeat")
+            Err(Xerr::unbalanced_then()),
+            xs.eval("if begin then repeat")
         );
         assert_eq!(Err(Xerr::unbalanced_repeat()), xs.eval("repeat begin"));
         assert_eq!(
-            Err(Xerr::unbalanced_endif()),
-            xs.eval("begin endif while")
+            Err(Xerr::unbalanced_then()),
+            xs.eval("begin then while")
         );
         assert_eq!(Err(Xerr::unbalanced_until()), xs.eval("until begin"));
         assert_eq!(
@@ -3025,7 +3025,7 @@ mod tests {
         let res = xs.eval("begin 1 repeat break");
         assert_eq!(Err(Xerr::unbalanced_break()), res);
         let mut xs = State::boot().unwrap();
-        xs.eval("begin true if break else break endif repeat")
+        xs.eval("begin true if break else break then repeat")
             .unwrap();
     }
 
@@ -3540,7 +3540,7 @@ mod tests {
                 n 1 - from aux to tower-of-hanoi
                 [ n from to ]
                 n 1 - aux to from tower-of-hanoi
-            endif
+            then
         ;        
         4 "a" "c" "b" tower-of-hanoi
         "#,
@@ -3582,7 +3582,7 @@ mod tests {
     #[test]
     fn test_unbalanced_flow() {
         assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("1 2 ]"));
-        assert_eq!(Err(Xerr::unbalanced_endif()), eval_boot!("[ endif ]"));
+        assert_eq!(Err(Xerr::unbalanced_then()), eval_boot!("[ then ]"));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
         assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
         assert_eq!(Err(Xerr::unbalanced_do()), eval_boot!(" ( do ) loop "));

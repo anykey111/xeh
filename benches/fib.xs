@@ -4,7 +4,7 @@
         dup 2 - fib
         swap 1 - fib
         +
-    endif
+    then
 ;
 
 # 15 0 do     i fib "," print print loop
