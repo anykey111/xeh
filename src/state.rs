@@ -738,11 +738,12 @@ impl State {
         self.defword("insert-tag", core_word_insert_tag)?;
         self.defword("remove-tag", core_word_remove_tag)?;
         self.defword("get-tag", core_word_get_tag)?;
-        self.def_immediate("#{", core_word_tags_map)?;
-        self.def_immediate("#hex", |xs| set_fmt_base(xs, 16))?;
-        self.def_immediate("#dec", |xs| set_fmt_base(xs, 10))?;
-        self.def_immediate("#oct", |xs| set_fmt_base(xs, 8))?;
-        self.def_immediate("#bin", |xs| set_fmt_base(xs, 2))?;
+        self.def_immediate("^{", core_word_tagmap_begin)?;
+        self.def_immediate("^}", core_word_tagmap_end)?;
+        self.def_immediate("^hex", |xs| set_fmt_base(xs, 16))?;
+        self.def_immediate("^dec", |xs| set_fmt_base(xs, 10))?;
+        self.def_immediate("^oct", |xs| set_fmt_base(xs, 8))?;
+        self.def_immediate("^bin", |xs| set_fmt_base(xs, 2))?;
         self.def_immediate("fmt/prefix", set_fmt_prefix)?;
         self.def_immediate("fmt/tags", set_fmt_tags)?;
         self.def_immediate("fmt/upcase", set_fmt_upcase)?;
@@ -1656,9 +1657,16 @@ fn jump_offset(origin: usize, dest: usize) -> RelativeJump {
     RelativeJump::from_to(origin, dest)
 }
 
-fn core_word_tags_map(xs: &mut State) -> Xresult {
+fn core_word_tagmap_begin(xs: &mut State) -> Xresult {
     xs.push_flow(Flow::Tags)?;
     xs.code_emit_call_native(vec_builder_begin)
+}
+
+fn core_word_tagmap_end(xs: &mut State) -> Xresult {
+    match xs.pop_flow() {
+        Some(Flow::Tags) => xs.code_emit_call_native(collect_tag_map),
+        _ => Err(Xerr::unbalanced_vec_builder()),
+    }
 }
 
 fn collect_tag_map(xs: &mut State) -> Xresult {
@@ -1750,7 +1758,6 @@ fn core_word_map_begin(xs: &mut State) -> Xresult {
 fn core_word_map_end(xs: &mut State) -> Xresult {
     match xs.pop_flow() {
         Some(Flow::Map) => xs.code_emit_call_native(map_builder_end),
-        Some(Flow::Tags) => xs.code_emit_call_native(collect_tag_map),
         _ => Err(Xerr::unbalanced_map_builder()),
     }
 }
@@ -2022,7 +2029,7 @@ fn build_let_vec(xs: &mut State) -> Xresult {
             Tok::Word(name) if name == "}" => {
                 break Err(Xerr::unbalanced_map_builder());
             }
-            Tok::Word(name) if name == "#" => {
+            Tok::Word(name) if name == "^" => {
                 build_let_vec_next(xs, &mut idx)?;
                 idx -= 1;
                 build_let_tags(xs)?;
@@ -2045,7 +2052,7 @@ fn build_let_vec(xs: &mut State) -> Xresult {
 fn build_let_in(xs: &mut State) -> Xresult {
     match xs.next_token()? {
         Tok::Whitespace(_) | Tok::Comment(_) => unreachable!(),
-        Tok::Word(name) if name == "#" => {
+        Tok::Word(name) if name == "^" => {
             xs.code_emit_call_native(core_word_dup)?;
             build_let_tags(xs)?;
             build_let_in(xs)
@@ -2567,14 +2574,18 @@ fn set_fmt_base(xs: &mut State, n: usize) -> Xresult {
     xs.code_emit_call_native(update_fmt_base)
 }
 
-fn update_fmt_prefix(xs: &mut State) -> Xresult {
-    let t = xs.pop_data()?.to_bool()?;
+fn with_fmt_prefix(xs: &mut State, t: bool) -> Xresult {
     let flags = xs.parse_fmt_flags(xs.top_data()?).unwrap_or_default();
     if flags.show_prefix() != t {
         update_fmt_flags(xs, flags.set_show_prefix(t))
     } else {
         OK
     }
+}
+
+fn update_fmt_prefix(xs: &mut State) -> Xresult {
+    let t = xs.pop_data()?.to_bool()?;
+    with_fmt_prefix(xs ,t)
 }
 
 fn set_fmt_prefix(xs: &mut State) -> Xresult {
@@ -2987,7 +2998,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "[ 1 \"ss\" [ 15 ] ] concat");
         assert_eq!("1ss15".to_string(), xs.pop_data().unwrap().str().unwrap());
-        eval_ok!(xs, "[ 1 \"ss\" [ 15 #hex ] ] concat");
+        eval_ok!(xs, "[ 1 \"ss\" [ 15 ^hex ] ] concat");
         assert_eq!("1ss0xf".to_string(), xs.pop_data().unwrap().str().unwrap());
     }
 
@@ -3164,7 +3175,7 @@ mod tests {
     fn test_str_to_num() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "\"255\" str>number 255 assert-eq");
-        eval_ok!(xs, "\"ff\" #hex str>number 255 assert-eq");
+        eval_ok!(xs, "\"ff\" ^hex str>number 255 assert-eq");
         eval_ok!(xs, "\"0.0\" str>number 0.0 assert-eq");
         assert_ne!(OK, xs.eval("\"10X\" str>number"));
     }
@@ -3184,13 +3195,13 @@ mod tests {
     fn test_fmt_base() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("255 #hex print").unwrap();
+        xs.eval("255 ^hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("13 #dec print").unwrap();
+        xs.eval("13 ^dec print").unwrap();
         assert_eq!(Some("13".to_string()), xs.read_stdout());
-        xs.eval("10 #oct print").unwrap();
+        xs.eval("10 ^oct print").unwrap();
         assert_eq!(Some("0o12".to_string()), xs.read_stdout());
-        xs.eval("3 #bin print").unwrap();
+        xs.eval("3 ^bin print").unwrap();
         assert_eq!(Some("0b11".to_string()), xs.read_stdout());
     }
 
@@ -3198,9 +3209,9 @@ mod tests {
     fn test_fmt_upcase() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval(" 255 true fmt/upcase #hex  print").unwrap();
+        xs.eval(" 255 true fmt/upcase ^hex  print").unwrap();
         assert_eq!(Some("0xFF".to_string()), xs.read_stdout());
-        xs.eval("10 #hex false fmt/upcase print").unwrap();
+        xs.eval("10 ^hex false fmt/upcase print").unwrap();
         assert_eq!(Some("0xa".to_string()), xs.read_stdout());
     }
 
@@ -3208,9 +3219,9 @@ mod tests {
     fn test_fmt_prefix() {
         let mut xs = State::boot().unwrap();
         xs.intercept_stdout(true);
-        xs.eval("255 #hex print").unwrap();
+        xs.eval("255 ^hex print").unwrap();
         assert_eq!(Some("0xff".to_string()), xs.read_stdout());
-        xs.eval("255 false fmt/prefix #hex print").unwrap();
+        xs.eval("255 false fmt/prefix ^hex print").unwrap();
         assert_eq!(Some("ff".to_string()), xs.read_stdout());
         xs.eval("[ ] print").unwrap();
         assert_eq!(Some("[ ]".to_string()), xs.read_stdout());
@@ -3563,8 +3574,8 @@ mod tests {
 
     #[test]
     fn test_incomplete_tag_map() {
-        assert_eq!(eval_boot!("#{ 1 2 }"), Err(Xerr::StackUnderflow));
-        assert_eq!(eval_boot!("#{ 1 "), Err(Xerr::unbalanced_tag_map_builder()));
+        assert_eq!(eval_boot!("^{ 1 2 ^}"), Err(Xerr::StackUnderflow));
+        assert_eq!(eval_boot!("^{ 1 "), Err(Xerr::unbalanced_tag_map_builder()));
     }
 
     #[test]
@@ -3732,12 +3743,12 @@ mod tests {
     #[test]
     fn test_let_tag() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "[ \"a\" #{ 3 #{ 0xe \"e\" } \"b\" } ] let [ # { 3 # t b } a ]
+        eval_ok!(xs, "[ \"a\" ^{ 3 ^{ 0xe \"e\" ^} \"b\" ^} ] let [ ^ { 3 ^ t b } a ]
             a \"a\" assert-eq
             b 3  assert-eq
             t { 0xe \"e\" } assert-eq
             ");
-        eval_ok!(xs, "100 #{ 5 0 } let # { 0 five } x
+        eval_ok!(xs, "100 ^{ 5 0 ^} let ^ { 0 five } x
             five 5 assert-eq
             x 100 assert-eq
             ");

@@ -226,7 +226,7 @@ impl Xerr {
     }
 
     pub(crate) fn unbalanced_tag_map_builder() -> Xerr {
-        let msg = xeh_xstr!("unbalanced tag vector builder");
+        let msg = xeh_xstr!("unbalanced tags map builder");
         Xerr::ControlFlowError { msg }
     }
 
