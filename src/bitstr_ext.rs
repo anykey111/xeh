@@ -1003,7 +1003,7 @@ mod tests {
     fn test_bitstr_env() {
         let mut xs = Xstate::boot().unwrap();
         xs.eval("big 255 u16! |00ff| assert-eq").unwrap();
-        assert_eq!(Err(Xerr::const_context()), xs.eval("( big 255 u16! )"));
+        assert_eq!(Err(Xerr::const_context()), xs.eval("#( big 255 u16! #)"));
     }
 
     #[test]

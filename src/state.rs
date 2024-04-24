@@ -692,8 +692,8 @@ impl State {
         self.def_immediate("var", core_word_variable)?;
         self.def_immediate("!", core_word_setvar)?;
         self.def_immediate("nil", core_word_nil)?;
-        self.def_immediate("(", core_word_nested_begin)?;
-        self.def_immediate(")", core_word_nested_end)?;
+        self.def_immediate("#(", core_word_nested_begin)?;
+        self.def_immediate("#)", core_word_nested_end)?;
         self.def_immediate("~)", core_word_nested_inject)?;
         self.def_immediate("const", core_word_const)?;
         self.def_immediate("do", core_word_do)?;
@@ -767,6 +767,10 @@ impl State {
 
     fn dict_key(&self, name: &str) -> Option<&DictEntry> {
         self.dict.iter().rfind(|x| x.name == name)
+    }
+
+    fn dict_pos(&self, name: &str) -> Option<usize> {
+        self.dict.iter().rposition(|x| x.name == name)
     }
 
     fn code_origin(&self) -> usize {
@@ -2171,14 +2175,21 @@ fn core_word_nested_inject(xs: &mut State) -> Xresult {
 }
 
 fn core_word_const(xs: &mut State) -> Xresult {
-let name = xs.next_name()?;
+    let name = xs.next_name()?;
     if xs.ctx.mode != ContextMode::MetaEval {
         let s = xeh_xstr!("const word used out of the meta-eval context");
         Err(Xerr::ErrorMsg(s))
     } else {
         let val = xs.pop_data()?;
         let name = Xstr::from(name.as_str());
-        xs.dict_insert(name, Entry::Constant(val))?;
+        if let Some(pos) = xs.dict_pos(name.as_str()) {
+            match &mut xs.dict[pos].entry {
+                Entry::Constant(old) => *old = val,
+                _ => return Err(Xerr::const_context())
+            }
+        } else {
+            xs.dict_insert(name, Entry::Constant(val))?;
+        }
         OK
     }
 }
@@ -2848,7 +2859,7 @@ mod tests {
         xs.eval("5 6 swap").unwrap();
         assert_eq!(Ok(Cell::Int(5)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(6)), xs.pop_data());
-        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 ( 2 swap )"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 #( 2 swap #)"));
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 swap"));
         let mut xs = State::boot().unwrap();
@@ -2857,7 +2868,7 @@ mod tests {
         assert_eq!(Ok(Cell::Int(2)), xs.pop_data());
         assert_eq!(Ok(Cell::Int(3)), xs.pop_data());
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 ( 2 3 rot )"));
+        assert_eq!(Err(Xerr::StackUnderflow), xs.eval("1 #( 2 3 rot #)"));
         let mut xs = State::boot().unwrap();
         xs.eval("1 2 over").unwrap();
         assert_eq!(Ok(Cell::Int(1)), xs.pop_data());
@@ -3253,13 +3264,13 @@ mod tests {
     #[test]
     fn test_nested_interpreter() {
         let mut xs = State::boot().unwrap();
-        xs.compile("( 3 5 * )").unwrap();
+        xs.compile("#( 3 5 * #)").unwrap();
         assert_eq!(Err(Xerr::StackUnderflow), xs.pop_data());
         xs.run().unwrap();
         assert_eq!(Ok(Cell::Int(15)), xs.pop_data());
-        eval_ok!(xs, "( : test4 2 2 + ; test4 )");
+        eval_ok!(xs, "#( : test4 2 2 + ; test4 #)");
         assert_eq!(Ok(Cell::Int(4)), xs.pop_data());
-        eval_ok!(xs, ": f [ ( 3 3 * ) ] ; f 0 get");
+        eval_ok!(xs, ": f [ #( 3 3 * #) ] ; f 0 get");
         assert_eq!(Ok(Cell::Int(9)), xs.pop_data());
     }
 
@@ -3267,10 +3278,10 @@ mod tests {
     fn test_meta_purge() {
         let mut xs = State::boot().unwrap();
         eval_ok!(xs, "
-        ( 1 const aaa )
-        ( : init ( 2 aaa + ) ;
-          ( init const yyy )
-         )
+        #( 1 const aaa #)
+        #( : init #( 2 aaa + #) ;
+          #( init const yyy #)
+         #)
          yyy var ddd
          3 ddd assert-eq
         ");
@@ -3280,17 +3291,17 @@ mod tests {
     #[test]
     fn test_meta_var() {
         let mut xs = State::boot().unwrap();
-        let res = xs.eval(" ( 2 var x ) x println");
+        let res = xs.eval(" #( 2 var x #) x println");
         assert_eq!(Err(Xerr::const_context()), res);
         let mut xs = State::boot().unwrap();
-        let res = xs.eval(" 1 var x ( x nil assert-eq ) ");
+        let res = xs.eval(" 1 var x #( x nil assert-eq #) ");
         assert_eq!(Err(Xerr::const_context()), res);
     }
 
     #[test]
     fn test_meta_meta() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, " [ ( 1 ( 2 ( 3 ) ) ) ] ");
+        eval_ok!(xs, " [ #( 1 #( 2 #( 3 #) #) #) ] ");
         assert_eq!(xs.pop_data().unwrap().to_vec(),
          Ok(rpds::vector![Cell::Int(3),Cell::Int(2),Cell::Int(1)]));
     }
@@ -3305,7 +3316,7 @@ mod tests {
     #[test]
     fn test_readonly_word() {
         let mut xs = State::boot().unwrap();
-        eval_ok!(xs, "( 1 const x ) : y x ; 2 var g : f g ; ");
+        eval_ok!(xs, "#( 1 const x #) : y x ; 2 var g : f g ; ");
         assert!(xs.eval("0 ! x").is_err());
         assert!(xs.eval("0 ! y").is_err());
         eval_ok!(xs, "0 ! g  f 0 assert-eq");
@@ -3321,7 +3332,7 @@ mod tests {
         let mut xs = State::boot().unwrap();
         eval_ok!(
             xs,
-            " ( 33 const ss ss 33 assert-eq ) ( ( 11 ss + ) const ss ) ss 44 assert-eq "
+            " #( 33 const ss ss 33 assert-eq #) #( #( 11 ss + #) const ss #) ss 44 assert-eq "
         );
     }
 
@@ -3339,12 +3350,18 @@ mod tests {
             late GG
             : FF GG ;
             FF 2 assert-eq
-            : GG 2 ; 
+            : GG 2 ;
             late WW
             : QQ WW ;
-            ( 3 const WW ) 
+            3 var WW
             QQ 3 assert-eq
             ");
+        assert_eq!(Err(Xerr::const_context()),
+            xs.eval("
+            late WW
+            : QQ WW ;
+            #( 3 const WW #) 
+            QQ 3 assert-eq"));
     }
 
     #[test]
@@ -3594,18 +3611,18 @@ mod tests {
     fn test_unbalanced_flow() {
         assert_eq!(Err(Xerr::unbalanced_vec_builder()), eval_boot!("1 2 ]"));
         assert_eq!(Err(Xerr::unbalanced_then()), eval_boot!("[ then ]"));
-        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ( "));
-        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" ) "));
-        assert_eq!(Err(Xerr::unbalanced_do()), eval_boot!(" ( do ) loop "));
+        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" #( "));
+        assert_eq!(Err(Xerr::unbalanced_context()), eval_boot!(" #) "));
+        assert_eq!(Err(Xerr::unbalanced_do()), eval_boot!(" #( do #) loop "));
     }
 
     #[test]
     fn test_nested_debug_token() {
         let mut xs = State::boot().unwrap();
-        assert_eq!(OK, xs.eval("( 1 2 +  )"));
-        assert_eq!(xs.debug_map[0], ")");
+        assert_eq!(OK, xs.eval("#( 1 2 +  #)"));
+        assert_eq!(xs.debug_map[0], "#)");
         assert_eq!(xs.code.len(), 1);
-        assert_ne!(OK, xs.eval("( 1 2 +  ) : "));
+        assert_ne!(OK, xs.eval("#( 1 2 +  #) : "));
     }
 
     #[test]
@@ -3643,11 +3660,11 @@ mod tests {
         );
 
         let mut xs = State::boot().unwrap();
-        let res = xs.eval("( [\n( loop )\n] )");
+        let res = xs.eval("#( [\n#( loop #)\n] #)");
         assert_eq!(Err(Xerr::unbalanced_loop()), res);
         assert_eq!(
             format!("{:?}", xs.last_err_location().unwrap()),
-            concat!("<buffer#0>:2:3\n", "( loop )\n", "--^")
+            concat!("<buffer#0>:2:4\n", "#( loop #)\n", "---^")
         );
 
         let mut xs = State::boot().unwrap();
@@ -3822,7 +3839,7 @@ mod tests {
     #[test]
     fn test_meta_stack() {
         let mut xs = State::boot().unwrap();
-        xs.eval(" ( 1 ( drop ) )").unwrap();
+        xs.eval(" #( 1 #( drop #) #)").unwrap();
     }
 
     #[test]
@@ -3838,7 +3855,7 @@ mod tests {
             defined BB assert
 
             defined CC not assert
-            ( true const CC )
+            #( true const CC #)
             defined CC assert
             ");
     }
@@ -3887,6 +3904,6 @@ mod tests {
         let mut xs = State::boot().unwrap();
         assert_eq!(Err(Xerr::Exit(-1)), xs.eval("-1 exit drop"));
         let mut xs = State::boot().unwrap();
-        assert_eq!(Err(Xerr::Exit(0)), xs.eval(" ( 0 exit + ) "));
+        assert_eq!(Err(Xerr::Exit(0)), xs.eval(" #( 0 exit + #) "));
     }
 }
