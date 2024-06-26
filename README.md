@@ -36,83 +36,46 @@ Video: [Youtube](https://www.youtube.com/@xeh-lang)
 
 ## Comments
 
-Single line comment starts with the `//`.
-At least one whitespace or new line should surround the comment word.
+    \ singleline comment
 
-Good:
-```
-// ok
-"hello" println // ok
-```
-
-Wrong:
-```
-"world" println// wrong
-```
-ERROR: unknown word `println//``
-
-```
-"hello" println //wrong
-```
-ERROR: unknown word `//wrong`
-
+    \(
+        multiline commet
+    \)
 
 ## Literals
 
-```
-    // decimal
+    \ decimal
     7 -99 1_000
     
-    // hex
+    \ hex
     0xff 0x11_EE
     
-    // binary
+    \ binary
     0b11111 0b1111_1111
     
-    // real 
+    \ real 
     2.78 -1.2e-5
     
-    // string
+    \ string
     "escapes \\ \" \r \n \t"          
-
-    // boolean flag
-    true false
-    
-    // vector
-    [ 1 2 3.0 "abc" ]
-
-    // map
-    { "value" "key" 10 "key2" }
-
-    // no value
-    nil
-
-    // bit-string consist of arbitrary number of bits
-    // hex digits "0".."9", and "A..F" represent 4 bit chunk of data
-    |F0|    // 11110000
-
-    // letters "x" and "." represent single bit of value 1 or 0
-    |x..x|  // 1001
-    |F0x|   // 111100001
-```
 
 ## Words
 
-By the analogy to the mainstream programming languages, "word" is just a function or variable name.
+The whole program constist of words and literals. Depending on the definition word maybe function, variable or just an identifier.
 
 1. Words are separated by whitespaces.
-2. Word name consist of any symbols, but can't start with digit or double quote.
+2. Word name consist of any characters, but can't start with digit or double quote.
 
 ```
-    // valid words
+    \ valid words
     abc
     my-name
     +[]
     _"d^%$$$#112d'"d+"
-    a0000-/-)(22)
+    a0000-/-(22)
     .99
 
-    // invalid words
+    \ invalid words
     0waa
     9sss
     "abc
@@ -120,41 +83,31 @@ By the analogy to the mainstream programming languages, "word" is just a functio
 
 ## Functions
 
-New word definition starts with ":" then word name and body follow, definition ends with ";".
+Function definition stats with `:` word, then function name and body follow,
+definition ends with `;`.
 
 ```
-    // define a new word
     : hello "Hello!" println ; 
-    // invoke
-    hello
 ```
 
 ## Variable 
 
-Variable definition starts with "var" word then name follow, initial value is taken from the stack.
+Variable definition starts with `var` then name follow, initial value is taken from the stack.
 
 ```
-    // define a new global variable 
+    \ define a new global variable 
     0 var counter
-    // set a new value 
+    \ update counter
     10 ! counter
-```
-
-Special word "!" sets the new value of variable.
-```
-    // define a new word that increment counter value
-    : increment-counter
-        counter 1 + ! counter
-    ;
 ```
 
 ## Locals
 
-Local is a read-only binding visible only inside the word body.
+Local is a read-only binding visible only inside the function body.
 Initial value is taken from the stack.
 
 ```
-    // locals
+    \ locals
     : print2
         local b 
         local a
@@ -162,58 +115,60 @@ Initial value is taken from the stack.
         "b = " print b println
     ;
     1 2 print2
-
 ```
 
 ## Conditional execution
 
+    
+    
+
 ```
-    true if "yes" else "no" endif println
+    Y 0 <= if
+        Y abs ! Y
+    then
 
-    // select one case of the multiple different choices
-    false case
-        true of 1 endof
-        false of 0 endof
+    X 2 mod zero? if "even" else "odd" then
+
+    \ select one case of the multiple different choices
+    X case
+        0 of "A" endof
+        1 of "B" endof
+        \ fallback, drop unmatched value from the stack
+        drop
+        "Other"
     endcase
 
-    // case with fallback
-    3 case
-        0 of "a" endof
-        1 of "b" endof
-        // fallback, drop unmatched value 2 from the stack
-        drop "c"
-    endcase
 ```
 
 ## Basic loops
 
 ```
-    // loop with pre-codnition, test condition before every iteration
+    \ loop with pre-codnition, test condition before every iteration
     begin remain 5 > while
         read-more
     repeat
 
-    // post condition, restart loop if condition is false
+    \ post condition, restart loop if condition is false
     begin read-byte zero? until
 
-    // endless loop
+    \ endless loop
     begin
-        day-of-week "friday" = if
-            // break loop execution
+        day-of-week "friday" == if
+            \ break loop execution
             break
-        endif 
+        then 
     repeat
 ```
     
 ## Counted loops
 
 ```
-    // count from 0 to 10, current loop index is accessed with "I"
+    \ count from 0 to 10, current loop index is accessed with "I"
     10 0 do I print loop
 
-    // outer loop index is accessed with J
-    10 5 do // J
-        5 0 do // I
+    \ outer loop index is accessed with J
+    10 5 do \ J
+        5 0 do \ I
             "J=" print J print
             "I=" print I print
         loop
@@ -227,12 +182,12 @@ Tags is a custom property map sticked to the value but not directly accessible.
 Tags have no impact on using value and dissapear after value modification.
 
 ```
-    // stick "abc" string to the integer 10
+    \ stick "abc" string to the integer 10
     10 #{ "ten" "name" "red" "color" } var X
-    // get "color" property
+    \ get "color" property
     X "color" get-tag println
 
-    // show all tags 
+    \ show all tags 
     X tags  println
 
     X 1 + println
@@ -255,10 +210,10 @@ All values on the stack are passed to the parent mode.
             dup 2 - fib
             swap 1 - fib
             +
-        endif
+        then
     ;
 
-    // compute Fibonacci number at compile-time
+    \ compute Fibonacci number at compile-time
     ( 20 fib ) var fib-of-20
 ```
 
@@ -278,10 +233,10 @@ Create enumerated list of constants.
 
 ```
 enum MyEnum
-    // By default enumeration starts with zero.
+    \ By default enumeration starts with zero.
     : A
     : B
-    // Use `=` to assign custom value to the field
+    \ Use `=` to assign custom value to the field
     B 2 + = C
 endenum
 ```
@@ -294,28 +249,28 @@ Ensure that each name in the PATTERN have corresponding value.
 Using literal instead of the name test that value is exactly match, otherwise error is raised.
 
 ```
-    // bind 1 to a
+    \ bind 1 to a
     1 let a
     
-    // test that a is 1
+    \ test that a is 1
     a let 1
     
-    // raise error, when a not equal to 2
+    \ raise error, when a not equal to 2
     a let 2
     
-    // bind vector elements
+    \ bind vector elements
     [ [ 1 2 ] [ 3 4 ] ] let [ [ a b ] [ c d ] ]
 
-    // slice first two elements of the vector and bind remaining to the xs
+    \ slice first two elements of the vector and bind remaining to the xs
     [ 1 2 3 5 7  ] let [ x1 x2 & xs ]
 
-    // find map keys
+    \ find map keys
     { 1 "key1" [ 2 3 ] "key2" } let { "key1" x "key2" [ 2 y ] }
     
-    // bind tags of the value
+    \ bind tags of the value
     "text" #{ "red" "color" } let # all-tags val
 
-    // find tag property
+    \ find tag property
     "text" #{ "red" "color" } let # { "color" color } val
 ```
 
@@ -324,7 +279,7 @@ Using literal instead of the name test that value is exactly match, otherwise er
 Meta evaluation result might serve as input for compilation. When compiler see immediate word `~)` instead of the closing bracket, first compiler join result into a string and then treat that string as a part of the source code.
 
 ```
-    // assign number for each name starting from 0
+    \ assign number for each name starting from 0
     : my-enum
         local names
         names length 0 do
@@ -332,7 +287,7 @@ Meta evaluation result might serve as input for compilation. When compiler see i
         loop
     ;
     
-    // define variables from list
+    \ define variables from list
     ( [ "aa" "bb" "cc" ] my-enum ~)
 
     bb println 
