@@ -115,7 +115,7 @@ pub mod fs_overlay {
         };
     }
 
-    pub fn exec_piped(path: &str, buf: &[u8]) -> Xresult1<Xcell> {
+    pub fn exec_piped(path: &str, buf: &[u8]) -> Xresult1<Vec<u8>> {
         no_filesystem_error!(path)
     }
 
